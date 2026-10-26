@@ -1,12 +1,18 @@
-# Builds the server package and publishes it as the GitHub pre-release v<version>-dev.<UTC yyMMddHHmm>, run by
-# hand from the Actions tab.
+# Builds the server package, pushes the images to ghcr.io and publishes it as a GitHub release, run by hand from
+# the Actions tab: by default the pre-release v<version>-dev.<UTC yyMMddHHmm>, with prerelease off the release
+# v<version>, which becomes the latest one (the one install.sh installs when run without the archive).
 #
 # The build is build.yml; the release goes on the commit that was built. The description is the one GitHub
 # generates (the changes since the previous release).
-name: Pre-release
+name: Release
 
 on:
   workflow_dispatch:
+    inputs:
+      prerelease:
+        description: Pre-release (v<version>-dev.<date>); off publishes v<version> as the latest release
+        type: boolean
+        default: true
 
 permissions:
   contents: read
@@ -16,13 +22,47 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  tag:
+    name: Tag
+    runs-on: ubuntu-24.04
+    outputs:
+      release: ${{ steps.tag.outputs.release }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Tag
+        id: tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PRERELEASE: ${{ inputs.prerelease }}
+        run: |
+          version=$(sed -n 's:.*<InformationalVersion>\(.*\)</InformationalVersion>.*:\1:p' \
+              src/Server/Server.Asp/Server.Asp.csproj | head -n1)
+          if [[ $PRERELEASE == true ]]; then
+              tag="v$version-dev.$(date -u +%y%m%d%H%M)"
+          else
+              tag="v$version"
+              if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+                  echo "::error::The release $tag already exists, raise <InformationalVersion> in Server.Asp.csproj"
+                  exit 1
+              fi
+          fi
+          echo "release=$tag" >> "$GITHUB_OUTPUT"
+
   build:
     name: Build
+    needs: tag
     uses: ./.github/workflows/build.yml
+    permissions:
+      contents: read
+      packages: write
+    with:
+      release: ${{ needs.tag.outputs.release }}
+      push: true
 
   release:
     name: Publish
-    needs: build
+    needs: [tag, build]
     runs-on: ubuntu-24.04
     permissions:
       contents: write
@@ -33,13 +73,21 @@ jobs:
           path: assets
           merge-multiple: true
 
-      - name: Pre-release
+      - name: Release
         env:
           GH_TOKEN: ${{ github.token }}
-          VERSION: ${{ needs.build.outputs.version }}
+          PRERELEASE: ${{ inputs.prerelease }}
+          TAG: ${{ needs.tag.outputs.release }}
         run: |
-          tag="v$VERSION-dev.$(date -u +%y%m%d%H%M)"
+          if [[ $PRERELEASE == true ]]; then kind=--prerelease; else kind=--latest; fi
           ls -l assets
-          gh release create "$tag" assets/* --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
-              --prerelease --title "FlowRate server ${tag#v}" --generate-notes
-          echo "### [FlowRate server ${tag#v}]($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/tag/$tag)" >> "$GITHUB_STEP_SUMMARY"
+          gh release create "$TAG" assets/* --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
+              "$kind" --title "FlowRate server ${TAG#v}" --generate-notes
+          url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/tag/$TAG"
+          {
+              echo "### [FlowRate server ${TAG#v}]($url)"
+              echo
+              echo '```sh'
+              echo "curl -fsSL $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/download/$TAG/install.sh | sudo sh"
+              echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

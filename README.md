@@ -10,7 +10,18 @@ It runs as two containers:
 
 ## Running it
 
-A release archive ships both images and an installer, see [`src/Scripts/package/README.txt`](src/Scripts/package/README.txt).
+On a Linux server (x64 or arm64), the latest release with its images from ghcr.io:
+
+```sh
+curl -fsSL https://github.com/puffer-bit/FlowRate-Server/releases/latest/download/install.sh | sudo sh
+```
+
+It asks for the public IP and the push notifications (a Firebase key or a relay, `--fcm-key FILE` /
+`--push-relay URL` skip the question). Each release also ships an archive with the images for machines without
+access to ghcr.io; see [`src/Scripts/package/README.txt`](src/Scripts/package/README.txt) for both.
+Releases are published by the Release workflow (Actions tab); the images on ghcr.io have to be public once, in the
+package settings, for the installer to pull them.
+
 From the sources, with Docker:
 
 ```sh
