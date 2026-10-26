@@ -1,0 +1,24 @@
+# Bridge networking instead of host networking, for Docker Desktop or where the containers must not
+# share the host's network: docker compose -f docker-compose.yml -f docker-compose.bridge.yml up -d
+# WebRTC then goes through Docker NAT, and a host firewall has to let the bridge traffic through.
+services:
+  mediasoup:
+    network_mode: !reset null
+    environment:
+      GRPC_BIND: 0.0.0.0:50051
+    ports:
+      - "4433:4433/udp"
+      - "4433:4433/tcp"
+    expose:
+      - "50051"
+
+  server:
+    network_mode: !reset null
+    environment:
+      Orchestrator__ListenIp: 0.0.0.0
+    # Compose DNS resolves the SFU here
+    extra_hosts: !reset []
+    ports:
+      # The control panel has no authentication: localhost only unless .env says otherwise
+      - "${PANEL_LISTEN_IP:-127.0.0.1}:7114:7114/tcp"
+      - "26666:26666/tcp"

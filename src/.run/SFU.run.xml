@@ -1,0 +1,5 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="SFU" type="NodeJSConfigurationType" node-parameters="--import tsx" path-to-js-file="main.ts" working-dir="$PROJECT_DIR$/Sfu/mediasoup">
+    <method v="2" />
+  </configuration>
+</component>

@@ -1,0 +1,20 @@
+**/bin/
+**/obj/
+**/.idea/
+**/.vs/
+**/.vscode/
+**/*.user
+**/*.DotSettings.user
+**/*.db
+**/*.sqlite
+**/node_modules/
+Sfu/mediasoup/dist/
+Sfu/mediasoup/.env
+Server/Server.Asp/data/
+Server/Server.Asp/Logs/
+Server/Server.Asp/Publish/
+# Built inside the image; a local build would only add stale files
+Server/Server.Asp/Web/wwwroot/panel/
+**/Dockerfile
+**/.dockerignore
+**/*firebase-adminsdk*.json

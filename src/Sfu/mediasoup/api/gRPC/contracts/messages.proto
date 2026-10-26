@@ -1,0 +1,137 @@
+syntax = "proto3";
+
+option csharp_namespace = "Server.Api.Grpc";
+package media;
+
+import "models.proto";
+
+enum ProtoSFUResultStatus {
+  SUCCESS = 0;
+  ERROR = 1;
+  NOT_FOUND = 2;
+}
+
+message SessionRequest {
+  int32 session_id = 1;
+}
+
+// Health check of the node; the caller measures the round trip itself
+message PingRequest {
+}
+
+message PingResponse {
+  int32 session_count = 1;
+  int32 worker_count = 2;
+  int64 uptime_seconds = 3;
+}
+
+message BaseResponse {
+  ProtoSFUResultStatus status = 1;
+  string error_message = 2;
+}
+
+message CreateTransportRequest {
+  int32 session_id = 1;
+  int32 user_id = 2;
+  string client_epoch = 3;
+}
+
+message CreateTransportResponse {
+  ProtoSFUResultStatus status = 1;
+  string transport_id = 2;
+  IceParameters ice_parameters = 3;     // server ufrag, password and candidates
+  DtlsParameters dtls_parameters = 4;   // server role and fingerprints
+  string server_host_address = 5;
+  uint32 server_port = 6;
+  string error_message = 7;
+}
+
+message ConnectTransportRequest {
+  int32 session_id = 1;
+  int32 user_id = 2;
+  DtlsParameters client_dtls = 3;
+}
+
+message ConnectTransportResponse {
+  ProtoSFUResultStatus status = 1;
+  string error_message = 7;
+}
+
+message RemoveTransportRequest {
+  int32 session_id = 1;
+  int32 user_id = 2;
+}
+
+// How a new track follows the media settings of its session
+message OutboundSettings {
+  // video/VP8 or video/H264; empty for the usual codec of the source
+  string mime_type = 1;
+  // The SFU asks for lost video packets; only with rtx, which the client resends on
+  bool nack = 2;
+  bool rtx = 3;
+  uint32 key_frame_request_delay_ms = 4;
+  // Opus in-band FEC, and DTX of a voice
+  bool fec = 5;
+  bool dtx = 6;
+}
+
+message AddOutboundRequest {
+  int32 session_id = 1;
+  int32 user_id = 2;
+  ProtoMediaSourceType media_source_type = 3;
+  ProtoMediaType media_type = 4;
+  // Absent for the values used before there were settings
+  OutboundSettings settings = 5;
+}
+
+message AddOutboundResponse {
+  ProtoSFUResultStatus status = 1;
+  string producer_id = 2;
+  uint32 ssrc = 3;
+  string error_message = 4;
+  RtpCodec codec = 5;
+  // The stream the client retransmits lost packets on; 0 when the track has none
+  uint32 rtx_payload_type = 6;
+  uint32 rtx_ssrc = 7;
+}
+
+message RemoveOutboundRequest {
+  int32 session_id = 1;
+  string producer_id = 2;
+}
+
+message OutboundActionRequest {
+  int32 session_id = 1;
+  string producer_id = 2;
+}
+
+message InboundSettings {
+  // The SFU resends lost packets when the client asks
+  bool nack = 1;
+}
+
+message AddInboundRequest {
+  int32 session_id = 1;
+  int32 user_id = 2;
+  string producer_id = 3;
+  // Absent for NACK on video and not on audio
+  InboundSettings settings = 4;
+}
+
+message AddInboundResponse {
+  ProtoSFUResultStatus status = 1;
+  string consumer_id = 2;
+  uint32 ssrc = 3;
+  string error_message = 4;
+  RtpCodec codec = 5;
+}
+
+message RemoveInboundRequest {
+  int32 session_id = 1;
+  string consumer_id = 2;
+}
+
+message InboundActionRequest {
+  int32 session_id = 1;
+  string consumer_id = 2;
+}

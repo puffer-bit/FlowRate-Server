@@ -1,0 +1,74 @@
+# Runs the tests of the server on every push and pull request, and type-checks the SFU and the control panel.
+#
+# The tests need neither Docker nor the SFU: the SFU is faked behind its gateway.
+name: Tests
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Tests
+    # Pinned so that a runner image migration does not change the build unannounced
+    runs-on: ubuntu-24.04
+    env:
+      DOTNET_NOLOGO: true
+      DOTNET_CLI_TELEMETRY_OPTOUT: true
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: recursive
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Test
+        working-directory: src
+        run: |
+          printf '### Tests\n\n' >> "$GITHUB_STEP_SUMMARY"
+          status=0
+          dotnet test FlowRateServer.sln -c Release --logger trx \
+              --results-directory "$GITHUB_WORKSPACE/TestResults" 2>&1 | tee "$RUNNER_TEMP/test.log" || status=1
+          # The "Passed!"/"Failed!" totals of each test assembly go to the run summary
+          grep -E '^(Passed|Failed)!' "$RUNNER_TEMP/test.log" | sed 's/^/    /' >> "$GITHUB_STEP_SUMMARY" || true
+          exit $status
+
+      - name: Upload test results
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-results
+          path: TestResults
+
+  typecheck:
+    name: Type check (${{ matrix.project }})
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        project: [src/Sfu/mediasoup, src/Web/admin-panel]
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: ${{ matrix.project }}/package-lock.json
+
+      # No install scripts: the mediasoup worker is not needed to type-check
+      - name: Type check
+        working-directory: ${{ matrix.project }}
+        run: |
+          npm ci --ignore-scripts
+          npx tsc -b --noEmit

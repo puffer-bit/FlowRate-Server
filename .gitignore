@@ -1,0 +1,45 @@
+# Build output
+**/bin/
+**/obj/
+/dist/
+src/Sfu/mediasoup/dist/
+src/Server/Server.Asp/Web/wwwroot/panel/
+node_modules/
+TestResults/
+coverage/
+
+# Runtime data and logs of local runs
+src/Server/Server.Asp/data/
+**/Logs/
+*.log
+*.db
+*.db-shm
+*.db-wal
+
+# Settings and secrets: only the .example files belong here
+.env
+!.env.example
+/secrets/
+**/*firebase-adminsdk*.json
+**/*fcm*.json
+**/*service-account*.json
+*.pfx
+*.p12
+*.pem
+*.key
+*.crt
+
+# IDE and OS
+.idea/
+.vscode/
+.vs/
+*.user
+*.suo
+*.DotSettings.user
+.DS_Store
+Thumbs.db
+*.swp
+*~
+*.tmp
+*.orig
+*.rej
