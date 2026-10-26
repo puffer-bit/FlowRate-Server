@@ -9,6 +9,8 @@ COPY . .
 RUN npm run build && npm prune --omit=dev
 
 FROM node:24-bookworm-slim
+# Links the image on ghcr.io to the repository
+LABEL org.opencontainers.image.source=https://github.com/puffer-bit/FlowRate-Server
 WORKDIR /app
 ENV NODE_ENV=production
 COPY --from=build /app/package.json ./

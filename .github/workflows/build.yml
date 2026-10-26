@@ -1,16 +1,29 @@
-# Builds the Docker images of the server and the SFU and packs them with the installer into
-# FlowRateServer-<version>-linux-x64-DOCKER.tar.gz (src/Scripts/bash/publish.sh), run by hand from the Actions
-# tab. The archive is uploaded as the artifact of the run; nothing is published to a release here,
-# release.yml calls this workflow and publishes it.
+# Builds the Docker images of the server and the SFU for x64 and arm64 and packs them with the installer into
+# FlowRateServer-<version>-linux-<arch>-DOCKER.tar.gz (src/Scripts/bash/publish.sh), run by hand from the Actions
+# tab. The archives and the installer files (dist/install) are uploaded as the artifacts of the run; nothing is
+# published to a release here, release.yml calls this workflow, pushes the images and publishes the release.
+#
+# With push the images go to ghcr.io/puffer-bit/flowrate-{server,mediasoup}:<release without v>, one tag per
+# architecture first, then merged into one multi-architecture tag (and latest for a release that is not a
+# pre-release).
 name: Build
 
 on:
   workflow_dispatch:
   workflow_call:
+    inputs:
+      release:
+        description: The release the images are named after (v0.3.0, v0.3.0-dev.2610261745), v<version> when empty
+        type: string
+        default: ""
+      push:
+        description: Push the images to ghcr.io
+        type: boolean
+        default: false
     outputs:
       version:
         description: The version of the build, from <InformationalVersion> of Server.Asp
-        value: ${{ jobs.build.outputs.version }}
+        value: ${{ jobs.version.outputs.version }}
 
 permissions:
   contents: read
@@ -20,31 +33,107 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  build:
-    name: linux-x64
+  version:
+    name: Version
     runs-on: ubuntu-24.04
     outputs:
       version: ${{ steps.version.outputs.version }}
+      release: ${{ steps.version.outputs.release }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Version
+        id: version
+        env:
+          RELEASE: ${{ inputs.release }}
+        run: |
+          version=$(sed -n 's:.*<InformationalVersion>\(.*\)</InformationalVersion>.*:\1:p' \
+              src/Server/Server.Asp/Server.Asp.csproj | head -n1)
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "release=${RELEASE:-v$version}" >> "$GITHUB_OUTPUT"
+          echo "### FlowRate server ${RELEASE:-$version}" >> "$GITHUB_STEP_SUMMARY"
+
+  build:
+    name: linux-${{ matrix.arch }}
+    needs: version
+    strategy:
+      matrix:
+        include:
+          - arch: x64
+            runner: ubuntu-24.04
+          # Native: the SFU compiles C++, which takes far too long under emulation
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: read
+      packages: write
+    env:
+      # PUBLIC_IP matters only when the stack runs, compose demands it for any command
+      PUBLIC_IP: 127.0.0.1
     steps:
       - uses: actions/checkout@v7
         with:
           submodules: recursive
 
-      - name: Version
-        id: version
-        run: |
-          version=$(sed -n 's:.*<InformationalVersion>\(.*\)</InformationalVersion>.*:\1:p' \
-              src/Server/Server.Asp/Server.Asp.csproj | head -n1)
-          echo "version=$version" >> "$GITHUB_OUTPUT"
-          echo "### FlowRate server $version" >> "$GITHUB_STEP_SUMMARY"
-
       - name: Publish
+        env:
+          RELEASE_TAG: ${{ needs.version.outputs.release }}
         run: src/Scripts/bash/publish.sh
 
       - uses: actions/upload-artifact@v7
         with:
-          name: FlowRateServer-${{ steps.version.outputs.version }}-linux-x64-DOCKER
+          name: FlowRateServer-${{ needs.version.outputs.version }}-linux-${{ matrix.arch }}-DOCKER
           path: dist/FlowRateServer-*-DOCKER.tar.gz
           if-no-files-found: error
           # Already compressed
           compression-level: 0
+
+      # The same on both architectures
+      - uses: actions/upload-artifact@v7
+        if: matrix.arch == 'x64'
+        with:
+          name: FlowRateServer-${{ needs.version.outputs.version }}-install
+          path: dist/install/
+          if-no-files-found: error
+
+      - name: Push
+        if: inputs.push
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          echo "$GH_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+          for image in $(docker compose -f dist/install/docker-compose.yml config --images); do
+              docker tag "$image" "$image-${{ matrix.arch }}"
+              docker push "$image-${{ matrix.arch }}"
+          done
+
+  manifest:
+    name: Images
+    if: inputs.push
+    needs: [version, build]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: FlowRateServer-${{ needs.version.outputs.version }}-install
+          path: install
+
+      - name: Merge the architectures
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PUBLIC_IP: 127.0.0.1
+          RELEASE: ${{ needs.version.outputs.release }}
+        run: |
+          echo "$GH_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+          printf '### Images\n\n' >> "$GITHUB_STEP_SUMMARY"
+          for image in $(docker compose -f install/docker-compose.yml config --images); do
+              tags=(-t "$image")
+              # A pre-release has a - in its tag and does not move latest
+              [[ $RELEASE == *-* ]] || tags+=(-t "${image%:*}:latest")
+              docker buildx imagetools create "${tags[@]}" "$image-x64" "$image-arm64"
+              echo "- \`$image\`" >> "$GITHUB_STEP_SUMMARY"
+          done

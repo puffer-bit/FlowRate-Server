@@ -14,6 +14,8 @@ RUN --mount=type=cache,target=/root/.nuget/packages \
     dotnet publish Server/Server.Asp/Server.Asp.csproj -c Release -o /out -p:UseAppHost=false
 
 FROM mcr.microsoft.com/dotnet/aspnet:10.0
+# Links the image on ghcr.io to the repository
+LABEL org.opencontainers.image.source=https://github.com/puffer-bit/FlowRate-Server
 WORKDIR /app
 COPY --from=build /out .
 COPY --from=panel /src/Server/Server.Asp/Web/wwwroot/panel Web/wwwroot/panel

@@ -1,23 +1,36 @@
 FlowRate server
 ===============
 
-The server and its SFU (mediasoup) as Docker images, for Linux.
+The server and its SFU (mediasoup) as Docker images, for Linux on x64 and arm64.
 
 Install
 -------
-Unpack the archive and run the installer from its folder:
+One command, the images come from ghcr.io:
+
+    curl -fsSL https://github.com/puffer-bit/FlowRate-Server/releases/latest/download/install.sh | sudo sh
+
+Or from the release archive, for a machine without access to ghcr.io: unpack it and run the installer
+from its folder:
 
     tar -xzf FlowRateServer-*.tar.gz && cd FlowRateServer-*/
     sh install.sh
 
 It installs Docker when it is missing, puts the compose files and .env into /opt/flowrate, asks for the
-public IP (detected for you), loads the images, opens 26666 and 4433 in ufw or firewalld when one is
-active and starts the containers. Options (sh install.sh --help):
+public IP (detected for you) and the push notifications, gets the images, opens 26666 and 4433 in ufw or
+firewalld when one is active and starts the containers. Options (sh install.sh --help), after sh -s -- when
+piped:
 
     --public-ip IP          skip the question
+    --fcm-key FILE          push notifications to FCM with this Firebase key, see below
+    --push-relay URL        push notifications through a relay
+    --no-push               push notifications off
     --network bridge        bridge networking, see below
     --dir DIR               another install directory
+    --version TAG           another release than the latest one, without the archive only
     -y                      no questions at all
+
+    curl -fsSL https://github.com/puffer-bit/FlowRate-Server/releases/latest/download/install.sh \
+        | sudo sh -s -- --public-ip 203.0.113.5 --fcm-key ./firebase-adminsdk.json
 
 Everything after that runs in the install directory, e.g. cd /opt/flowrate && docker compose logs -f.
 Check that the server reached the SFU:
@@ -28,11 +41,11 @@ Check that the server reached the SFU:
 
 Update
 ------
-Unpack the newer archive anywhere and run its install.sh again. It keeps .env and secrets/ in
-/opt/flowrate and the data in the volumes.
+Run the installer again: the curl command above, or install.sh of a newer archive unpacked anywhere. It
+keeps .env and secrets/ in /opt/flowrate and the data in the volumes.
 
-Without the installer: copy .env.example to .env, set PUBLIC_IP, then docker load -i images.tar and
-docker compose up -d in this folder.
+Without the installer: copy .env.example to .env, set PUBLIC_IP, then docker load -i images.tar (or
+docker compose pull) and docker compose up -d in this folder.
 
 Ports
 -----
@@ -76,13 +89,19 @@ through: on OpenWrt that is a forward rule from wan to the zone of the bridge.
 
 Push notifications
 ------------------
-Off by default. To send them to FCM directly, put the Firebase service account key into secrets/ of the
-install directory, readable by the container (chmod 644), and name it in .env:
+Off unless the first run of the installer was given a key or a relay. To send them to FCM directly, with
+the Firebase service account key (Firebase console, Project settings, Service accounts, Generate new
+private key):
 
-    cp firebase-adminsdk.json /opt/flowrate/secrets/ && chmod 644 /opt/flowrate/secrets/firebase-adminsdk.json
-    PUSH_SERVICE_ACCOUNT_FILE=firebase-adminsdk.json
+    sh install.sh --fcm-key firebase-adminsdk.json
 
-Without a key of your own, set PUSH_RELAY_URL to a push relay instead. Then docker compose up -d again.
+It copies the key into /opt/flowrate/secrets/, readable by the container, and names it in .env. Without a
+key of your own, a push relay:
+
+    sh install.sh --push-relay https://relay.example.com
+
+and sh install.sh --no-push turns them off again. By hand: put the key into secrets/ (chmod 644) and set
+PUSH_SERVICE_ACCOUNT_FILE=<its name> in .env, or set PUSH_RELAY_URL, then docker compose up -d again.
 
 Data
 ----
