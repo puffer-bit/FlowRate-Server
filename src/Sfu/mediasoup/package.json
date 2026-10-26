@@ -1,0 +1,29 @@
+{
+  "name": "flowrate-sfu",
+  "version": "1.0.0",
+  "description": "FlowRate SFU: mediasoup behind a gRPC API",
+  "main": "dist/main.js",
+  "scripts": {
+    "build": "tsc -p . && node -e \"require('fs').cpSync('api/gRPC/contracts','dist/api/gRPC/contracts',{recursive:true})\"",
+    "start": "node dist/main.js",
+    "dev": "tsx main.ts"
+  },
+  "license": "MIT",
+  "type": "module",
+  "dependencies": {
+    "@grpc/grpc-js": "^1.14.4",
+    "@grpc/proto-loader": "^0.8.1",
+    "dotenv": "^17.4.2",
+    "express": "^5.2.1",
+    "mediasoup": "^3.31.0"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.6",
+    "@types/node": "^25.9.3",
+    "tsx": "^4.23.12",
+    "typescript": "^6.0.3"
+  },
+  "allowScripts": {
+    "mediasoup@3.31.0": true
+  }
+}

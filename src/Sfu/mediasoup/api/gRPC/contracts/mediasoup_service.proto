@@ -1,0 +1,27 @@
+syntax = "proto3";
+
+option csharp_namespace = "Server.Infrastructure.Mediasoup";
+package media;
+
+import "messages.proto";
+
+service MediasoupServer {
+  rpc Ping (PingRequest) returns (PingResponse);
+
+  rpc LoadSession (SessionRequest) returns (BaseResponse);
+  rpc UnloadSession (SessionRequest) returns (BaseResponse);
+
+  rpc CreatePeerTransport (CreateTransportRequest) returns (CreateTransportResponse);
+  rpc ConnectPeerTransport (ConnectTransportRequest) returns (ConnectTransportResponse);
+  rpc RemovePeerTransport (RemoveTransportRequest) returns (BaseResponse);
+
+  rpc AddOutbound (AddOutboundRequest) returns (AddOutboundResponse);
+  rpc RemoveOutbound (RemoveOutboundRequest) returns (BaseResponse);
+  rpc PauseOutbound (OutboundActionRequest) returns (BaseResponse);
+  rpc ResumeOutbound (OutboundActionRequest) returns (BaseResponse);
+
+  rpc AddInbound (AddInboundRequest) returns (AddInboundResponse);
+  rpc RemoveInbound (RemoveInboundRequest) returns (BaseResponse);
+  rpc PauseInbound (InboundActionRequest) returns (BaseResponse);
+  rpc ResumeInbound (InboundActionRequest) returns (BaseResponse);
+}

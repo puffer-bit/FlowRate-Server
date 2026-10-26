@@ -1,0 +1,33 @@
+using Shared.Enums;
+using Shared.Models;
+using Shared.Models.Requests.SessionActions.Generic;
+using Server.Application.Coordinator.Messaging;
+using Server.Application.Coordinator.Sessions.Layout;
+
+namespace Server.Application.Coordinator.Handlers.Sessions;
+
+public class MoveSessionHandler : IMessageHandler<MoveSessionRequest>
+{
+    private readonly ISessionLayoutService _layout;
+    private readonly IMessageSender _messageSender;
+
+    public MoveSessionHandler(ISessionLayoutService layout, IMessageSender messageSender)
+    {
+        _layout = layout;
+        _messageSender = messageSender;
+    }
+
+    public async Task<HandleMessageResult> HandleMessage(MoveSessionRequest? request, string connectionId)
+    {
+        if (request == null)
+            return HandleMessageResult.ForbiddenRequest;
+
+        var result = await _layout.MoveSessionAsync(request.SessionId, request.CategoryId, request.Index);
+        _messageSender.SendMessageById(connectionId, request.ToResponse(result));
+
+        return HandleMessageResult.NoError;
+    }
+
+    public BaseMessage? CreateFailureResponse(MoveSessionRequest request) =>
+        request.ToResponse(SessionLayoutResult.InternalError);
+}

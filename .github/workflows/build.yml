@@ -1,0 +1,50 @@
+# Builds the Docker images of the server and the SFU and packs them with the installer into
+# FlowRateServer-<version>-linux-x64-DOCKER.tar.gz (src/Scripts/bash/publish.sh), run by hand from the Actions
+# tab. The archive is uploaded as the artifact of the run; nothing is published to a release here,
+# release.yml calls this workflow and publishes it.
+name: Build
+
+on:
+  workflow_dispatch:
+  workflow_call:
+    outputs:
+      version:
+        description: The version of the build, from <InformationalVersion> of Server.Asp
+        value: ${{ jobs.build.outputs.version }}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: linux-x64
+    runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: recursive
+
+      - name: Version
+        id: version
+        run: |
+          version=$(sed -n 's:.*<InformationalVersion>\(.*\)</InformationalVersion>.*:\1:p' \
+              src/Server/Server.Asp/Server.Asp.csproj | head -n1)
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "### FlowRate server $version" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Publish
+        run: src/Scripts/bash/publish.sh
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: FlowRateServer-${{ steps.version.outputs.version }}-linux-x64-DOCKER
+          path: dist/FlowRateServer-*-DOCKER.tar.gz
+          if-no-files-found: error
+          # Already compressed
+          compression-level: 0

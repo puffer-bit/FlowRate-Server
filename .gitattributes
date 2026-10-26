@@ -1,0 +1,9 @@
+# Keep LF in the repository on every platform: the shell scripts run inside Linux containers
+* text=auto eol=lf
+
+# Binary assets
+*.png binary
+*.ico binary
+*.jpg binary
+*.gz binary
+*.zip binary

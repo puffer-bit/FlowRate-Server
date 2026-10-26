@@ -1,0 +1,46 @@
+syntax = "proto3";
+
+option csharp_namespace = "Server.Api.Grpc";
+package media;
+
+enum ProtoMediaSourceType {
+  Microphone = 0;
+  Camera = 1;
+  Screen = 2;
+  Undefined = 3;
+}
+
+enum ProtoMediaType {
+  Audio = 0;
+  Video = 1;
+  Tunnel = 2;
+}
+
+message RtpCodec {
+  string mime_type = 1;
+  uint32 payload_type = 2;
+  uint32 clock_rate = 3;
+  uint32 channels = 4;
+}
+
+message IceCandidate {
+  string candidate = 1;
+  string sdp_mid = 2;
+  int32 sdp_m_line_index = 3;
+}
+
+message DtlsFingerprint {
+  string algorithm = 1;
+  string value = 2;
+}
+
+message DtlsParameters {
+  string role = 1;
+  repeated DtlsFingerprint fingerprints = 2;
+}
+
+message IceParameters {
+  string username_fragment = 1;
+  string password = 2;
+  repeated IceCandidate server_ice_candidates = 3;
+}
