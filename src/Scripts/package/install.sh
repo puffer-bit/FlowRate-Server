@@ -6,7 +6,7 @@
 #
 # From the unpacked release archive it loads the images of the archive; on its own it downloads the compose files
 # of its release from GitHub and pulls the images from ghcr.io:
-#   curl -fsSL https://github.com/puffer-bit/FlowRate-Server/releases/latest/download/install.sh | sudo sh
+#   curl -fsSL https://github.com/puffer-bit/FlowRate-Server/releases/download/<tag>/install.sh | sudo sh
 #
 # Usage: sh install.sh [options]
 #   --public-ip IP          address clients reach this machine at, detected when not given

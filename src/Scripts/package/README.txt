@@ -5,9 +5,14 @@ The server and its SFU (mediasoup) as Docker images, for Linux on x64 and arm64.
 
 Install
 -------
-One command, the images come from ghcr.io:
+One command, the images come from ghcr.io. The newest pre-release:
 
-    curl -fsSL https://github.com/puffer-bit/FlowRate-Server/releases/latest/download/install.sh | sudo sh
+    curl -fsSL "$(curl -fsSL https://api.github.com/repos/puffer-bit/FlowRate-Server/releases \
+        | grep -o 'https://[^"]*/releases/download/[^"]*/install.sh' | head -n 1)" | sudo sh
+
+or a particular release by its tag:
+
+    curl -fsSL https://github.com/puffer-bit/FlowRate-Server/releases/download/<tag>/install.sh | sudo sh
 
 Or from the release archive, for a machine without access to ghcr.io: unpack it and run the installer
 from its folder:
@@ -29,7 +34,7 @@ piped:
     --version TAG           another release than the latest one, without the archive only
     -y                      no questions at all
 
-    curl -fsSL https://github.com/puffer-bit/FlowRate-Server/releases/latest/download/install.sh \
+    curl -fsSL https://github.com/puffer-bit/FlowRate-Server/releases/download/<tag>/install.sh \
         | sudo sh -s -- --public-ip 203.0.113.5 --fcm-key ./firebase-adminsdk.json
 
 Everything after that runs in the install directory, e.g. cd /opt/flowrate && docker compose logs -f.

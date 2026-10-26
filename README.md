@@ -10,10 +10,17 @@ It runs as two containers:
 
 ## Running it
 
-On a Linux server (x64 or arm64), the latest release with its images from ghcr.io:
+On a Linux server (x64 or arm64), the newest pre-release with its images from ghcr.io:
 
 ```sh
-curl -fsSL https://github.com/puffer-bit/FlowRate-Server/releases/latest/download/install.sh | sudo sh
+curl -fsSL "$(curl -fsSL https://api.github.com/repos/puffer-bit/FlowRate-Server/releases \
+    | grep -o 'https://[^"]*/releases/download/[^"]*/install.sh' | head -n 1)" | sudo sh
+```
+
+A particular one by its tag, from the [releases](https://github.com/puffer-bit/FlowRate-Server/releases):
+
+```sh
+curl -fsSL https://github.com/puffer-bit/FlowRate-Server/releases/download/<tag>/install.sh | sudo sh
 ```
 
 It asks for the public IP and the push notifications (a Firebase key or a relay, `--fcm-key FILE` /
