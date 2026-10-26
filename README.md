@@ -1,4 +1,4 @@
-# FlowRate server
+# FlowRate Server
 
 The server side of FlowRate: text chats, voice and video sessions, push notifications and a browser control panel.
 It runs as two containers:
