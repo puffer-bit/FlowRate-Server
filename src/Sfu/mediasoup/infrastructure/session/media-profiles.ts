@@ -1,6 +1,6 @@
 import { MediaSourceType } from '../../core/enums/media-source-type.js';
 import { MediaType } from '../../core/enums/media-type.js';
-import type { MediaKind, RtcpFeedback, RtpCapabilities, RtpCodecCapability, RtpCodecParameters } from 'mediasoup/types';
+import type { MediaKind, RtcpFeedback, RtpCapabilities, RtpCodecCapability, RtpCodecParameters, RtpHeaderExtensionParameters } from 'mediasoup/types';
 
 const OPUS = { mimeType: 'audio/opus', clockRate: 48000, channels: 2, payloadType: 100 };
 const VP8 = { mimeType: 'video/VP8', clockRate: 90000, payloadType: 96 };
@@ -21,6 +21,18 @@ const PLI_FIR_FEEDBACK: RtcpFeedback[] = [
 ];
 
 const NACK_FEEDBACK: RtcpFeedback = { type: 'nack', parameter: '' };
+
+const TRANSPORT_CC_FEEDBACK: RtcpFeedback = { type: 'transport-cc', parameter: '' };
+
+/**
+ * The header extensions of every producer. A client that sends the transport-wide sequence number
+ * under this id gets transport-cc feedback on it, and estimates the bandwidth by the delays; the
+ * client is told the id with each outbound track. A client that does not send it gets none, as
+ * before.
+ */
+export const PRODUCER_HEADER_EXTENSIONS: RtpHeaderExtensionParameters[] = [
+    { uri: 'http://www.ietf.org/id/draft-holmer-rmcat-transport-wide-cc-extensions-01', id: 5 }
+];
 
 /** Codecs of every session router; each profile below must match one of them. */
 export const ROUTER_CODECS: RtpCodecCapability[] = [
@@ -129,7 +141,9 @@ export function getMediaProfile(source: MediaSourceType, type: MediaType, settin
             kind: 'video',
             codec: {
                 ...videoCodec(source, resolved.mimeType),
-                rtcpFeedback: repaired ? [NACK_FEEDBACK, ...PLI_FIR_FEEDBACK] : PLI_FIR_FEEDBACK
+                rtcpFeedback: repaired
+                    ? [NACK_FEEDBACK, ...PLI_FIR_FEEDBACK, TRANSPORT_CC_FEEDBACK]
+                    : [...PLI_FIR_FEEDBACK, TRANSPORT_CC_FEEDBACK]
             },
             rtx: repaired,
             keyFrameRequestDelay: resolved.keyFrameRequestDelayMs
@@ -139,7 +153,11 @@ export function getMediaProfile(source: MediaSourceType, type: MediaType, settin
     if (type === MediaType.Audio && source === MediaSourceType.Microphone) {
         return {
             kind: 'audio',
-            codec: { ...OPUS, parameters: { 'useinbandfec': resolved.fec ? 1 : 0, 'usedtx': resolved.dtx ? 1 : 0, 'minptime': 10, 'ptime': 20 } },
+            codec: {
+                ...OPUS,
+                parameters: { 'useinbandfec': resolved.fec ? 1 : 0, 'usedtx': resolved.dtx ? 1 : 0, 'minptime': 10, 'ptime': 20 },
+                rtcpFeedback: [TRANSPORT_CC_FEEDBACK]
+            },
             rtx: false,
             keyFrameRequestDelay: 0
         };
@@ -148,7 +166,11 @@ export function getMediaProfile(source: MediaSourceType, type: MediaType, settin
     if (type === MediaType.Audio && source === MediaSourceType.Screen) {
         return {
             kind: 'audio',
-            codec: { ...OPUS, parameters: { 'useinbandfec': resolved.fec ? 1 : 0, 'usedtx': 0, 'stereo': 1, 'ptime': 20 } },
+            codec: {
+                ...OPUS,
+                parameters: { 'useinbandfec': resolved.fec ? 1 : 0, 'usedtx': 0, 'stereo': 1, 'ptime': 20 },
+                rtcpFeedback: [TRANSPORT_CC_FEEDBACK]
+            },
             rtx: false,
             keyFrameRequestDelay: 0
         };

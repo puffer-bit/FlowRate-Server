@@ -93,6 +93,9 @@ message AddOutboundResponse {
   // The stream the client retransmits lost packets on; 0 when the track has none
   uint32 rtx_payload_type = 6;
   uint32 rtx_ssrc = 7;
+  // The id the SFU reads the transport-wide sequence number under, answered with transport-cc
+  // feedback; 0 when it gives none
+  uint32 transport_cc_extension_id = 8;
 }
 
 message RemoveOutboundRequest {
