@@ -53,7 +53,8 @@ export class SFUServer {
                     ssrc: result.ssrc,
                     codec: this.toCodec(result.codec),
                     rtx_payload_type: result.rtx?.payloadType ?? 0,
-                    rtx_ssrc: result.rtx?.ssrc ?? 0
+                    rtx_ssrc: result.rtx?.ssrc ?? 0,
+                    transport_cc_extension_id: result.transportCcExtensionId ?? 0
                 };
             }),
             RemoveOutbound: this.handle(({ session_id, producer_id }) =>
