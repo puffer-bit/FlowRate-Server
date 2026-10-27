@@ -148,6 +148,7 @@ public partial class MediasoupGateway : ISFUGateway
             Channels = (int)(response.Codec?.Channels ?? 1),
             RtxPayloadType = (int)response.RtxPayloadType,
             RtxSSRC = response.RtxSsrc,
+            TransportCcExtensionId = (int)response.TransportCcExtensionId,
             IsFecEnabled = settings.IsFecEnabled,
             FecLossPercent = settings.FecLossPercent,
             IsDtxEnabled = settings.IsDtxEnabled
