@@ -88,7 +88,7 @@ public class ChatSessionManagerAttachmentTests
 
         var result = await _manager.AddMessageAsync(chatId, MessageWithImage(chatId), AuthorId);
 
-        Assert.Equal(AddMessageResult.NoError, result);
+        Assert.Equal(null, result);
         var image = Assert.Single(Assert.Single(_added).Images);
         Assert.Equal(5000, image.Size);
         Assert.Equal("image/png", image.MimeType);
@@ -124,7 +124,7 @@ public class ChatSessionManagerAttachmentTests
         var chatId = await CreateChat(attachmentsAllowed: false);
         StoreUploads(chatId);
 
-        Assert.Equal(AddMessageResult.AttachmentsNotAllowed,
+        Assert.Equal(ErrorCode.AttachmentsNotAllowed,
             await _manager.AddMessageAsync(chatId, MessageWithImage(chatId), AuthorId));
         Assert.Empty(_added);
     }
@@ -135,7 +135,7 @@ public class ChatSessionManagerAttachmentTests
         var chatId = await CreateChat();
         StoreUploads(chatId, ownerId: 2);
 
-        Assert.Equal(AddMessageResult.AttachmentInvalid,
+        Assert.Equal(ErrorCode.AttachmentInvalid,
             await _manager.AddMessageAsync(chatId, MessageWithImage(chatId), AuthorId));
     }
 
@@ -145,7 +145,7 @@ public class ChatSessionManagerAttachmentTests
         var chatId = await CreateChat();
         StoreUploads(chatId + 1);
 
-        Assert.Equal(AddMessageResult.AttachmentInvalid,
+        Assert.Equal(ErrorCode.AttachmentInvalid,
             await _manager.AddMessageAsync(chatId, MessageWithImage(chatId), AuthorId));
     }
 
@@ -155,7 +155,7 @@ public class ChatSessionManagerAttachmentTests
         var chatId = await CreateChat();
         StoreUploads(chatId, state: MediaUploadState.Uploading);
 
-        Assert.Equal(AddMessageResult.AttachmentNotReady,
+        Assert.Equal(ErrorCode.AttachmentNotReady,
             await _manager.AddMessageAsync(chatId, MessageWithImage(chatId), AuthorId));
     }
 
@@ -165,7 +165,7 @@ public class ChatSessionManagerAttachmentTests
         var chatId = await CreateChat();
         StoreUploads(chatId, state: MediaUploadState.Attached);
 
-        Assert.Equal(AddMessageResult.AttachmentInvalid,
+        Assert.Equal(ErrorCode.AttachmentInvalid,
             await _manager.AddMessageAsync(chatId, MessageWithImage(chatId), AuthorId));
     }
 
@@ -177,7 +177,7 @@ public class ChatSessionManagerAttachmentTests
         _messages.Setup(r => r.AddAsync(It.IsAny<ChatMessageModel>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new MediaUploadUnavailableException());
 
-        Assert.Equal(AddMessageResult.AttachmentNotReady,
+        Assert.Equal(ErrorCode.AttachmentNotReady,
             await _manager.AddMessageAsync(chatId, MessageWithImage(chatId), AuthorId));
         Assert.Empty(_events.Of<ChatSessionMessageAddedEvent>());
     }
@@ -201,7 +201,7 @@ public class ChatSessionManagerAttachmentTests
         var chatId = await CreateChat();
         StoreFile(chatId);
 
-        Assert.Equal(AddMessageResult.NoError, await _manager.AddMessageAsync(chatId, MessageWithFile(chatId), AuthorId));
+        Assert.Equal(null, await _manager.AddMessageAsync(chatId, MessageWithFile(chatId), AuthorId));
 
         var file = Assert.Single(Assert.Single(_added).Files);
         Assert.Equal("report.pdf", file.FileName);
@@ -216,7 +216,7 @@ public class ChatSessionManagerAttachmentTests
         var chatId = await CreateChat();
         StoreFile(chatId, kind: MediaUploadKind.Image);
 
-        Assert.Equal(AddMessageResult.AttachmentInvalid,
+        Assert.Equal(ErrorCode.AttachmentInvalid,
             await _manager.AddMessageAsync(chatId, MessageWithFile(chatId), AuthorId));
     }
 
@@ -226,7 +226,7 @@ public class ChatSessionManagerAttachmentTests
         var chatId = await CreateChat();
         StoreFile(chatId, state: MediaUploadState.Uploading);
 
-        Assert.Equal(AddMessageResult.AttachmentNotReady,
+        Assert.Equal(ErrorCode.AttachmentNotReady,
             await _manager.AddMessageAsync(chatId, MessageWithFile(chatId), AuthorId));
     }
 
@@ -236,7 +236,7 @@ public class ChatSessionManagerAttachmentTests
         var chatId = await CreateChat(attachmentsAllowed: false);
         StoreFile(chatId);
 
-        Assert.Equal(AddMessageResult.AttachmentsNotAllowed,
+        Assert.Equal(ErrorCode.AttachmentsNotAllowed,
             await _manager.AddMessageAsync(chatId, MessageWithFile(chatId), AuthorId));
     }
 
@@ -250,7 +250,7 @@ public class ChatSessionManagerAttachmentTests
             Video = [new ChatVideoContentDTO { Id = 1, FileName = "a.mp4", Size = 1, MimeType = "video/mp4", Width = 1, Height = 1, Duration = TimeSpan.FromSeconds(1) }]
         };
 
-        Assert.Equal(AddMessageResult.AttachmentInvalid, await _manager.AddMessageAsync(chatId, message, AuthorId));
+        Assert.Equal(ErrorCode.AttachmentInvalid, await _manager.AddMessageAsync(chatId, message, AuthorId));
     }
 
     [Fact]
@@ -269,7 +269,7 @@ public class ChatSessionManagerAttachmentTests
         _uploads.Setup(r => r.RemoveByMessageAsync(7, It.IsAny<CancellationToken>()))
             .ReturnsAsync([OriginalId, PreviewId]);
 
-        Assert.Equal(DeleteMessageResult.NoError, await _manager.DeleteMessageAsync(chatId, 7, AuthorId));
+        Assert.Equal(null, await _manager.DeleteMessageAsync(chatId, 7, AuthorId));
 
         _storage.Verify(s => s.DeleteAsync(OriginalId, It.IsAny<CancellationToken>()), Times.Once);
         _storage.Verify(s => s.DeleteAsync(PreviewId, It.IsAny<CancellationToken>()), Times.Once);

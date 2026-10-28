@@ -1,6 +1,6 @@
+using Shared.Enums;
 using Server.Core.Models.Roles;
 using Server.Application.Orchestrator.Roles;
-using Shared.Enums.Coordinator;
 using Shared.Models.DataTransferObjects;
 
 namespace Server.Application.Mappers;
@@ -22,16 +22,16 @@ public static class RoleMapperExtensions
 
     public static RoleChange ToChange(this RoleUpdateDTO role) => new(role.Name, role.Color, role.Permissions);
 
-    public static CoordinatorRoleResult ToResult(this RoleOperationStatus status) => status switch
+    public static ErrorCode? ToResult(this RoleOperationStatus status) => status switch
     {
-        RoleOperationStatus.Done => CoordinatorRoleResult.NoError,
-        RoleOperationStatus.InsufficientPermissions => CoordinatorRoleResult.InsufficientPermissions,
-        RoleOperationStatus.HierarchyViolation => CoordinatorRoleResult.HierarchyViolation,
-        RoleOperationStatus.Conflict => CoordinatorRoleResult.Conflict,
-        RoleOperationStatus.RoleNotFound => CoordinatorRoleResult.RoleNotFound,
-        RoleOperationStatus.UserNotFound => CoordinatorRoleResult.UserNotFound,
-        RoleOperationStatus.Invalid => CoordinatorRoleResult.InvalidRole,
-        RoleOperationStatus.TooManyRoles => CoordinatorRoleResult.TooManyRoles,
-        _ => CoordinatorRoleResult.InternalError
+        RoleOperationStatus.Done => null,
+        RoleOperationStatus.InsufficientPermissions => ErrorCode.InsufficientPermissions,
+        RoleOperationStatus.HierarchyViolation => ErrorCode.HierarchyViolation,
+        RoleOperationStatus.Conflict => ErrorCode.Conflict,
+        RoleOperationStatus.RoleNotFound => ErrorCode.RoleNotFound,
+        RoleOperationStatus.UserNotFound => ErrorCode.UserNotFound,
+        RoleOperationStatus.Invalid => ErrorCode.InvalidValue,
+        RoleOperationStatus.TooManyRoles => ErrorCode.TooManyRoles,
+        _ => ErrorCode.Internal
     };
 }

@@ -48,7 +48,7 @@ public partial class MediasoupGateway
         });
         _activeChannel = channel;
         _grpcClient = new MediasoupServer.MediasoupServerClient(channel);
-        UpdateStatus(SfuNodeConnectionState.Connecting, error: null);
+        UpdateStatus(SFUNodeConnectionState.Connecting, error: null);
 
         try
         {
@@ -64,12 +64,12 @@ public partial class MediasoupGateway
         }
         catch (OperationCanceledException)
         {
-            MarkUnreachable(SfuNodeConnectionState.Disconnected, "Connection timed out.");
+            MarkUnreachable(SFUNodeConnectionState.Disconnected, "Connection timed out.");
             _logger.LogError($"Connection to gRPC server {_endpoint.Address} timed out or was cancelled");
         }
         catch (Exception ex)
         {
-            MarkUnreachable(SfuNodeConnectionState.Disconnected, ex.Message);
+            MarkUnreachable(SFUNodeConnectionState.Disconnected, ex.Message);
             _logger.LogError(ex, "Failed to establish initial connection to gRPC server: {EndpointAddress}. Exception: {ExMessage}", _endpoint.Address, ex.Message);
         }
 
@@ -85,7 +85,7 @@ public partial class MediasoupGateway
         lock (_statusLock)
         {
             IsConnected = false;
-            SetStatus(SfuNodeConnectionState.Disconnected, roundTripTime: null, error: "Disconnected by the orchestrator.");
+            SetStatus(SFUNodeConnectionState.Disconnected, roundTripTime: null, error: "Disconnected by the orchestrator.");
         }
     }
 
@@ -116,7 +116,7 @@ public partial class MediasoupGateway
                 var currentState = channel.State;
 
                 if (currentState == ConnectivityState.TransientFailure)
-                    MarkUnreachable(SfuNodeConnectionState.Disconnected, "Connection with the node lost.");
+                    MarkUnreachable(SFUNodeConnectionState.Disconnected, "Connection with the node lost.");
 
                 if (currentState == ConnectivityState.Ready)
                     MarkReachable();
@@ -179,7 +179,7 @@ public partial class MediasoupGateway
         // A channel that is down is reported by the monitor; here only a node that stopped answering is left
         if (channel.State != ConnectivityState.Ready)
         {
-            MarkUnreachable(SfuNodeConnectionState.Disconnected, error);
+            MarkUnreachable(SFUNodeConnectionState.Disconnected, error);
             return;
         }
 
@@ -190,7 +190,7 @@ public partial class MediasoupGateway
             isLost = _missedPings >= MissedPingsLimit && IsConnected;
             if (isLost)
                 IsConnected = false;
-            SetStatus(SfuNodeConnectionState.Unresponsive, roundTripTime: null, error);
+            SetStatus(SFUNodeConnectionState.Unresponsive, roundTripTime: null, error);
         }
 
         if (isLost)
@@ -209,13 +209,13 @@ public partial class MediasoupGateway
         lock (_statusLock)
         {
             // A ready channel says nothing about a node that stopped answering pings
-            if (roundTripTime == null && _status.State == SfuNodeConnectionState.Unresponsive)
+            if (roundTripTime == null && _status.State == SFUNodeConnectionState.Unresponsive)
                 return;
 
             _missedPings = 0;
             isRestored = !IsConnected;
             IsConnected = true;
-            SetStatus(SfuNodeConnectionState.Connected, roundTripTime ?? _status.RoundTripTime, error: null,
+            SetStatus(SFUNodeConnectionState.Connected, roundTripTime ?? _status.RoundTripTime, error: null,
                 lastPingAtUtc: roundTripTime != null ? DateTimeOffset.UtcNow : null, load);
         }
 
@@ -226,7 +226,7 @@ public partial class MediasoupGateway
         }
     }
 
-    private void MarkUnreachable(SfuNodeConnectionState state, string error)
+    private void MarkUnreachable(SFUNodeConnectionState state, string error)
     {
         bool isLost;
         lock (_statusLock)
@@ -244,7 +244,7 @@ public partial class MediasoupGateway
         }
     }
 
-    private void UpdateStatus(SfuNodeConnectionState state, string? error)
+    private void UpdateStatus(SFUNodeConnectionState state, string? error)
     {
         lock (_statusLock)
             SetStatus(state, _status.RoundTripTime, error);
@@ -254,7 +254,7 @@ public partial class MediasoupGateway
     /// Called under <see cref="_statusLock"/>, so <see cref="StatusChanged"/> handlers only take note and return.
     /// Null <paramref name="lastPingAtUtc"/> and <paramref name="load"/> keep the previous values.
     /// </remarks>
-    private void SetStatus(SfuNodeConnectionState state, TimeSpan? roundTripTime, string? error,
+    private void SetStatus(SFUNodeConnectionState state, TimeSpan? roundTripTime, string? error,
         DateTimeOffset? lastPingAtUtc = null, SfuNodeLoad? load = null)
     {
         var previous = _status;

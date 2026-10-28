@@ -25,15 +25,11 @@ public class ChatSessionHistoryPageHandler : IMessageHandler<ChatSessionHistoryP
         var (result, page) = await _chatSessionManager.FetchMessagesBeforeAsync(request.ChatId,
             request.BeforeMessageId, request.Take);
 
-        var responseData = page != null
-            ? request.ToResponse(result, page.Messages.ToDtoList(), page.Revision)
-            : request.ToResponse(result, null, 0);
+        var responseData = request.Answer(result,
+            () => request.ToResponse(page!.Messages.ToDtoList(), page.Revision));
 
         _messageSender.SendMessageById(connectionId, responseData);
 
-        return result == FetchMessagesResult.NoError ? HandleMessageResult.NoError : HandleMessageResult.InternalError;
+        return result == null ? HandleMessageResult.NoError : HandleMessageResult.InternalError;
     }
-
-    public BaseMessage? CreateFailureResponse(ChatSessionHistoryPageRequest request) =>
-        request.ToResponse(FetchMessagesResult.InternalError, null, 0);
 }

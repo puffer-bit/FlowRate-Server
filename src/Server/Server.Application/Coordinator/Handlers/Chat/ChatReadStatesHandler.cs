@@ -24,11 +24,8 @@ public class ChatReadStatesHandler : IMessageHandler<ChatReadStatesRequest>
 
         var states = await _readService.GetStatesAsync(request.SenderId);
         _messageSender.SendMessageById(connectionId,
-            request.ToResponse(ChatReadResult.NoError, states.Select(state => state.ToDto()).ToList()));
+            request.ToResponse(states.Select(state => state.ToDto()).ToList()));
 
         return HandleMessageResult.NoError;
     }
-
-    public BaseMessage? CreateFailureResponse(ChatReadStatesRequest request) =>
-        request.ToResponse(ChatReadResult.InternalError, null);
 }

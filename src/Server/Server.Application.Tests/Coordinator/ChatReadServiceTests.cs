@@ -74,7 +74,7 @@ public class ChatReadServiceTests
 
         var (result, state) = await _service.MarkReadAsync(UserId, ChatId, 99);
 
-        Assert.Equal(ChatReadResult.NoError, result);
+        Assert.Equal(null, result);
         Assert.Equal(30, state!.LastReadMessageId);
         _sender.Verify(s => s.SendMessageByUserId(UserId,
             It.Is<ChatReadStateChangedNotification>(n => n.State.ChatId == ChatId && n.State.UnreadCount == 0)),
@@ -86,7 +86,7 @@ public class ChatReadServiceTests
     {
         var (result, _) = await _service.MarkReadAsync(UserId, ChatId + 1, 3);
 
-        Assert.Equal(ChatReadResult.ChatNotExists, result);
+        Assert.Equal(ErrorCode.ChatNotFound, result);
         _repository.VerifyNoOtherCalls();
     }
 

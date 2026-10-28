@@ -25,15 +25,11 @@ public class ChatSessionChangesHandler : IMessageHandler<ChatSessionChangesReque
         var (result, changes) = await _chatSessionManager.FetchChangesAsync(request.ChatId,
             request.AfterRevision, request.Take);
 
-        var responseData = changes != null
-            ? request.ToResponse(result, changes.Messages.ToDtoList(), changes.Revision, changes.HasMore, changes.Reset)
-            : request.ToResponse(result, null, 0, false, false);
+        var responseData = request.Answer(result,
+            () => request.ToResponse(changes!.Messages.ToDtoList(), changes.Revision, changes.HasMore, changes.Reset));
 
         _messageSender.SendMessageById(connectionId, responseData);
 
-        return result == FetchMessagesResult.NoError ? HandleMessageResult.NoError : HandleMessageResult.InternalError;
+        return result == null ? HandleMessageResult.NoError : HandleMessageResult.InternalError;
     }
-
-    public BaseMessage? CreateFailureResponse(ChatSessionChangesRequest request) =>
-        request.ToResponse(FetchMessagesResult.InternalError, null, 0, false, false);
 }

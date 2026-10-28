@@ -28,7 +28,7 @@ public static class CoordinatorMapperExtensions
             MaxOnlineUsers = model.MaxOnlineUsers,
             MaxUsers = model.MaxUsers,
             IsMOTDEnabled = model.Motd.IsEnabled,
-            MotdText = model.Motd.IsEnabled ? model.Motd.Text : null,
+            MOTDText = model.Motd.IsEnabled ? model.Motd.Text : null,
             IsPasswordProtected = !string.IsNullOrEmpty(model.PasswordHash),
             HeartbeatIntervalSeconds = model.Heartbeat.IntervalSeconds,
             HeartbeatTimeoutSeconds = model.Heartbeat.TimeoutSeconds,

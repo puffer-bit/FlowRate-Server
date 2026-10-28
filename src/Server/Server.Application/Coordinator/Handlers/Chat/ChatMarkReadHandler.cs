@@ -23,11 +23,8 @@ public class ChatMarkReadHandler : IMessageHandler<ChatMarkReadRequest>
         if (request == null) return HandleMessageResult.ForbiddenRequest;
 
         var (result, state) = await _readService.MarkReadAsync(request.SenderId, request.ChatId, request.MessageId);
-        _messageSender.SendMessageById(connectionId, request.ToResponse(result, state?.ToDto()));
+        _messageSender.SendMessageById(connectionId, request.Answer(result, () => request.ToResponse(state!.ToDto())));
 
-        return result == ChatReadResult.NoError ? HandleMessageResult.NoError : HandleMessageResult.InternalError;
+        return result == null ? HandleMessageResult.NoError : HandleMessageResult.InternalError;
     }
-
-    public BaseMessage? CreateFailureResponse(ChatMarkReadRequest request) =>
-        request.ToResponse(ChatReadResult.InternalError, null);
 }

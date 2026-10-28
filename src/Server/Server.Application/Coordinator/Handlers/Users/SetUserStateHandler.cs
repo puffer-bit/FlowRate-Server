@@ -40,20 +40,20 @@ public class SetUserStateHandler : IMessageHandler<CoordinatorSetUserStateReques
         if (request == null)
             return HandleMessageResult.ForbiddenRequest;
 
-        var userId = request.UserTargetId;
+        var userId = request.TargetUserId;
         if (userId == request.SenderId || userId == UserModel.SystemUserId)
         {
-            _messageSender.SendMessageById(connectionId, request.ToResponse(ModerateUserResult.CannotTargetSelf));
+            _messageSender.SendMessageById(connectionId, request.ToError(ErrorCode.CannotTargetSelf));
             return HandleMessageResult.NoError;
         }
 
         var result = await _userManager.SetState(userId, request.State);
-        var user = result == ModerateUserResult.NoError
+        var user = result == null
             ? (await _userManager.GetUserAsync(userId))?.ToDto(request.SenderId)
             : null;
-        _messageSender.SendMessageById(connectionId, request.ToResponse(result, user));
+        _messageSender.SendMessageById(connectionId, request.Answer(result, () => request.ToResponse(user!)));
 
-        if (result != ModerateUserResult.NoError)
+        if (result != null)
         {
             _logger.LogTrace("User {SenderId} failed to make user {Id} {State}: {Result}", request.SenderId, userId,
                 request.State, result);
@@ -77,7 +77,4 @@ public class SetUserStateHandler : IMessageHandler<CoordinatorSetUserStateReques
             connection.Close();
         }
     }
-
-    public BaseMessage? CreateFailureResponse(CoordinatorSetUserStateRequest request) =>
-        request.ToResponse(ModerateUserResult.InternalError);
 }

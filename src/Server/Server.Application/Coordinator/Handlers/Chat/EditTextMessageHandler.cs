@@ -9,7 +9,7 @@ using Server.Application.Coordinator.Authentication;
 
 namespace Server.Application.Coordinator.Handlers.Chat;
 
-public class EditTextMessageHandler : IMessageHandler<EditTextMessageRequest>
+public class EditTextMessageHandler : IMessageHandler<EditMessageRequest>
 {
     private readonly IChatSessionManager _chatSessionManager;
     private readonly IMessageSender _messageSender;
@@ -20,19 +20,16 @@ public class EditTextMessageHandler : IMessageHandler<EditTextMessageRequest>
         _messageSender = messageSender;
     }
 
-    public async Task<HandleMessageResult> HandleMessage(EditTextMessageRequest? request, string connectionId)
+    public async Task<HandleMessageResult> HandleMessage(EditMessageRequest? request, string connectionId)
     {
         if (request == null) return HandleMessageResult.ForbiddenRequest;
 
         var result = await _chatSessionManager.EditMessageAsync(request.ChatId, request.MessageId, request.Text, request.SenderId);
-        var responseData = request.ToResponse(result);
+        var responseData = request.Answer(result, request.ToResponse);
         
         _messageSender.SendMessageById(connectionId, 
             responseData);
         
-        return result == EditMessageResult.NoError ? HandleMessageResult.NoError : HandleMessageResult.InternalError;
+        return result == null ? HandleMessageResult.NoError : HandleMessageResult.InternalError;
     }
-
-    public BaseMessage? CreateFailureResponse(EditTextMessageRequest request) =>
-        request.ToResponse(EditMessageResult.InternalError);
 }

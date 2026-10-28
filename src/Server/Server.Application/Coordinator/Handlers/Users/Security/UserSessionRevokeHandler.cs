@@ -23,7 +23,7 @@ public class UserSessionRevokeHandler(IMessageSender messageSender, IConnectionM
             // The current session is left with a logout, not ended from under the connection that asks
             if (sessionId == current || !await sessions.EndAsync(request.SenderId, sessionId))
             {
-                messageSender.SendMessageById(connectionId, request.ToResponse(UserSecurityResult.SessionNotFound));
+                messageSender.SendMessageById(connectionId, request.ToError(ErrorCode.SessionNotFound));
                 return HandleMessageResult.NoError;
             }
         }
@@ -33,10 +33,7 @@ public class UserSessionRevokeHandler(IMessageSender messageSender, IConnectionM
         }
 
         var list = await sessions.GetAsync(request.SenderId, current);
-        messageSender.SendMessageById(connectionId, request.ToResponse(UserSecurityResult.NoError, list));
+        messageSender.SendMessageById(connectionId, request.ToResponse(list));
         return HandleMessageResult.NoError;
     }
-
-    public BaseMessage? CreateFailureResponse(UserSessionRevokeRequest request) =>
-        request.ToResponse(UserSecurityResult.InternalError);
 }

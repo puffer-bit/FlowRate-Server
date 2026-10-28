@@ -18,17 +18,14 @@ public class UserTwoFactorSetupHandler(IMessageSender messageSender, UserSecurit
 
         if (!await replies.IsProvenAsync(request.SenderId, request.Proof))
         {
-            messageSender.SendMessageById(connectionId, request.ToResponse(UserSecurityResult.ProofRequired));
+            messageSender.SendMessageById(connectionId, request.ToError(ErrorCode.ProofRequired));
             return HandleMessageResult.ForbiddenRequest;
         }
 
         var (status, offer) = await replies.Security.OfferTwoFactorAsync(replies.CoordinatorId, request.SenderId);
         messageSender.SendMessageById(connectionId, offer == null
-            ? request.ToResponse(status.ToResult())
-            : request.ToResponse(UserSecurityResult.NoError, offer.Secret, offer.Uri));
+            ? request.ToError(status.ToResult() ?? ErrorCode.Internal)
+            : request.ToResponse(offer.Secret, offer.Uri));
         return HandleMessageResult.NoError;
     }
-
-    public BaseMessage? CreateFailureResponse(UserTwoFactorSetupRequest request) =>
-        request.ToResponse(UserSecurityResult.InternalError);
 }

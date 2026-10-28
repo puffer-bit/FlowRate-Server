@@ -20,14 +20,9 @@ public class BanInSessionHandler : HybridSessionRequestHandler<BanInSessionReque
     protected override int GetSessionId(BanInSessionRequest request) => request.SessionId;
 
     protected override async Task<BaseMessage> HandleAsync(BanInSessionRequest request, IHybridSession session) =>
-        request.ToResponse(await session.PeerManager.BanPeerAsync(request.SenderId, request.UserTargetId, request.Reason));
+        request.Answer(await session.PeerManager.BanPeerAsync(request.SenderId, request.TargetUserId, request.Reason), request.ToResponse);
 
     // Only hybrid sessions support this request, so an id of another session type is never found
-    protected override BaseMessage SessionNotFound(BanInSessionRequest request) =>
-        request.ToResponse(request.SessionType == SessionType.Hybrid
-            ? BanFromSessionResult.SessionNotExists
-            : BanFromSessionResult.UnknownSessionType);
-
-    public override BaseMessage CreateFailureResponse(BanInSessionRequest request) =>
-        request.ToResponse(BanFromSessionResult.InternalError);
+    protected override ErrorCode SessionNotFound(BanInSessionRequest request) =>
+        request.SessionType == SessionType.Hybrid ? ErrorCode.SessionNotFound : ErrorCode.WrongSessionType;
 }

@@ -1,3 +1,5 @@
+using Shared.Enums;
+using Shared.Models.Responses;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Server.Application.Abstractions.Security;
@@ -110,11 +112,11 @@ public class TwoStageLoginTests
         await Login();
 
         var response = Assert.IsType<UserAuthResponse>(Assert.Single(_sent));
-        Assert.Equal(AuthResult.SecondStageRequeried, response.AuthResult);
-        Assert.Null(response.UserDTO);
-        Assert.Equal("TwoFactor,FIDO2", response.ServerMessage);
-        Assert.Equal("challenge", response.FIDO2LoginOptionsDTO!.Challenge);
-        Assert.Equal("AQ", Assert.Single(response.FIDO2LoginOptionsDTO.AllowedCredentials).Id);
+        Assert.Equal(AuthResult.SecondStageRequired, response.AuthResult);
+        Assert.Null(response.User);
+        Assert.Equal([SecondStageAuthType.TwoFactor, SecondStageAuthType.FIDO2], response.SecondStages);
+        Assert.Equal("challenge", response.FIDO2LoginOptions!.Challenge);
+        Assert.Equal("AQ", Assert.Single(response.FIDO2LoginOptions.AllowedCredentials).Id);
         _users.Verify(u => u.AttachUser(It.IsAny<string?>(), It.IsAny<IClientConnection>()), Times.Never);
         _connection.Verify(c => c.Close(It.IsAny<ConnectionCloseReason>()), Times.Never);
     }
@@ -129,8 +131,7 @@ public class TwoStageLoginTests
         await SendCode("123456");
 
         var response = Assert.IsType<TwoFactorUserAuthResponse>(_sent[^1]);
-        Assert.Equal(AuthResult.Success, response.AuthResult);
-        Assert.Equal(UserId, response.UserDTO!.Id);
+        Assert.Equal(UserId, response.User!.Id);
         Assert.Equal(UserId, _connection.Object.UserId);
         _users.Verify(u => u.AttachUser(Identity, _connection.Object), Times.Once);
     }
@@ -192,7 +193,7 @@ public class TwoStageLoginTests
         RequireSecondStage();
         await _firstStage.HandleMessage(new UserAuthRequest(null, Identity, SessionToken: first), ConnectionId);
 
-        Assert.Equal(AuthResult.SecondStageRequeried, Assert.IsType<UserAuthResponse>(_sent[^1]).AuthResult);
+        Assert.Equal(AuthResult.SecondStageRequired, Assert.IsType<UserAuthResponse>(_sent[^1]).AuthResult);
     }
 
     [Fact]
@@ -204,7 +205,7 @@ public class TwoStageLoginTests
 
         await _firstStage.HandleMessage(new UserAuthRequest(null, Identity, SessionToken: token), ConnectionId);
 
-        Assert.Equal(AuthResult.SecondStageRequeried, Assert.IsType<UserAuthResponse>(_sent[^1]).AuthResult);
+        Assert.Equal(AuthResult.SecondStageRequired, Assert.IsType<UserAuthResponse>(_sent[^1]).AuthResult);
     }
 
     [Fact]
@@ -244,7 +245,7 @@ public class TwoStageLoginTests
         for (var i = 1; i < PendingLogins.MaxFailures; i++)
         {
             await SendCode("000000");
-            Assert.Equal(AuthResult.AuthFailed, Assert.IsType<TwoFactorUserAuthResponse>(_sent[^1]).AuthResult);
+            Assert.Equal(ErrorCode.AuthFailed, Assert.IsType<ErrorResponse>(_sent[^1]).Code);
             _connection.Verify(c => c.Close(It.IsAny<ConnectionCloseReason>()), Times.Never);
         }
 
@@ -262,7 +263,7 @@ public class TwoStageLoginTests
 
         await SendCode("123456");
 
-        Assert.Equal(AuthResult.AuthFailed, Assert.IsType<TwoFactorUserAuthResponse>(Assert.Single(_sent)).AuthResult);
+        Assert.Equal(ErrorCode.AuthFailed, Assert.IsType<ErrorResponse>(Assert.Single(_sent)).Code);
         _connection.Verify(c => c.Close(It.IsAny<ConnectionCloseReason>()), Times.Once);
         _users.Verify(u => u.AttachUser(It.IsAny<string?>(), It.IsAny<IClientConnection>()), Times.Never);
     }
@@ -275,7 +276,7 @@ public class TwoStageLoginTests
 
         await SendCode("123456");
 
-        Assert.Equal(AuthResult.AuthFailed, Assert.IsType<TwoFactorUserAuthResponse>(_sent[^1]).AuthResult);
+        Assert.Equal(ErrorCode.AuthFailed, Assert.IsType<ErrorResponse>(_sent[^1]).Code);
         _authenticator.Verify(a => a.CheckUserLoginData(It.IsAny<int>(), It.IsAny<string?>(), It.IsAny<string?>()),
             Times.Never);
     }
@@ -291,7 +292,7 @@ public class TwoStageLoginTests
 
         await _passkeys.HandleMessage(new FIDO2UserAuthRequest(Assertion()), ConnectionId);
 
-        Assert.Equal(AuthResult.Success, Assert.IsType<FIDO2UserAuthResponse>(_sent[^1]).AuthResult);
+        Assert.IsType<FIDO2UserAuthResponse>(_sent[^1]);
         Assert.Equal(UserId, _connection.Object.UserId);
     }
 
@@ -303,7 +304,7 @@ public class TwoStageLoginTests
 
         await _passkeys.HandleMessage(new FIDO2UserAuthRequest(Assertion()), ConnectionId);
 
-        Assert.Equal(AuthResult.AuthFailed, Assert.IsType<FIDO2UserAuthResponse>(_sent[^1]).AuthResult);
+        Assert.Equal(ErrorCode.AuthFailed, Assert.IsType<ErrorResponse>(_sent[^1]).Code);
         _authenticator.Verify(a => a.CheckPasskeyAsync(It.IsAny<int>(), It.IsAny<string>(),
             It.IsAny<PasskeyAssertion>()), Times.Never);
     }
@@ -319,7 +320,7 @@ public class TwoStageLoginTests
 
         await SendCode("123456");
 
-        Assert.Equal(AuthResult.Banned, Assert.IsType<TwoFactorUserAuthResponse>(_sent[^1]).AuthResult);
+        Assert.Equal(ErrorCode.Banned, Assert.IsType<ErrorResponse>(_sent[^1]).Code);
         _connection.Verify(c => c.Close(It.IsAny<ConnectionCloseReason>()), Times.Once);
     }
 
@@ -330,7 +331,7 @@ public class TwoStageLoginTests
 
         await SendCode("123456");
 
-        Assert.Equal(AuthResult.AuthFailed, Assert.IsType<TwoFactorUserAuthResponse>(_sent[^1]).AuthResult);
+        Assert.Equal(ErrorCode.AuthFailed, Assert.IsType<ErrorResponse>(_sent[^1]).Code);
         _connection.Verify(c => c.Close(It.IsAny<ConnectionCloseReason>()), Times.Never);
     }
 

@@ -85,9 +85,9 @@ public sealed class PushReplyService
 
             return await _chats.AddMessageAsync(request.ChatId, message, device!.UserId) switch
             {
-                AddMessageResult.NoError => PushReplyResult.Sent,
-                AddMessageResult.ChatNotExists => PushReplyResult.ChatNotExists,
-                AddMessageResult.Rejected => PushReplyResult.Forbidden,
+                null => PushReplyResult.Sent,
+                ErrorCode.ChatNotFound => PushReplyResult.ChatNotExists,
+                ErrorCode.ChatReadOnly => PushReplyResult.Forbidden,
                 _ => PushReplyResult.InternalError
             };
         }
@@ -114,8 +114,8 @@ public sealed class PushReplyService
                 cancellationToken);
             return result switch
             {
-                ChatReadResult.NoError => PushReplyResult.Sent,
-                ChatReadResult.ChatNotExists => PushReplyResult.ChatNotExists,
+                null => PushReplyResult.Sent,
+                ErrorCode.ChatNotFound => PushReplyResult.ChatNotExists,
                 _ => PushReplyResult.InternalError
             };
         }

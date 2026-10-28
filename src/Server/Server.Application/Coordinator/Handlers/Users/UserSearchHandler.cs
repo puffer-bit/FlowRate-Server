@@ -36,12 +36,9 @@ public class UserSearchHandler : IMessageHandler<CoordinatorUserSearchRequest>
             .Select(match => match.user.ToDto(request.SenderId))
             .ToList();
 
-        _messageSender.SendMessageById(connectionId, request.ToResponse(users, UsersRequestResult.NoError));
+        _messageSender.SendMessageById(connectionId, request.ToResponse(users));
         return HandleMessageResult.NoError;
     }
-
-    public BaseMessage? CreateFailureResponse(CoordinatorUserSearchRequest request) =>
-        request.ToResponse(new List<UserDTO>(), UsersRequestResult.InternalError);
 
     private static int RankOf(string username, string query)
     {

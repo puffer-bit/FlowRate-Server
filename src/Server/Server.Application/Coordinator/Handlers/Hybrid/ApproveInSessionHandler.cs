@@ -20,14 +20,9 @@ public class ApproveInSessionHandler : HybridSessionRequestHandler<ApproveUserRe
     protected override int GetSessionId(ApproveUserRequest request) => request.SessionId;
 
     protected override async Task<BaseMessage> HandleAsync(ApproveUserRequest request, IHybridSession session) =>
-        request.ToResponse(await session.PeerManager.ApprovePeerAsync(request.SenderId, request.UserTargetId));
+        request.Answer(await session.PeerManager.ApprovePeerAsync(request.SenderId, request.TargetUserId), request.ToResponse);
 
     // Only hybrid sessions support this request, so an id of another session type is never found
-    protected override BaseMessage SessionNotFound(ApproveUserRequest request) =>
-        request.ToResponse(request.SessionType == SessionType.Hybrid
-            ? ApproveUserSessionResult.SessionNotExists
-            : ApproveUserSessionResult.UnknownSessionType);
-
-    public override BaseMessage CreateFailureResponse(ApproveUserRequest request) =>
-        request.ToResponse(ApproveUserSessionResult.InternalError);
+    protected override ErrorCode SessionNotFound(ApproveUserRequest request) =>
+        request.SessionType == SessionType.Hybrid ? ErrorCode.SessionNotFound : ErrorCode.WrongSessionType;
 }

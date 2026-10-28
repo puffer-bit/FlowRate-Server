@@ -25,7 +25,7 @@ public class UserIdentityResetHandler(IMessageSender messageSender, IConnectionM
 
         if (!await replies.IsProvenAsync(request.SenderId, request.Proof))
         {
-            messageSender.SendMessageById(connectionId, request.ToResponse(UserSecurityResult.ProofRequired));
+            messageSender.SendMessageById(connectionId, request.ToError(ErrorCode.ProofRequired));
             return HandleMessageResult.ForbiddenRequest;
         }
 
@@ -33,10 +33,7 @@ public class UserIdentityResetHandler(IMessageSender messageSender, IConnectionM
         await users.SetIdentityAsync(request.SenderId, identity);
         await sessions.EndAllButAsync(request.SenderId, connection.UserSessionId, UserSessionEndReason.IdentityReset);
 
-        messageSender.SendMessageById(connectionId, request.ToResponse(UserSecurityResult.NoError, identity));
+        messageSender.SendMessageById(connectionId, request.ToResponse(identity));
         return HandleMessageResult.NoError;
     }
-
-    public BaseMessage? CreateFailureResponse(UserIdentityResetRequest request) =>
-        request.ToResponse(UserSecurityResult.InternalError);
 }

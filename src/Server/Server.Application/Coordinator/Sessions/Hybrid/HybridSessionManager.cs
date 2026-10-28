@@ -64,14 +64,14 @@ public class HybridSessionManager : IHybridSessionManager
         }
     }
 
-    public async Task<(CreateSessionResult result, HybridSessionModel? session)> CreateAsync(CreateSessionModel request,
+    public async Task<(ErrorCode? result, HybridSessionModel? session)> CreateAsync(CreateSessionModel request,
         int userId)
     {
         if (request.Capacity <= 1)
-            return (CreateSessionResult.WrongCapacity, null);
+            return (ErrorCode.InvalidValue, null);
 
         if (request.SessionData is not HybridSessionCreateData hybridData)
-            return (CreateSessionResult.UnexpectedParameters, null);
+            return (ErrorCode.InvalidValue, null);
 
         await _lifecycleLock.WaitAsync();
         try
@@ -79,7 +79,7 @@ public class HybridSessionManager : IHybridSessionManager
             if (_sessions.Values.Any(s => s.Model.Name == request.Name))
             {
                 _logger.LogTrace("Failed to create hybrid session. Name \"{Name}\" already used", request.Name);
-                return (CreateSessionResult.NameAlreadyUsed, null);
+                return (ErrorCode.NameTaken, null);
             }
 
             var model = HybridSessionModel.Create(_coordinatorInstanceId, request.Name, request.Capacity, userId,
@@ -98,12 +98,12 @@ public class HybridSessionManager : IHybridSessionManager
 
             _logger.LogTrace("Hybrid session \"{Name}\" (ID: {SessionId}) created", model.Name, model.Id);
             await _coordinatorEventBus.PublishAsync(new HybridSessionCreatedEvent(model, userId));
-            return (CreateSessionResult.NoError, model);
+            return (null, model);
         }
         catch (Exception e)
         {
             _logger.LogError(e, "Failed to create hybrid session.");
-            return (CreateSessionResult.InternalError, null);
+            return (ErrorCode.Internal, null);
         }
         finally
         {
@@ -111,13 +111,13 @@ public class HybridSessionManager : IHybridSessionManager
         }
     }
 
-    public async Task<DeleteSessionResult> DeleteAsync(int sessionId, int userId)
+    public async Task<ErrorCode?> DeleteAsync(int sessionId, int userId)
     {
         await _lifecycleLock.WaitAsync();
         try
         {
             if (!_sessions.TryRemove(sessionId, out var session))
-                return DeleteSessionResult.SessionNotExists;
+                return ErrorCode.SessionNotFound;
 
             try
             {
@@ -132,12 +132,12 @@ public class HybridSessionManager : IHybridSessionManager
 
             _logger.LogTrace("Hybrid session \"{Name}\" (ID: {SessionId}) deleted", session.Model.Name, sessionId);
             await _coordinatorEventBus.PublishAsync(new HybridSessionDeletedEvent(sessionId, userId));
-            return DeleteSessionResult.NoError;
+            return null;
         }
         catch (Exception e)
         {
             _logger.LogError(e, "Failed to delete hybrid session {SessionId}.", sessionId);
-            return DeleteSessionResult.InternalError;
+            return ErrorCode.Internal;
         }
         finally
         {
@@ -145,24 +145,24 @@ public class HybridSessionManager : IHybridSessionManager
         }
     }
 
-    public async Task<ChangeSessionSettingsResult> ChangeSettingsAsync(int sessionId, string name, int capacity,
+    public async Task<ErrorCode?> ChangeSettingsAsync(int sessionId, string name, int capacity,
         bool isHostMustApprove, HybridMediaSettings media, int userId)
     {
         await _lifecycleLock.WaitAsync();
         try
         {
             if (!_sessions.TryGetValue(sessionId, out var session))
-                return ChangeSessionSettingsResult.SessionNotExists;
+                return ErrorCode.SessionNotFound;
 
             // Same rule as on creation, and the peers already inside must still fit
             if (capacity <= 1 || capacity < session.PeerManager.GetAllPeerSnapshots().Count)
-                return ChangeSessionSettingsResult.WrongCapacity;
+                return ErrorCode.InvalidValue;
 
             if (_sessions.Values.Any(s => s.Model.Id != sessionId && s.Model.Name == name))
             {
                 _logger.LogTrace("Failed to change hybrid session {SessionId}. Name \"{Name}\" already used",
                     sessionId, name);
-                return ChangeSessionSettingsResult.NameAlreadyUsed;
+                return ErrorCode.NameTaken;
             }
 
             var model = session.Model;
@@ -190,12 +190,12 @@ public class HybridSessionManager : IHybridSessionManager
 
             _logger.LogTrace("Hybrid session \"{Name}\" (ID: {SessionId}) reconfigured", model.Name, sessionId);
             await _coordinatorEventBus.PublishAsync(new HybridSessionReconfiguredEvent(model, userId));
-            return ChangeSessionSettingsResult.NoError;
+            return null;
         }
         catch (Exception e)
         {
             _logger.LogError(e, "Failed to change hybrid session {SessionId}.", sessionId);
-            return ChangeSessionSettingsResult.InternalError;
+            return ErrorCode.Internal;
         }
         finally
         {

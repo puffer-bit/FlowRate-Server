@@ -24,12 +24,6 @@ public class HybridSessionStartVideoShareHandler : HybridSessionRequestHandler<H
     protected override async Task<BaseMessage> HandleAsync(HybridSessionStartVideoRequest request, IHybridSession session)
     {
         var (result, outbound) = await session.PeerManager.StartVideoShareAsync(request.SenderId);
-        return request.ToResponse(result, outbound);
+        return request.Answer(result, () => request.ToResponse(outbound!));
     }
-
-    protected override BaseMessage SessionNotFound(HybridSessionStartVideoRequest request) =>
-        request.ToResponse(StartVideoShareResult.SessionNotExists);
-
-    public override BaseMessage CreateFailureResponse(HybridSessionStartVideoRequest request) =>
-        request.ToResponse(StartVideoShareResult.InternalError);
 }

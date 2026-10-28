@@ -42,10 +42,10 @@ public class SessionManager : ISessionManager
         await _layout.LoadAsync(GetUnorderedSessionModels().Select(session => session.Id));
     }
 
-    public async Task<(CreateSessionResult result, SessionModel? session)> CreateSessionAsync(
+    public async Task<(ErrorCode? result, SessionModel? session)> CreateSessionAsync(
         CreateSessionModel request, int userId)
     {
-        (CreateSessionResult result, SessionModel? session) created;
+        (ErrorCode? result, SessionModel? session) created;
         switch (request.SessionData.SessionType)
         {
             case SessionType.Chat:
@@ -55,7 +55,7 @@ public class SessionManager : ISessionManager
                 created = await _hybridSessions.CreateAsync(request, userId);
                 break;
             default:
-                return (CreateSessionResult.UnexpectedParameters, null);
+                return (ErrorCode.InvalidValue, null);
         }
 
         if (created.session != null)
@@ -64,34 +64,34 @@ public class SessionManager : ISessionManager
         return created;
     }
 
-    public async Task<DeleteSessionResult> DeleteSessionAsync(int sessionId, int userId)
+    public async Task<ErrorCode?> DeleteSessionAsync(int sessionId, int userId)
     {
-        DeleteSessionResult result;
+        ErrorCode? result;
         if (_chatSessions.TryGetSession(sessionId, out _))
             result = await _chatSessions.DeleteAsync(sessionId, userId);
         else if (_hybridSessions.TryGetSession(sessionId, out _))
             result = await _hybridSessions.DeleteAsync(sessionId, userId);
         else
-            return DeleteSessionResult.SessionNotExists;
+            return ErrorCode.SessionNotFound;
 
-        if (result == DeleteSessionResult.NoError)
+        if (result == null)
             await _layout.RemoveSessionAsync(sessionId);
 
         return result;
     }
 
-    public async Task<ChangeSessionPermissionsResult> SetPermissionsAsync(int sessionId,
+    public async Task<ErrorCode?> SetPermissionsAsync(int sessionId,
         IReadOnlyList<PermissionOverride> overrides)
     {
         await _permissionsLock.WaitAsync();
         try
         {
             if (!TryGetSessionModel(sessionId, out var session))
-                return ChangeSessionPermissionsResult.SessionNotExists;
+                return ErrorCode.SessionNotFound;
 
             await _permissions.ReplaceAsync(sessionId, overrides);
             session.SetPermissionOverrides(overrides);
-            return ChangeSessionPermissionsResult.NoError;
+            return null;
         }
         finally
         {

@@ -64,7 +64,7 @@ public sealed class PushEndpointsTests : IDisposable
             UserState.Normal, UserStatus.Online, DateTime.UtcNow, DateTime.UtcNow));
         _chats.Setup(c => c.AddMessageAsync(It.IsAny<int>(), It.IsAny<NewChatMessageModel>(), UserId))
             .ReturnsAsync((int chatId, NewChatMessageModel _, int _) =>
-                chatId == ChatId ? AddMessageResult.NoError : AddMessageResult.ChatNotExists);
+                chatId == ChatId ? null : ErrorCode.ChatNotFound);
 
         var chat = ChatSessionModel.Create(Coordinator, "general", UserId);
         _chats.Setup(c => c.TryGetSession(ChatId, out chat)).Returns(true);

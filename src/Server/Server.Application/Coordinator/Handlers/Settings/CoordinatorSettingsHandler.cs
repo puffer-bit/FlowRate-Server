@@ -1,5 +1,4 @@
 using Shared.Enums;
-using Shared.Enums.Coordinator;
 using Shared.Models;
 using Shared.Models.Requests.Coordinator;
 using Server.Application.Coordinator.Messaging;
@@ -37,14 +36,11 @@ public class CoordinatorSettingsHandler : IMessageHandler<CoordinatorSettingsReq
         var nodes = await _settingsService.GetSfuNodesAsync();
 
         _messageSender.SendMessageById(connectionId, model == null
-            ? request.ToResponse(CoordinatorSettingsResult.InternalError)
-            : request.ToResponse(CoordinatorSettingsResult.NoError, model.ToSettingsDto(),
+            ? request.ToError(ErrorCode.Internal)
+            : request.ToResponse(model.ToSettingsDto(),
                 // A snapshot of the connections: the client shows it as it was when the settings were opened
                 nodes.Select(node => node.ToDto(node.IsEnabled ? _sfuNodes.GetStatus(node.Id) : null)).ToList()));
 
         return HandleMessageResult.NoError;
     }
-
-    public BaseMessage? CreateFailureResponse(CoordinatorSettingsRequest request) =>
-        request.ToResponse(CoordinatorSettingsResult.InternalError);
 }
