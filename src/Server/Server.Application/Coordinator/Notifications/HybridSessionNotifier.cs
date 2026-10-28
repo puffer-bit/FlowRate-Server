@@ -32,6 +32,8 @@ public class HybridSessionNotifier :
     IEventHandler<HybridSessionPeerUnmuteMicrophoneEvent>,
     IEventHandler<HybridSessionPeerMuteSoundEvent>,
     IEventHandler<HybridSessionPeerUnmuteSoundEvent>,
+    IEventHandler<HybridSessionPeerStartedWatchingScreenShareEvent>,
+    IEventHandler<HybridSessionPeerStoppedWatchingScreenShareEvent>,
     IEventHandler<HybridSessionPeerAfkEvent>,
     IEventHandler<HybridSessionPeerNotAfkEvent>,
     IEventHandler<HybridSessionPeerPokedEvent>
@@ -192,6 +194,20 @@ public class HybridSessionNotifier :
     public Task HandleAsync(HybridSessionPeerUnmuteSoundEvent evt, CancellationToken ct = default)
     {
         _visibility.Send(evt.SessionId, new HybridSessionPeerUnmuteSoundNotification(evt.SessionId, evt.UserId, evt.InitiatorUserId));
+        return Task.CompletedTask;
+    }
+
+    public Task HandleAsync(HybridSessionPeerStartedWatchingScreenShareEvent evt, CancellationToken ct = default)
+    {
+        _visibility.Send(evt.SessionId,
+            new HybridSessionPeerStartedWatchingScreenShareNotification(evt.SessionId, evt.UserId, evt.SharerUserId));
+        return Task.CompletedTask;
+    }
+
+    public Task HandleAsync(HybridSessionPeerStoppedWatchingScreenShareEvent evt, CancellationToken ct = default)
+    {
+        _visibility.Send(evt.SessionId,
+            new HybridSessionPeerStoppedWatchingScreenShareNotification(evt.SessionId, evt.UserId, evt.SharerUserId));
         return Task.CompletedTask;
     }
 

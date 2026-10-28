@@ -322,6 +322,7 @@ public partial class HybridSessionPeerManager
 
         sharer.SetScreenShareActive(false);
         await PauseScreenWatchersAsync(outbound.Id);
+        await ForgetWatchersOfScreenShareAsync(userId);
 
         var result = await Gateway.PauseOutbound(Model.Id, outbound.Id);
 
@@ -376,6 +377,8 @@ public partial class HybridSessionPeerManager
                 return (SetScreenShareWatchResult.SFUError, null, null);
             }
 
+            await ForgetScreenShareWatchAsync(listenerUserId, userId);
+
             if (watched != null)
                 _logger.LogTrace("Peer with ID {listenerUserId} stopped watching screen share of peer {userId}.", listenerUserId, userId);
             return (SetScreenShareWatchResult.NoError, watched, heard);
@@ -401,6 +404,10 @@ public partial class HybridSessionPeerManager
                 return (SetScreenShareWatchResult.SFUError, null, null);
             }
         }
+
+        if (listener.StartWatchingScreenShare(userId))
+            await _coordinatorEventBus.PublishAsync(
+                new HybridSessionPeerStartedWatchingScreenShareEvent(Model.Id, listenerUserId, userId));
 
         _logger.LogTrace("Peer with ID {listenerUserId} started watching screen share of peer {userId}.", listenerUserId, userId);
         return (SetScreenShareWatchResult.NoError, inbound, audioInbound);
@@ -592,6 +599,12 @@ public partial class HybridSessionPeerManager
 
             await Task.WhenAll(consumed.Select(pair => Gateway.RemoveInbound(Model.Id, userId, pair.Value.Id)));
 
+            if (_peers.TryGetValue(userId, out var listener))
+            {
+                foreach (var sharerId in listener.WatchedScreenShares)
+                    await ForgetScreenShareWatchAsync(userId, sharerId);
+            }
+
             if (_peers.TryGetValue(userId, out var speaker))
                 speaker.SetMicrophoneMuted(false);
 
@@ -606,6 +619,7 @@ public partial class HybridSessionPeerManager
             {
                 speaker?.SetScreenShareActive(false);
                 ForgetInbounds(screenOutbound.Id);
+                await ForgetWatchersOfScreenShareAsync(userId);
                 await Gateway.RemoveOutbound(Model.Id, userId, screenOutbound.Id);
                 await _coordinatorEventBus.PublishAsync(new HybridSessionPeerStoppedScreenShareEvent(Model.Id, userId));
             }
@@ -620,6 +634,20 @@ public partial class HybridSessionPeerManager
         {
             _logger.LogError(e, "Failed to release media of user with ID {userId}", userId);
         }
+    }
+
+    /// <summary>Tells the session the listener no longer watches the screen share of the user, if it did.</summary>
+    private async Task ForgetScreenShareWatchAsync(int listenerUserId, int userId)
+    {
+        if (_peers.TryGetValue(listenerUserId, out var listener) && listener.StopWatchingScreenShare(userId))
+            await _coordinatorEventBus.PublishAsync(
+                new HybridSessionPeerStoppedWatchingScreenShareEvent(Model.Id, listenerUserId, userId));
+    }
+
+    private async Task ForgetWatchersOfScreenShareAsync(int userId)
+    {
+        foreach (var peer in _peers.Values)
+            await ForgetScreenShareWatchAsync(peer.UserId, userId);
     }
 
     private void ForgetInbounds(string outboundId)
@@ -641,6 +669,9 @@ public partial class HybridSessionPeerManager
         _inbounds.Clear();
         _screenWatchers.Clear();
         _readyInbounds.Clear();
+
+        foreach (var peer in _peers.Values)
+            peer.ForgetWatchedScreenShares();
     }
 
     private static int? InitiatorOrNull(int initiatorId, int userId) => initiatorId == userId ? null : initiatorId;
