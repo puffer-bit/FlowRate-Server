@@ -22,7 +22,8 @@ public static class PeerMapperExtensions
             IsScreenShareActive = peer.IsScreenShareActive,
             IsScreenAudioActive = peer.IsScreenAudioActive,
             IsAfk = peer.IsAfk,
-            AfkMessage = peer.AfkReason
+            AfkMessage = peer.AfkReason,
+            WatchedScreenShares = peer.WatchedScreenShares?.ToList() ?? []
         };
     }
 }
