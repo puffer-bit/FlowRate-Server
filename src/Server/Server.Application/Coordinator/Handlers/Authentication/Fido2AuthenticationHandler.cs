@@ -24,7 +24,7 @@ public class Fido2AuthenticationHandler(IAuthenticator authenticator, SecondStag
             login => login.Challenge.Passkey is { } options && TryDecode(request.AssertionResponse) is { } assertion
                 ? authenticator.CheckPasskeyAsync(login.Challenge.UserId, options.OptionsJson, assertion)
                 : Task.FromResult(false),
-            (result, user) => request.ToResponse(result, user?.ToDto(user.Id)));
+            (result, user, token) => request.ToResponse(result, user?.ToDto(user.Id), sessionToken: token));
     }
 
     public static PasskeyAssertion? TryDecode(FIDO2AssertionDTO? dto)

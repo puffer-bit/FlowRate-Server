@@ -234,7 +234,9 @@ public class CoordinatorInstanceFactory : ICoordinatorInstanceFactory
         ICoordinatorPermissions permissions,
         SessionVisibility visibility)
     {
-        var userLogin = new UserLogin(userManager);
+        var userSessions = new UserSessions(_provider.GetRequiredService<IUserSessionRepository>(), connectionManager,
+            coordinatorInstanceId, _provider.GetRequiredService<TimeProvider>());
+        var userLogin = new UserLogin(userManager, userSessions);
         var pendingLogins = new PendingLogins();
         var secondStage = new SecondStageAuthentication(logger, messageSender, connectionManager, userLogin, pendingLogins);
         yield return new AuthenticationActionHandler(logger, messageSender, authenticator, connectionManager, userLogin,
@@ -252,6 +254,10 @@ public class CoordinatorInstanceFactory : ICoordinatorInstanceFactory
         yield return new UserPasskeyOptionsHandler(messageSender, securityReplies);
         yield return new UserPasskeyRegisterHandler(messageSender, securityReplies);
         yield return new UserPasskeyDeleteHandler(messageSender, securityReplies);
+        yield return new UserSessionsHandler(messageSender, connectionManager, userSessions);
+        yield return new UserSessionRevokeHandler(messageSender, connectionManager, userSessions);
+        yield return new UserIdentityResetHandler(messageSender, connectionManager, securityReplies,
+            _provider.GetRequiredService<IUserRepository>(), userSessions);
         
         yield return ActivatorUtilities.CreateInstance<CreateSessionHandler>(_provider, sessionManager, messageSender);
         yield return ActivatorUtilities.CreateInstance<LeaveSessionHandler>(_provider, hybridSessionManager, messageSender);

@@ -732,6 +732,11 @@ namespace Server.Infrastructure.Database.Migrations
                     b.Property<DateTime>("FirstConnectionTime")
                         .HasColumnType("TEXT");
 
+                    b.Property<byte[]>("IdentityHash")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("BLOB");
+
                     b.Property<string>("Ip")
                         .HasMaxLength(45)
                         .HasColumnType("TEXT");
@@ -757,17 +762,14 @@ namespace Server.Infrastructure.Database.Migrations
                     b.Property<int>("State")
                         .HasColumnType("INTEGER");
 
-                    b.Property<string>("UserIdentity")
-                        .IsRequired()
-                        .HasMaxLength(37)
-                        .HasColumnType("TEXT");
-
                     b.Property<string>("Username")
                         .IsRequired()
                         .HasMaxLength(32)
                         .HasColumnType("TEXT");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("CoordinatorInstanceId", "IdentityHash");
 
                     b.ToTable("UserEntities");
                 });
@@ -861,6 +863,71 @@ namespace Server.Infrastructure.Database.Migrations
                     b.HasKey("UserId");
 
                     b.ToTable("UserSecurityData", (string)null);
+                });
+
+            modelBuilder.Entity("Server.Infrastructure.Database.Entities.UserSessionEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("AppVersion")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("CoordinatorInstanceId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("DeviceName")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("DevicePlatform")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("ExpiresAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("LastAddress")
+                        .HasMaxLength(45)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("LastUsedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<byte[]>("PreviousTokenHash")
+                        .HasMaxLength(32)
+                        .HasColumnType("BLOB");
+
+                    b.Property<byte[]>("TokenHash")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("BLOB");
+
+                    b.Property<int>("UserId")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PreviousTokenHash");
+
+                    b.HasIndex("TokenHash")
+                        .IsUnique();
+
+                    b.HasIndex("UserId");
+
+                    b.HasIndex("CoordinatorInstanceId", "UserId");
+
+                    b.ToTable("UserSessions", (string)null);
                 });
 
             modelBuilder.Entity("Server.Infrastructure.Database.Entities.HybridSessionEntity", b =>
@@ -1128,6 +1195,15 @@ namespace Server.Infrastructure.Database.Migrations
                     b.HasOne("Server.Infrastructure.Database.Entities.UserEntity", null)
                         .WithOne("SecurityData")
                         .HasForeignKey("Server.Infrastructure.Database.Entities.UserSecurityDataEntity", "UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Server.Infrastructure.Database.Entities.UserSessionEntity", b =>
+                {
+                    b.HasOne("Server.Infrastructure.Database.Entities.UserEntity", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
                 });

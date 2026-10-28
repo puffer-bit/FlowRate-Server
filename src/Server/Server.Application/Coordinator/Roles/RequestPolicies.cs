@@ -87,7 +87,8 @@ public static class RequestPolicies
         // The sender's own account; changes are proven with the current password and code by the handlers
         UserSecurityInfoRequest or UserSetPasswordRequest or UserTwoFactorSetupRequest or UserTwoFactorEnableRequest
             or UserTwoFactorDisableRequest or UserPasskeyOptionsRequest or UserPasskeyRegisterRequest
-            or UserPasskeyDeleteRequest => Open,
+            or UserPasskeyDeleteRequest or UserSessionsRequest or UserSessionRevokeRequest
+            or UserIdentityResetRequest => Open,
 
         _ => null
     };
@@ -110,7 +111,8 @@ public static class RequestPolicies
         // Securing one's own account is never held back
         UserSecurityInfoRequest or UserSetPasswordRequest or UserTwoFactorSetupRequest or UserTwoFactorEnableRequest
             or UserTwoFactorDisableRequest or UserPasskeyOptionsRequest or UserPasskeyRegisterRequest
-            or UserPasskeyDeleteRequest => true,
+            or UserPasskeyDeleteRequest or UserSessionsRequest or UserSessionRevokeRequest
+            or UserIdentityResetRequest => true,
 
         _ => false
     };

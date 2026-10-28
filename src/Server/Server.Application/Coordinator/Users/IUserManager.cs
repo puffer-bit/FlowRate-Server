@@ -25,6 +25,9 @@ public interface IUserManager
     /// already stays attached as they are, and <see cref="UserConnected"/> is raised only when they come online.
     /// </summary>
     Task<UserAttachment> AttachUser(string? userIdentity, IClientConnection clientConnection);
+
+    /// <summary>Attaches the user of a device session, who proved themselves when the session started.</summary>
+    Task<UserAttachment> AttachUser(int userId, IClientConnection clientConnection);
     Task<ChangeUsernameResult> ChangeUsername(int userId, string newUsername);
     Task<SetAvatarResult> SetAvatar(int userId, string? avatarUrl);
 

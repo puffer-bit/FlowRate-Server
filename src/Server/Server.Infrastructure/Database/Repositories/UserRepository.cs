@@ -3,6 +3,7 @@ using Server.Core.Models.User;
 using Server.Infrastructure.Database.Entities;
 using Server.Infrastructure.Mappers;
 using Server.Application.Abstractions.Persistence;
+using Server.Application.Coordinator.Authentication;
 
 namespace Server.Infrastructure.Database.Repositories;
 
@@ -35,9 +36,10 @@ public class UserRepository : IUserRepository
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
 
+        var identityHash = SecretHash.Of(identity);
         var userEntity = await context.UserEntities
             .Include(x => x.Roles)
-            .FirstOrDefaultAsync(x => x.UserIdentity == identity && x.CoordinatorInstanceId == coordinatorInstanceId,
+            .FirstOrDefaultAsync(x => x.IdentityHash == identityHash && x.CoordinatorInstanceId == coordinatorInstanceId,
                 cancellationToken);
         
         return userEntity.ToModel();
@@ -90,7 +92,7 @@ public class UserRepository : IUserRepository
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
 
-        var userEntity = model.ToEntity(userIdentity);
+        var userEntity = model.ToEntity(SecretHash.Of(userIdentity));
         userEntity.SecurityData = new UserSecurityDataEntity();
         await context.UserEntities.AddAsync(userEntity, cancellationToken);
         await context.SaveChangesAsync(cancellationToken);
@@ -116,7 +118,7 @@ public class UserRepository : IUserRepository
         if (entity == null)
             return;
         
-        context.Entry(entity).CurrentValues.SetValues(model.ToEntity(entity.UserIdentity));
+        context.Entry(entity).CurrentValues.SetValues(model.ToEntity(entity.IdentityHash));
         await context.SaveChangesAsync(cancellationToken);
     }
 
@@ -135,14 +137,16 @@ public class UserRepository : IUserRepository
         }
     }
 
-    public async Task<string?> GetIdentityByIdAsync(
-        int userId, 
+    public async Task SetIdentityAsync(
+        int userId,
+        string userIdentity,
         CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
 
-        var entity = await context.UserEntities
-            .FirstOrDefaultAsync(x => x.Id == userId, cancellationToken);
-        return entity?.UserIdentity;
+        var identityHash = SecretHash.Of(userIdentity);
+        await context.UserEntities
+            .Where(x => x.Id == userId)
+            .ExecuteUpdateAsync(setters => setters.SetProperty(x => x.IdentityHash, identityHash), cancellationToken);
     }
 }

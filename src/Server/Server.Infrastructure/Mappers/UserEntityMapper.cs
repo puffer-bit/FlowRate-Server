@@ -14,13 +14,13 @@ public static class UserEntityMapper
             entity.Roles.Select(role => role.RoleId));
     }
 
-    public static UserEntity ToEntity(this UserModel? model, string userIdentity)
+    public static UserEntity ToEntity(this UserModel? model, byte[] identityHash)
     {
         if (model == null) return null!;
         return new UserEntity
         {
             Id = model.Id,
-            UserIdentity = userIdentity,
+            IdentityHash = identityHash,
             Username = model.Username,
             Ip = model.Ip ?? string.Empty,
             CoordinatorInstanceId = model.CoordinatorInstanceId,
@@ -49,14 +49,14 @@ public static class UserEntityMapper
     }
     
     public static IDictionary<string, UserEntity> ToEntityDictionary(
-        this IDictionary<string, (UserModel model, string userIdentity)> source)
+        this IDictionary<string, (UserModel model, byte[] identityHash)> source)
     {
         if (source == null)
             throw new ArgumentNullException(nameof(source));
 
         return source.ToDictionary(
             pair => pair.Key,
-            pair => pair.Value.model.ToEntity(pair.Value.userIdentity)
+            pair => pair.Value.model.ToEntity(pair.Value.identityHash)
         );
     }
 }
