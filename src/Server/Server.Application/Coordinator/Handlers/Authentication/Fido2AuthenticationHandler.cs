@@ -20,11 +20,11 @@ public class Fido2AuthenticationHandler(IAuthenticator authenticator, SecondStag
         if (request == null)
             return Task.FromResult(HandleMessageResult.ForbiddenRequest);
 
-        return secondStage.HandleAsync(connectionId,
+        return secondStage.HandleAsync(request, connectionId,
             login => login.Challenge.Passkey is { } options && TryDecode(request.AssertionResponse) is { } assertion
                 ? authenticator.CheckPasskeyAsync(login.Challenge.UserId, options.OptionsJson, assertion)
                 : Task.FromResult(false),
-            (result, user, token) => request.ToResponse(result, user?.ToDto(user.Id), sessionToken: token));
+            (user, token) => request.ToResponse(user.ToDto(user.Id), token));
     }
 
     public static PasskeyAssertion? TryDecode(FIDO2AssertionDTO? dto)

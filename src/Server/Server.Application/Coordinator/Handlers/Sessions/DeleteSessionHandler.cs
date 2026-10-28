@@ -26,11 +26,8 @@ public class DeleteSessionHandler : IMessageHandler<DeleteSessionRequest>
             return HandleMessageResult.ForbiddenRequest;
 
         var result = await _sessionManager.DeleteSessionAsync(request.SessionId, request.SenderId);
-        _messageSender.SendMessageById(connectionId, request.ToResponse(result));
+        _messageSender.SendMessageById(connectionId, request.Answer(result, request.ToResponse));
 
         return HandleMessageResult.NoError;
     }
-
-    public BaseMessage? CreateFailureResponse(DeleteSessionRequest request) =>
-        request.ToResponse(DeleteSessionResult.InternalError);
 }

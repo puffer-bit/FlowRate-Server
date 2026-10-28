@@ -8,14 +8,14 @@ namespace Server.Application.Abstractions.Sfu;
 /// <param name="StateChangedAtUtc">When <paramref name="State"/> last changed.</param>
 /// <param name="Error">Why the node is not connected, if known.</param>
 public sealed record SfuNodeStatus(
-    SfuNodeConnectionState State,
+    SFUNodeConnectionState State,
     TimeSpan? RoundTripTime,
     DateTimeOffset? LastPingAtUtc,
     DateTimeOffset StateChangedAtUtc,
     string? Error = null,
     SfuNodeLoad? Load = null)
 {
-    public static SfuNodeStatus Initial() => new(SfuNodeConnectionState.Connecting, null, null, DateTimeOffset.UtcNow);
+    public static SfuNodeStatus Initial() => new(SFUNodeConnectionState.Connecting, null, null, DateTimeOffset.UtcNow);
 }
 
 /// <summary>Load the node reported with its last ping.</summary>

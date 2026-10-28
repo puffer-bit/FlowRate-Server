@@ -1,6 +1,5 @@
 using Microsoft.Extensions.Logging;
 using Shared.Enums;
-using Shared.Enums.Coordinator;
 using Shared.Models;
 using Shared.Models.Requests.Coordinator;
 using Server.Application.Coordinator.Messaging;
@@ -43,22 +42,20 @@ public class CoordinatorUpdateSettingsHandler : IMessageHandler<CoordinatorUpdat
 
         var code = result.Status switch
         {
-            CoordinatorSettingsUpdateStatus.Updated => CoordinatorSettingsResult.NoError,
-            CoordinatorSettingsUpdateStatus.Conflict => CoordinatorSettingsResult.Conflict,
-            CoordinatorSettingsUpdateStatus.Invalid => CoordinatorSettingsResult.InvalidSettings,
-            _ => CoordinatorSettingsResult.InternalError
+            CoordinatorSettingsUpdateStatus.Updated => (ErrorCode?)null,
+            CoordinatorSettingsUpdateStatus.Conflict => ErrorCode.Conflict,
+            CoordinatorSettingsUpdateStatus.Invalid => ErrorCode.InvalidValue,
+            _ => ErrorCode.Internal
         };
 
-        _messageSender.SendMessageById(connectionId, request.ToResponse(code, result.Settings?.ToSettingsDto(),
-            result.Errors.Count > 0 ? result.Errors.ToDictionary() : null));
+        _messageSender.SendMessageById(connectionId, code is { } error
+            ? request.ToError(error, fields: result.Errors.Count > 0 ? result.Errors.ToDictionary() : null)
+            : request.ToResponse(result.Settings!.ToSettingsDto()));
 
-        if (code != CoordinatorSettingsResult.NoError)
+        if (code != null)
             _logger.LogTrace("User {SenderId} failed to change the coordinator settings: {Result}",
                 request.SenderId, code);
 
         return HandleMessageResult.NoError;
     }
-
-    public BaseMessage? CreateFailureResponse(CoordinatorUpdateSettingsRequest request) =>
-        request.ToResponse(CoordinatorSettingsResult.InternalError);
 }

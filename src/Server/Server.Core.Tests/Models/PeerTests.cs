@@ -36,11 +36,11 @@ public class PeerTests
     {
         var guest = Peer.Join(GuestId, Session(isHostMustApprove: true));
 
-        Assert.Equal(HybridSessionConnectTransportResult.NoError, guest.MarkTransportConnected());
+        Assert.Equal(null, guest.MarkTransportConnected());
         Assert.False(guest.CanReceiveMedia);
         Assert.Equal(HybridSessionPeerState.WaitingForApprove, guest.State);
 
-        Assert.Equal(ApproveUserSessionResult.NoError, guest.Approve());
+        Assert.Equal(null, guest.Approve());
         Assert.True(guest.IsApproved);
         Assert.True(guest.CanReceiveMedia);
     }
@@ -61,8 +61,8 @@ public class PeerTests
     {
         var host = Peer.Join(HostId, Session(isHostMustApprove: true));
 
-        Assert.Equal(ApproveUserSessionResult.InternalError, host.Approve());
-        Assert.Equal(RejectUserSessionResult.InternalError, host.Reject());
+        Assert.Equal(ErrorCode.Internal, host.Approve());
+        Assert.Equal(ErrorCode.Internal, host.Reject());
     }
 
     [Fact]
@@ -70,12 +70,12 @@ public class PeerTests
     {
         var guest = Peer.Join(GuestId, Session(isHostMustApprove: true));
 
-        Assert.Equal(RejectUserSessionResult.NoError, guest.Reject());
+        Assert.Equal(null, guest.Reject());
 
         Assert.Equal(HybridSessionPeerState.Closed, guest.State);
-        Assert.Equal(ApproveUserSessionResult.AlreadyRejected, guest.Approve());
-        Assert.Equal(HybridSessionJoinResult.Rejected, guest.Rejoin());
-        Assert.Equal(HybridSessionConnectTransportResult.Rejected, guest.MarkTransportConnected());
+        Assert.Equal(ErrorCode.AlreadyRejected, guest.Approve());
+        Assert.Equal(ErrorCode.NotAdmitted, guest.Rejoin());
+        Assert.Equal(ErrorCode.NotAdmitted, guest.MarkTransportConnected());
     }
 
     [Fact]
@@ -84,7 +84,7 @@ public class PeerTests
         var guest = Peer.Join(GuestId, Session(isHostMustApprove: true));
         guest.Approve();
 
-        Assert.Equal(RejectUserSessionResult.AlreadyApproved, guest.Reject());
+        Assert.Equal(ErrorCode.AlreadyApproved, guest.Reject());
         Assert.False(guest.IsRejected);
     }
 
@@ -95,7 +95,7 @@ public class PeerTests
         guest.MarkTransportConnected();
         guest.SetMicrophoneMuted(true);
 
-        Assert.Equal(HybridSessionJoinResult.NoError, guest.Rejoin());
+        Assert.Equal(null, guest.Rejoin());
 
         Assert.False(guest.IsTransportConnected);
         Assert.False(guest.IsMicrophoneMuted);

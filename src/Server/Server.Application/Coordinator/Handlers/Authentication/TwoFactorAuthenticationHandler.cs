@@ -15,10 +15,10 @@ public class TwoFactorAuthenticationHandler(IAuthenticator authenticator, Second
         if (request == null)
             return Task.FromResult(HandleMessageResult.ForbiddenRequest);
 
-        return secondStage.HandleAsync(connectionId,
+        return secondStage.HandleAsync(request, connectionId,
             login => login.Challenge.AcceptsCodes
                 ? authenticator.CheckUserLoginData(login.Challenge.UserId, request.Password, request.TwoFactorCode)
                 : Task.FromResult(false),
-            (result, user, token) => request.ToResponse(result, user?.ToDto(user.Id), sessionToken: token));
+            (user, token) => request.ToResponse(user.ToDto(user.Id), token));
     }
 }

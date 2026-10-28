@@ -10,7 +10,7 @@ using Server.Application.Coordinator.Roles;
 
 namespace Server.Application.Coordinator.Handlers.Chat;
 
-public class DeleteTextMessageHandler : IMessageHandler<DeleteTextMessageRequest>
+public class DeleteTextMessageHandler : IMessageHandler<DeleteMessageRequest>
 {
     private readonly IChatSessionManager _chatSessionManager;
     private readonly IMessageSender _messageSender;
@@ -24,7 +24,7 @@ public class DeleteTextMessageHandler : IMessageHandler<DeleteTextMessageRequest
         _permissions = permissions;
     }
 
-    public async Task<HandleMessageResult> HandleMessage(DeleteTextMessageRequest? request, string connectionId)
+    public async Task<HandleMessageResult> HandleMessage(DeleteMessageRequest? request, string connectionId)
     {
         if (request == null) return HandleMessageResult.ForbiddenRequest;
 
@@ -33,14 +33,11 @@ public class DeleteTextMessageHandler : IMessageHandler<DeleteTextMessageRequest
             && _permissions.HasIn(request.SenderId, chat, Permission.ManageMessages);
         var result = await _chatSessionManager.DeleteMessageAsync(request.ChatId, request.MessageId, request.SenderId,
             mayDeleteAny);
-        var responseData = request.ToResponse(result);
+        var responseData = request.Answer(result, request.ToResponse);
         
         _messageSender.SendMessageById(connectionId, 
             responseData);
         
-        return result == DeleteMessageResult.NoError ? HandleMessageResult.NoError : HandleMessageResult.InternalError;
+        return result == null ? HandleMessageResult.NoError : HandleMessageResult.InternalError;
     }
-
-    public BaseMessage? CreateFailureResponse(DeleteTextMessageRequest request) =>
-        request.ToResponse(DeleteMessageResult.InternalError);
 }

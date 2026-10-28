@@ -91,7 +91,7 @@ public class HybridSessionSfuNodeTests
 
         Assert.Null(session.PeerManager.CurrentGateway);
         Assert.False(session.PeerManager.IsReady);
-        Assert.Equal(HybridSessionNodeState.WaitingForSfuNode, session.Model.State);
+        Assert.Equal(HybridSessionNodeState.WaitingForSFUNode, session.Model.State);
     }
 
     [Fact]

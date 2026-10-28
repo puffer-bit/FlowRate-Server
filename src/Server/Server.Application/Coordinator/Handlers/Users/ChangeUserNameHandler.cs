@@ -33,21 +33,18 @@ public class ChangeUserNameHandler : IMessageHandler<CoordinatorChangeUsernameRe
             return HandleMessageResult.ForbiddenRequest;
         }
 
-        var userId = request.UserId ?? request.SenderId;
+        var userId = request.TargetUserId ?? request.SenderId;
 
         var result = await _userManager.ChangeUsername(userId, request.Username);
-        var user = result == ChangeUsernameResult.NoError
+        var user = result == null
             ? (await _userManager.GetUserAsync(userId))?.ToDto(request.SenderId)
             : null;
 
-        _messageSender.SendMessageById(connectionId, request.ToResponse(result, user));
+        _messageSender.SendMessageById(connectionId, request.Answer(result, () => request.ToResponse(user!)));
         
-        if (result != ChangeUsernameResult.NoError)
+        if (result != null)
             _logger.LogTrace("User {SenderId} failed to rename user {Id}: {Result}", request.SenderId, userId, result);
         
         return HandleMessageResult.NoError;
     }
-
-    public BaseMessage? CreateFailureResponse(CoordinatorChangeUsernameRequest request) =>
-        request.ToResponse(ChangeUsernameResult.InternalError);
 }

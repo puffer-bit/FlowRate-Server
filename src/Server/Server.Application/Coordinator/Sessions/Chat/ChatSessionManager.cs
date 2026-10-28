@@ -62,14 +62,14 @@ public class ChatSessionManager : IChatSessionManager
             _sessions.TryAdd(chat.Id, chat);
     }
 
-    public async Task<(CreateSessionResult result, ChatSessionModel? session)> CreateAsync(CreateSessionModel request,
+    public async Task<(ErrorCode? result, ChatSessionModel? session)> CreateAsync(CreateSessionModel request,
         int userId)
     {
         await _lifecycleLock.WaitAsync();
         try
         {
             if (_sessions.Values.Any(s => s.Name == request.Name))
-                return (CreateSessionResult.NameAlreadyUsed, null);
+                return (ErrorCode.NameTaken, null);
 
             var chat = ChatSessionModel.Create(_coordinatorInstanceId, request.Name, userId);
             if (request.SessionData is ChatSessionCreateData chatData)
@@ -77,7 +77,7 @@ public class ChatSessionManager : IChatSessionManager
                 chat.Describe(chatData.Description, chatData.IconPath);
                 chat.Configure(new ChatSessionOptions(
                     IsAttachmentsAllowed: chatData.IsAttachmentsAllowed,
-                    IsVoiceMessagesAllowed: chatData.IsVoiceMessageAllowed,
+                    IsVoiceMessagesAllowed: chatData.IsVoiceMessagesAllowed,
                     IsVideoMessagesAllowed: chatData.IsVideoMessagesAllowed,
                     IsDelayedMessagesAllowed: chatData.IsDelayedMessagesAllowed));
             }
@@ -86,12 +86,12 @@ public class ChatSessionManager : IChatSessionManager
             _sessions[chat.Id] = chat;
 
             await _coordinatorEventBus.PublishAsync(new ChatSessionCreatedEvent(chat, userId));
-            return (CreateSessionResult.NoError, chat);
+            return (null, chat);
         }
         catch (Exception e)
         {
             _logger.LogError(e, "Error while creating chat session.");
-            return (CreateSessionResult.InternalError, null);
+            return (ErrorCode.Internal, null);
         }
         finally
         {
@@ -99,13 +99,13 @@ public class ChatSessionManager : IChatSessionManager
         }
     }
 
-    public async Task<DeleteSessionResult> DeleteAsync(int sessionId, int userId)
+    public async Task<ErrorCode?> DeleteAsync(int sessionId, int userId)
     {
         await _lifecycleLock.WaitAsync();
         try
         {
             if (!_sessions.ContainsKey(sessionId))
-                return DeleteSessionResult.SessionNotExists;
+                return ErrorCode.SessionNotFound;
 
             await _chatSessionRepository.RemoveAsync(sessionId);
             _sessions.TryRemove(sessionId, out _);
@@ -113,12 +113,12 @@ public class ChatSessionManager : IChatSessionManager
 
             await _coordinatorEventBus.PublishAsync(new ChatSessionDeletedEvent(sessionId, userId));
             await DeleteMediaAsync(() => _mediaUploads.RemoveByChatAsync(sessionId));
-            return DeleteSessionResult.NoError;
+            return null;
         }
         catch (Exception e)
         {
             _logger.LogError(e, "Error while deleting chat session.");
-            return DeleteSessionResult.InternalError;
+            return ErrorCode.Internal;
         }
         finally
         {
@@ -131,70 +131,70 @@ public class ChatSessionManager : IChatSessionManager
 
     public IReadOnlyCollection<ChatSessionModel> GetAllSessions() => _sessions.Values.ToList();
 
-    public async Task<(FetchMessagesResult result, List<ChatMessageModel>? messages)> FetchMessagesAsync(
+    public async Task<(ErrorCode? result, List<ChatMessageModel>? messages)> FetchMessagesAsync(
         int sessionId, int take, int? skip)
     {
         try
         {
             if (!_sessions.ContainsKey(sessionId))
-                return (FetchMessagesResult.ChatNotExists, null);
+                return (ErrorCode.ChatNotFound, null);
 
             var messages = await _messagesRepository.GetByTakeSkipAsync(sessionId, skip ?? 0, take);
-            return (FetchMessagesResult.NoError, messages);
+            return (null, messages);
         }
         catch (Exception e)
         {
             _logger.LogError(e, "Error while fetching chat messages.");
-            return (FetchMessagesResult.InternalError, null);
+            return (ErrorCode.Internal, null);
         }
     }
 
-    public async Task<(FetchMessagesResult result, ChatHistoryPage? page)> FetchMessagesBeforeAsync(
+    public async Task<(ErrorCode? result, ChatHistoryPage? page)> FetchMessagesBeforeAsync(
         int sessionId, int? beforeMessageId, int take)
     {
         try
         {
             if (!_sessions.ContainsKey(sessionId))
-                return (FetchMessagesResult.ChatNotExists, null);
+                return (ErrorCode.ChatNotFound, null);
 
             var revision = await _messagesRepository.GetRevisionAsync(sessionId);
             var messages = await _messagesRepository.GetBeforeAsync(sessionId, beforeMessageId, take);
-            return (FetchMessagesResult.NoError, new ChatHistoryPage(messages, revision));
+            return (null, new ChatHistoryPage(messages, revision));
         }
         catch (Exception e)
         {
             _logger.LogError(e, "Error while fetching chat messages.");
-            return (FetchMessagesResult.InternalError, null);
+            return (ErrorCode.Internal, null);
         }
     }
 
-    public async Task<(FetchMessagesResult result, ChatChanges? changes)> FetchChangesAsync(
+    public async Task<(ErrorCode? result, ChatChanges? changes)> FetchChangesAsync(
         int sessionId, long afterRevision, int take)
     {
         try
         {
             if (!_sessions.ContainsKey(sessionId))
-                return (FetchMessagesResult.ChatNotExists, null);
+                return (ErrorCode.ChatNotFound, null);
 
             var revision = await _messagesRepository.GetRevisionAsync(sessionId);
             if (afterRevision > revision)
-                return (FetchMessagesResult.NoError, new ChatChanges([], revision, false, true));
+                return (null, new ChatChanges([], revision, false, true));
 
             var count = await _messagesRepository.CountChangesAsync(sessionId, afterRevision);
             if (count > ChangesResetThreshold)
-                return (FetchMessagesResult.NoError, new ChatChanges([], revision, false, true));
+                return (null, new ChatChanges([], revision, false, true));
 
             var messages = await _messagesRepository.GetChangesAsync(sessionId, afterRevision, take);
-            return (FetchMessagesResult.NoError, new ChatChanges(messages, revision, count > messages.Count, false));
+            return (null, new ChatChanges(messages, revision, count > messages.Count, false));
         }
         catch (Exception e)
         {
             _logger.LogError(e, "Error while fetching chat changes.");
-            return (FetchMessagesResult.InternalError, null);
+            return (ErrorCode.Internal, null);
         }
     }
 
-    public async Task<(FetchMessageResult result, ChatMessageModel? message)> FetchMessageAsync(int sessionId,
+    public async Task<(ErrorCode? result, ChatMessageModel? message)> FetchMessageAsync(int sessionId,
         int messageId)
     {
         try
@@ -202,28 +202,28 @@ public class ChatSessionManager : IChatSessionManager
             // Message ids are shared by all coordinators, so the chat must be one of this coordinator
             var message = _sessions.ContainsKey(sessionId) ? await GetMessageAsync(sessionId, messageId) : null;
             return message == null
-                ? (FetchMessageResult.MessageNotExists, null)
-                : (FetchMessageResult.NoError, message);
+                ? (ErrorCode.MessageNotFound, null)
+                : (null, message);
         }
         catch (Exception e)
         {
             _logger.LogError(e, "Error while fetching chat message.");
-            return (FetchMessageResult.InternalError, null);
+            return (ErrorCode.Internal, null);
         }
     }
 
-    public async Task<AddMessageResult> AddMessageAsync(int sessionId, NewChatMessageModel message, int senderUserId)
+    public async Task<ErrorCode?> AddMessageAsync(int sessionId, NewChatMessageModel message, int senderUserId)
     {
         try
         {
             if (!_sessions.TryGetValue(sessionId, out var chat))
-                return AddMessageResult.ChatNotExists;
+                return ErrorCode.ChatNotFound;
 
             if (!chat.CanPost)
-                return AddMessageResult.Rejected;
+                return ErrorCode.ChatReadOnly;
 
             var (attachmentsResult, images, files) = await ResolveAttachmentsAsync(chat, message, senderUserId);
-            if (attachmentsResult != AddMessageResult.NoError)
+            if (attachmentsResult != null)
                 return attachmentsResult;
 
             var messageModel = message.ToModel(senderUserId, DateTime.UtcNow, images, files);
@@ -232,7 +232,7 @@ public class ChatSessionManager : IChatSessionManager
             {
                 var repliedMessage = await GetMessageAsync(sessionId, replyToMessageId);
                 if (repliedMessage == null)
-                    return AddMessageResult.ReplyTargetNotExists;
+                    return ErrorCode.ReplyTargetNotFound;
 
                 messageModel.ReplyTo(repliedMessage);
             }
@@ -249,25 +249,25 @@ public class ChatSessionManager : IChatSessionManager
                 writeLock.Release();
             }
 
-            return AddMessageResult.NoError;
+            return null;
         }
         catch (MediaUploadUnavailableException)
         {
-            return AddMessageResult.AttachmentNotReady;
+            return ErrorCode.AttachmentNotReady;
         }
         catch (Exception e)
         {
             _logger.LogError(e, "Error while adding chat message.");
-            return AddMessageResult.InternalError;
+            return ErrorCode.Internal;
         }
     }
 
-    public async Task<EditMessageResult> EditMessageAsync(int sessionId, int messageId, string text, int userId)
+    public async Task<ErrorCode?> EditMessageAsync(int sessionId, int messageId, string text, int userId)
     {
         try
         {
             if (!_sessions.ContainsKey(sessionId))
-                return EditMessageResult.ChatNotExists;
+                return ErrorCode.ChatNotFound;
 
             var writeLock = MessageWriteLockOf(sessionId);
             await writeLock.WaitAsync();
@@ -275,15 +275,15 @@ public class ChatSessionManager : IChatSessionManager
             {
                 var message = await GetMessageAsync(sessionId, messageId);
                 if (message == null)
-                    return EditMessageResult.MessageNotExists;
+                    return ErrorCode.MessageNotFound;
 
                 var result = message.Edit(userId, text, DateTime.UtcNow);
-                if (result != EditMessageResult.NoError)
+                if (result != null)
                     return result;
 
                 message.MarkChanged(await _messagesRepository.UpdateAsync(message));
                 await _coordinatorEventBus.PublishAsync(new ChatSessionMessageEditedEvent(sessionId, message));
-                return EditMessageResult.NoError;
+                return null;
             }
             finally
             {
@@ -293,17 +293,17 @@ public class ChatSessionManager : IChatSessionManager
         catch (Exception e)
         {
             _logger.LogError(e, "Error while editing chat message.");
-            return EditMessageResult.InternalError;
+            return ErrorCode.Internal;
         }
     }
 
-    public async Task<DeleteMessageResult> DeleteMessageAsync(int sessionId, int messageId, int userId,
+    public async Task<ErrorCode?> DeleteMessageAsync(int sessionId, int messageId, int userId,
         bool mayDeleteAny = false)
     {
         try
         {
             if (!_sessions.TryGetValue(sessionId, out var chat))
-                return DeleteMessageResult.ChatNotExists;
+                return ErrorCode.ChatNotFound;
 
             var writeLock = MessageWriteLockOf(sessionId);
             await writeLock.WaitAsync();
@@ -311,19 +311,19 @@ public class ChatSessionManager : IChatSessionManager
             {
                 var message = await GetMessageAsync(sessionId, messageId);
                 if (message == null || message.IsDeleted)
-                    return DeleteMessageResult.MessageNotExists;
+                    return ErrorCode.MessageNotFound;
 
                 if (!mayDeleteAny && !chat.CanDeleteMessage(message, userId))
-                    return DeleteMessageResult.InsufficientPermissions;
+                    return ErrorCode.InsufficientPermissions;
 
                 var revision = await _messagesRepository.DeleteAsync(messageId);
                 if (revision == null)
-                    return DeleteMessageResult.MessageNotExists;
+                    return ErrorCode.MessageNotFound;
 
                 await _coordinatorEventBus.PublishAsync(
                     new ChatSessionMessageDeletedEvent(sessionId, messageId, revision.Value));
                 await DeleteMediaAsync(() => _mediaUploads.RemoveByMessageAsync(messageId));
-                return DeleteMessageResult.NoError;
+                return null;
             }
             finally
             {
@@ -333,22 +333,22 @@ public class ChatSessionManager : IChatSessionManager
         catch (Exception e)
         {
             _logger.LogError(e, "Error while deleting chat message.");
-            return DeleteMessageResult.InternalError;
+            return ErrorCode.Internal;
         }
     }
 
-    private async Task<(AddMessageResult result, IReadOnlyList<ChatImageContentModel> images,
+    private async Task<(ErrorCode? result, IReadOnlyList<ChatImageContentModel> images,
         IReadOnlyList<ChatFileContentModel> files)> ResolveAttachmentsAsync(
         ChatSessionModel chat, NewChatMessageModel message, int senderUserId)
     {
         if (message.Images.Count + message.Video.Count + message.Files.Count == 0)
-            return (AddMessageResult.NoError, [], []);
+            return (null, [], []);
 
         if (!chat.Options.IsAttachmentsAllowed)
-            return (AddMessageResult.AttachmentsNotAllowed, [], []);
+            return (ErrorCode.AttachmentsNotAllowed, [], []);
 
         if (message.Video.Count > 0)
-            return (AddMessageResult.AttachmentInvalid, [], []);
+            return (ErrorCode.AttachmentInvalid, [], []);
 
         var images = new List<ChatImageContentModel>(message.Images.Count);
         foreach (var image in message.Images)
@@ -356,12 +356,12 @@ public class ChatSessionManager : IChatSessionManager
             var original = await GetUploadAsync(image.UploadId, chat.Id, senderUserId, MediaUploadKind.Image);
             var preview = await GetUploadAsync(image.PreviewUploadId, chat.Id, senderUserId, MediaUploadKind.ImagePreview);
             if (original == null || preview == null)
-                return (AddMessageResult.AttachmentInvalid, [], []);
+                return (ErrorCode.AttachmentInvalid, [], []);
 
             if (original.State != MediaUploadState.Completed || preview.State != MediaUploadState.Completed)
                 return (original.State == MediaUploadState.Attached || preview.State == MediaUploadState.Attached
-                    ? AddMessageResult.AttachmentInvalid
-                    : AddMessageResult.AttachmentNotReady, [], []);
+                    ? ErrorCode.AttachmentInvalid
+                    : ErrorCode.AttachmentNotReady, [], []);
 
             images.Add(new ChatImageContentModel
             {
@@ -382,9 +382,9 @@ public class ChatSessionManager : IChatSessionManager
         {
             var upload = await GetUploadAsync(file.UploadId, chat.Id, senderUserId, MediaUploadKind.File);
             if (upload == null || upload.State == MediaUploadState.Attached)
-                return (AddMessageResult.AttachmentInvalid, [], []);
+                return (ErrorCode.AttachmentInvalid, [], []);
             if (upload.State != MediaUploadState.Completed)
-                return (AddMessageResult.AttachmentNotReady, [], []);
+                return (ErrorCode.AttachmentNotReady, [], []);
 
             files.Add(new ChatFileContentModel
             {
@@ -396,7 +396,7 @@ public class ChatSessionManager : IChatSessionManager
             });
         }
 
-        return (AddMessageResult.NoError, images, files);
+        return (null, images, files);
     }
 
     private async Task<MediaUploadModel?> GetUploadAsync(string id, int chatId, int ownerUserId, MediaUploadKind kind)

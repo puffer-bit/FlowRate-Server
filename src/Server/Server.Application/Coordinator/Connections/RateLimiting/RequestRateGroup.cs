@@ -6,7 +6,6 @@ using Shared.Models.Requests.Coordinator.Security;
 using Shared.Models.Requests.SessionActions.ChatSession;
 using Shared.Models.Requests.SessionActions.Generic;
 using Shared.Models.Requests.SessionActions.HybridSession;
-using Shared.Models.Requests.WebRTC;
 using Shared.Models.Requests.Heartbeat;
 
 namespace Server.Application.Coordinator.Connections.RateLimiting;
@@ -106,8 +105,7 @@ public sealed class RequestRateLimits
             or HybridSessionStartVoiceRequest or HybridSessionStopVoiceRequest
             or HybridSessionStartVideoRequest or HybridSessionStopVideoRequest
             or HybridSessionStartScreenShareRequest or HybridSessionStopScreenShareRequest
-            or HybridSessionSetScreenShareWatchRequest
-            or WebRtcConnectRequest => RequestRateGroup.SessionMedia,
+            or HybridSessionSetScreenShareWatchRequest => RequestRateGroup.SessionMedia,
         HybridSessionSetMicrophoneMuteRequest or HybridSessionSetSoundMuteRequest
             or HybridSessionSetAfkRequest => RequestRateGroup.MicrophoneMute,
         HybridSessionResumeInboundsRequest => RequestRateGroup.InboundResume,
@@ -116,7 +114,7 @@ public sealed class RequestRateLimits
             or CoordinatorReorderRolesRequest or CoordinatorAssignRoleRequest or CoordinatorUnassignRoleRequest
             or CoordinatorSetUserStateRequest or CoordinatorDeleteUserRequest
             => RequestRateGroup.Moderation,
-        SendTextMessageRequest or EditTextMessageRequest or DeleteTextMessageRequest
+        SendMessageRequest or EditMessageRequest or DeleteMessageRequest
             or HybridSessionPokeRequest => RequestRateGroup.ChatWrite,
         ChatSessionHistoryRequest or ChatSessionMessageRequest or ChatSessionHistoryPageRequest
             or ChatSessionChangesRequest or ChatReadStatesRequest or ChatMarkReadRequest => RequestRateGroup.ChatRead,

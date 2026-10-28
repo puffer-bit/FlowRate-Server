@@ -41,9 +41,6 @@ public class UserActionHandler : IMessageHandler<CoordinatorUserInfoRequest>
         return HandleMessageResult.NoError;
     }
 
-    public BaseMessage? CreateFailureResponse(CoordinatorUserInfoRequest request) =>
-        request.ToResponse(new Dictionary<int, UserDTO>(), UsersRequestResult.InternalError);
-
     private async Task HandleUsersInfoAsync(CoordinatorUserInfoRequest request, string connectionId)
     {
         var usersList = new Dictionary<int, UserDTO>();
@@ -59,12 +56,12 @@ public class UserActionHandler : IMessageHandler<CoordinatorUserInfoRequest>
         if (usersList.Count == 0) 
         {
             _messageSender.SendMessageById(connectionId, 
-                request.ToResponse(usersList,  UsersRequestResult.NoError));
+                request.ToResponse(usersList));
             
         }
         else
         {
-            var responseData = request.ToResponse(usersList,  UsersRequestResult.NoError);
+            var responseData = request.ToResponse(usersList);
         
             _messageSender.SendMessageById(connectionId, 
                 responseData);

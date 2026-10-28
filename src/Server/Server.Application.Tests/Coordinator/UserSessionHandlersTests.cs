@@ -1,3 +1,4 @@
+using Shared.Enums;
 using Microsoft.Extensions.Time.Testing;
 using Moq;
 using Server.Application.Abstractions.Persistence;
@@ -12,6 +13,7 @@ using Shared.Enums.User;
 using Shared.Models;
 using Shared.Models.Notifications.CoordinatorInfo;
 using Shared.Models.Requests.Coordinator.Security;
+using Shared.Models.Responses;
 using Shared.Models.Responses.Coordinator.Security;
 
 namespace Server.Application.Tests.Coordinator;
@@ -68,7 +70,7 @@ public class UserSessionHandlersTests
         where TRequest : Shared.Models.Requests.Request where T : BaseMessage
     {
         await handler.HandleMessage(request with { SenderId = UserId }, "desk");
-        return Assert.IsType<T>(_sent[^1]);
+        return Assert.IsAssignableFrom<T>(_sent[^1]);
     }
 
     private UserSessionRevokeHandler RevokeHandler() => new(_sender.Object, _connections.Object, _sessions);
@@ -90,8 +92,6 @@ public class UserSessionHandlersTests
     {
         var response = await Send<UserSessionsRequest, UserSessionsResponse>(
             new UserSessionsHandler(_sender.Object, _connections.Object, _sessions), new UserSessionsRequest());
-
-        Assert.Equal(UserSecurityResult.NoError, response.Result);
         Assert.Equal(3, response.Sessions!.Count);
         Assert.Equal(_current, Assert.Single(response.Sessions, s => s.IsCurrent).Id);
         Assert.All(response.Sessions, s => Assert.True(s.IsOnline));
@@ -102,8 +102,6 @@ public class UserSessionHandlersTests
     {
         var response = await Send<UserSessionRevokeRequest, UserSessionsResponse>(RevokeHandler(),
             new UserSessionRevokeRequest(_laptop));
-
-        Assert.Equal(UserSecurityResult.NoError, response.Result);
         Assert.DoesNotContain(response.Sessions!, s => s.Id == _laptop);
         VerifyEnded(_laptop, UserSessionEndReason.Revoked);
         VerifyUntouched(_current);
@@ -127,9 +125,9 @@ public class UserSessionHandlersTests
     {
         foreach (var id in new[] { _current, Guid.NewGuid() })
         {
-            var response = await Send<UserSessionRevokeRequest, UserSessionsResponse>(RevokeHandler(),
+            var response = await Send<UserSessionRevokeRequest, Response>(RevokeHandler(),
                 new UserSessionRevokeRequest(id));
-            Assert.Equal(UserSecurityResult.SessionNotFound, response.Result);
+            Assert.Equal(ErrorCode.SessionNotFound, response.Error());
         }
 
         Assert.Equal(3, _repository.All.Count);
@@ -138,10 +136,10 @@ public class UserSessionHandlersTests
     [Fact]
     public async Task IdentityReset_WithoutProof_ChangesNothing()
     {
-        var response = await Send<UserIdentityResetRequest, UserIdentityResetResponse>(ResetHandler(),
+        var response = await Send<UserIdentityResetRequest, Response>(ResetHandler(),
             new UserIdentityResetRequest(null));
 
-        Assert.Equal(UserSecurityResult.ProofRequired, response.Result);
+        Assert.Equal(ErrorCode.ProofRequired, response.Error());
         _users.Verify(u => u.SetIdentityAsync(It.IsAny<int>(), It.IsAny<string>(), It.IsAny<CancellationToken>()),
             Times.Never);
         Assert.Equal(3, _repository.All.Count);
@@ -154,8 +152,6 @@ public class UserSessionHandlersTests
 
         var response = await Send<UserIdentityResetRequest, UserIdentityResetResponse>(ResetHandler(),
             new UserIdentityResetRequest(null));
-
-        Assert.Equal(UserSecurityResult.NoError, response.Result);
         Assert.StartsWith("#", response.UserIdentity);
         _users.Verify(u => u.SetIdentityAsync(UserId, response.UserIdentity!, It.IsAny<CancellationToken>()));
         Assert.Equal(_current, Assert.Single(_repository.All).Id);

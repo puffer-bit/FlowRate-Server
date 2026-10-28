@@ -20,11 +20,5 @@ public class HybridSessionPokeHandler : HybridSessionRequestHandler<HybridSessio
     protected override int GetSessionId(HybridSessionPokeRequest request) => request.SessionId;
 
     protected override async Task<BaseMessage> HandleAsync(HybridSessionPokeRequest request, IHybridSession session) =>
-        request.ToResponse(await session.PeerManager.PokeAsync(request.SenderId, request.UserTargetId, request.Message));
-
-    protected override BaseMessage SessionNotFound(HybridSessionPokeRequest request) =>
-        request.ToResponse(PokeResult.SessionNotExists);
-
-    public override BaseMessage CreateFailureResponse(HybridSessionPokeRequest request) =>
-        request.ToResponse(PokeResult.InternalError);
+        request.Answer(await session.PeerManager.PokeAsync(request.SenderId, request.TargetUserId, request.Message), request.ToResponse);
 }

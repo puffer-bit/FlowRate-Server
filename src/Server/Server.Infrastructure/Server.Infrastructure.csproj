@@ -11,7 +11,6 @@
     </ItemGroup>
 
     <ItemGroup>
-      <ProjectReference Include="..\..\Shared\Shared.Tools\Shared.Tools.csproj" />
       <ProjectReference Include="..\Server.Application\Server.Application.csproj" />
       <ProjectReference Include="..\Server.Core\Server.Core.csproj" />
       <ProjectReference Include="..\Server.Push\Server.Push.csproj" />
