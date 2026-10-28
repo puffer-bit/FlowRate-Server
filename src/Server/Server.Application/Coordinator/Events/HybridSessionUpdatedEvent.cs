@@ -68,6 +68,12 @@ public record HybridSessionPeerMuteSoundEvent(int SessionId, int UserId, int? In
 public record HybridSessionPeerUnmuteSoundEvent(int SessionId, int UserId, int? InitiatorUserId = null)
     : HybridSessionUpdatedEvent(SessionId);
 
+public record HybridSessionPeerStartedWatchingScreenShareEvent(int SessionId, int UserId, int SharerUserId)
+    : HybridSessionUpdatedEvent(SessionId);
+
+public record HybridSessionPeerStoppedWatchingScreenShareEvent(int SessionId, int UserId, int SharerUserId)
+    : HybridSessionUpdatedEvent(SessionId);
+
 public record HybridSessionPeerAfkEvent(int SessionId, int UserId, string? Reason)
     : HybridSessionUpdatedEvent(SessionId);
 
