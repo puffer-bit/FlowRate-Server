@@ -1,3 +1,4 @@
+using System.Collections.Immutable;
 using Server.Core.Enums;
 using Shared.Enums;
 
@@ -24,6 +25,9 @@ public sealed class Peer
     /// <summary>The user stepped away from the keyboard; the reason they gave goes with it.</summary>
     public bool IsAfk { get; private set; }
     public string? AfkReason { get; private set; }
+
+    /// <summary>The users whose screen share the peer watches; replaced whole, so it can be read without the session lock.</summary>
+    public ImmutableHashSet<int> WatchedScreenShares { get; private set; } = ImmutableHashSet<int>.Empty;
 
     public bool IsApproved => Admission == PeerAdmission.Approved;
     public bool IsRejected => Admission == PeerAdmission.Rejected;
@@ -69,6 +73,7 @@ public sealed class Peer
         IsScreenAudioActive = false;
         IsAfk = false;
         AfkReason = null;
+        WatchedScreenShares = ImmutableHashSet<int>.Empty;
         State = IsAdmitted ? HybridSessionPeerState.Connecting : HybridSessionPeerState.WaitingForApprove;
         return HybridSessionJoinResult.NoError;
     }
@@ -127,6 +132,7 @@ public sealed class Peer
         IsScreenAudioActive = false;
         IsAfk = false;
         AfkReason = null;
+        WatchedScreenShares = ImmutableHashSet<int>.Empty;
         State = HybridSessionPeerState.WaitingForServer;
     }
 
@@ -139,6 +145,7 @@ public sealed class Peer
         IsScreenAudioActive = false;
         IsAfk = false;
         AfkReason = null;
+        WatchedScreenShares = ImmutableHashSet<int>.Empty;
         State = HybridSessionPeerState.Closed;
     }
 
@@ -158,6 +165,23 @@ public sealed class Peer
             return false;
 
         IsSoundMuted = isMuted;
+        return true;
+    }
+
+    /// <returns>False if the peer already watched the screen share of the user.</returns>
+    public bool StartWatchingScreenShare(int userId) => Replace(WatchedScreenShares.Add(userId));
+
+    /// <returns>False if the peer did not watch the screen share of the user.</returns>
+    public bool StopWatchingScreenShare(int userId) => Replace(WatchedScreenShares.Remove(userId));
+
+    public void ForgetWatchedScreenShares() => WatchedScreenShares = ImmutableHashSet<int>.Empty;
+
+    private bool Replace(ImmutableHashSet<int> watched)
+    {
+        if (ReferenceEquals(watched, WatchedScreenShares))
+            return false;
+
+        WatchedScreenShares = watched;
         return true;
     }
 
@@ -182,5 +206,5 @@ public sealed class Peer
 
     public PeerSnapshot ToSnapshot() =>
         new(UserId, State, IsTransportConnected, IsApproved, IsRejected, IsMicrophoneMuted, IsScreenShareActive, IsSoundMuted,
-            IsScreenAudioActive, IsAfk, AfkReason);
+            IsScreenAudioActive, IsAfk, AfkReason, WatchedScreenShares);
 }

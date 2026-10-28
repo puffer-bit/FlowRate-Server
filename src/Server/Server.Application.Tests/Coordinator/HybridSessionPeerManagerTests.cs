@@ -720,6 +720,56 @@ public class HybridSessionPeerManagerTests
     }
 
     [Fact]
+    public async Task WatchScreenShare_TellsTheSessionWhoWatches_OnceEachWay()
+    {
+        var manager = await CreateManager();
+        await JoinAndConnect(manager, HostId, GuestId);
+        await manager.StartScreenShareAsync(HostId, withAudio: false);
+
+        await manager.SetScreenShareWatchAsync(GuestId, HostId, true);
+        await manager.SetScreenShareWatchAsync(GuestId, HostId, true);
+
+        var started = Assert.Single(_events.Of<HybridSessionPeerStartedWatchingScreenShareEvent>());
+        Assert.Equal((GuestId, HostId), (started.UserId, started.SharerUserId));
+        Assert.Equal([HostId], manager.GetAllPeerSnapshots()[GuestId].WatchedScreenShares!);
+
+        await manager.SetScreenShareWatchAsync(GuestId, HostId, false);
+        await manager.SetScreenShareWatchAsync(GuestId, HostId, false);
+
+        var stopped = Assert.Single(_events.Of<HybridSessionPeerStoppedWatchingScreenShareEvent>());
+        Assert.Equal((GuestId, HostId), (stopped.UserId, stopped.SharerUserId));
+        Assert.Empty(manager.GetAllPeerSnapshots()[GuestId].WatchedScreenShares!);
+    }
+
+    [Fact]
+    public async Task StopScreenShare_TellsTheSessionItsWatchersStoppedWatching()
+    {
+        var manager = await CreateManager();
+        await JoinAndConnect(manager, HostId, GuestId, OtherGuestId);
+        await manager.StartScreenShareAsync(HostId, withAudio: false);
+        await manager.SetScreenShareWatchAsync(GuestId, HostId, true);
+
+        await manager.StopScreenShareAsync(HostId, HostId);
+
+        var stopped = Assert.Single(_events.Of<HybridSessionPeerStoppedWatchingScreenShareEvent>());
+        Assert.Equal((GuestId, HostId), (stopped.UserId, stopped.SharerUserId));
+        Assert.Empty(manager.GetAllPeerSnapshots()[GuestId].WatchedScreenShares!);
+    }
+
+    [Fact]
+    public async Task WatcherLeaving_IsNotToldAsStoppedWatching()
+    {
+        var manager = await CreateManager();
+        await JoinAndConnect(manager, HostId, GuestId);
+        await manager.StartScreenShareAsync(HostId, withAudio: false);
+        await manager.SetScreenShareWatchAsync(GuestId, HostId, true);
+
+        await manager.RemovePeerAsync(GuestId);
+
+        Assert.Empty(_events.Of<HybridSessionPeerStoppedWatchingScreenShareEvent>());
+    }
+
+    [Fact]
     public async Task StopScreenShare_ThenStart_ResumesTheSameOutbound_ButNotItsWatchers()
     {
         var manager = await CreateManager();
