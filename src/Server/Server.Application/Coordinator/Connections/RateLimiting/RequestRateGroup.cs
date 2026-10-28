@@ -95,7 +95,7 @@ public sealed class RequestRateLimits
         // A proof can be guessed like a login, so it counts against the same limit per IP
         UserSetPasswordRequest or UserTwoFactorSetupRequest or UserTwoFactorEnableRequest
             or UserTwoFactorDisableRequest or UserPasskeyOptionsRequest or UserPasskeyRegisterRequest
-            or UserPasskeyDeleteRequest => RequestRateGroup.Authentication,
+            or UserPasskeyDeleteRequest or UserIdentityResetRequest => RequestRateGroup.Authentication,
         CreateSessionRequest or DeleteSessionRequest or ChangeHybridSessionSettingsRequest
             or ChangeSessionPermissionsRequest
             => RequestRateGroup.SessionManagement,
