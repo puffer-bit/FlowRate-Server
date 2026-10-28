@@ -130,13 +130,13 @@ public class MessageRouter : IMessageRouter
         {
             if (_authorizer != null && _authorizer.IsFrozenOut(message))
             {
-                RejectForbidden(connection, message, RequestRejectReason.UserFrozen);
+                RejectForbidden(connection, message, ErrorCode.UserFrozen);
                 return;
             }
 
             if (_authorizer != null && !await _authorizer.IsAllowedAsync(message))
             {
-                RejectForbidden(connection, message, RequestRejectReason.InsufficientPermissions);
+                RejectForbidden(connection, message, ErrorCode.InsufficientPermissions);
                 return;
             }
 
@@ -146,17 +146,16 @@ public class MessageRouter : IMessageRouter
         {
             _logger.LogError(ex, "Handling {MessageType} from connection {ConnectionId} (user {UserId}) failed.",
                 message.GetType().Name, connection.ConnectionId, connection.UserId);
-            SendFailureResponse(handler, message, connection);
+            SendFailureResponse(message, connection);
         }
     }
 
-    private void SendFailureResponse(IMessageHandler handler, BaseMessage message, IClientConnection connection)
+    private void SendFailureResponse(BaseMessage message, IClientConnection connection)
     {
         try
         {
-            var response = handler.CreateFailureResponse(message);
-            if (response != null)
-                connection.Send(response);
+            if (message is Request request)
+                connection.Send(request.ToError(ErrorCode.Internal));
         }
         catch (Exception ex)
         {
@@ -165,13 +164,13 @@ public class MessageRouter : IMessageRouter
         }
     }
 
-    private void RejectForbidden(IClientConnection connection, BaseMessage message, RequestRejectReason reason)
+    private void RejectForbidden(IClientConnection connection, BaseMessage message, ErrorCode reason)
     {
         _logger.LogDebug("Rejected {MessageType} from user {UserId}: {Reason}.",
             message.GetType().Name, connection.UserId, reason);
 
         if (message is Request request)
-            connection.Send(new RequestRejectedResponse(request.RequestId, reason));
+            connection.Send(request.ToError(reason));
     }
 
     private void RejectInvalid(IClientConnection connection, Request request, IReadOnlyList<string> errors)
@@ -183,7 +182,7 @@ public class MessageRouter : IMessageRouter
         _logger.LogDebug("Rejected invalid {MessageType} from connection {ConnectionId}: {Errors}",
             request.GetType().Name, connection.ConnectionId, details);
 
-        connection.Send(new RequestRejectedResponse(request.RequestId, RequestRejectReason.InvalidRequest, details));
+        connection.Send(request.ToError(ErrorCode.InvalidRequest, details));
 
         if (connection.RequestGuard.RegisterRejection() != RequestGuardVerdict.RejectedTooOften)
             return;
@@ -200,7 +199,7 @@ public class MessageRouter : IMessageRouter
             message.GetType().Name, group, connection.ConnectionId);
 
         if (message is Request request)
-            connection.Send(new RequestRejectedResponse(request.RequestId, RequestRejectReason.RateLimited, group.ToString()));
+            connection.Send(request.ToError(ErrorCode.RateLimited, group.ToString()));
 
         if (verdict != RequestGuardVerdict.RejectedTooOften)
             return;

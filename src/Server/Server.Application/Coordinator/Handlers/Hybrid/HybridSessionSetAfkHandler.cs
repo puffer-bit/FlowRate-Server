@@ -22,11 +22,5 @@ public class HybridSessionSetAfkHandler : HybridSessionRequestHandler<HybridSess
     protected override bool DrivesOwnPeer => true;
 
     protected override async Task<BaseMessage> HandleAsync(HybridSessionSetAfkRequest request, IHybridSession session) =>
-        request.ToResponse(await session.PeerManager.SetAfkAsync(request.SenderId, request.IsAfk, request.Reason));
-
-    protected override BaseMessage SessionNotFound(HybridSessionSetAfkRequest request) =>
-        request.ToResponse(SetAfkResult.SessionNotExists);
-
-    public override BaseMessage CreateFailureResponse(HybridSessionSetAfkRequest request) =>
-        request.ToResponse(SetAfkResult.InternalError);
+        request.Answer(await session.PeerManager.SetAfkAsync(request.SenderId, request.IsAfk, request.Reason), request.ToResponse);
 }

@@ -45,7 +45,7 @@ public class SessionManagerTests
         _manager = new SessionManager(_chatSessions, _hybridSessions.Object, _layout, permissions.Object, "coordinator");
     }
 
-    private Task<(CreateSessionResult result, Core.Models.SessionModel? session)> CreateChat(int? categoryId = null) =>
+    private Task<(ErrorCode? result, Core.Models.SessionModel? session)> CreateChat(int? categoryId = null) =>
         _manager.CreateSessionAsync(new CreateSessionModel("general", 10, new ChatSessionCreateData(), categoryId), UserId);
 
     [Fact]
@@ -70,7 +70,7 @@ public class SessionManagerTests
         Assert.Empty(_layout.GetLayout().RootSessionIds);
     }
 
-    private Task<(SessionLayoutResult Result, int? CategoryId)> CreateCategory() =>
+    private Task<(ErrorCode? Result, int? CategoryId)> CreateCategory() =>
         _layout.CreateCategoryAsync("Voice");
 
     [Fact]
@@ -78,7 +78,7 @@ public class SessionManagerTests
     {
         var (result, session) = await CreateChat();
 
-        Assert.Equal(CreateSessionResult.NoError, result);
+        Assert.Equal(null, result);
         var chat = Assert.IsType<ChatSessionModel>(session);
         Assert.Equal("general", chat.Name);
     }
@@ -97,7 +97,7 @@ public class SessionManagerTests
     {
         await CreateChat();
 
-        Assert.Equal(DeleteSessionResult.NoError, await _manager.DeleteSessionAsync(10, UserId));
+        Assert.Equal(null, await _manager.DeleteSessionAsync(10, UserId));
 
         Assert.False(_manager.TryGetSessionModel(10, out _));
         _hybridSessions.Verify(m => m.DeleteAsync(It.IsAny<int>(), It.IsAny<int>()), Times.Never);
@@ -106,7 +106,7 @@ public class SessionManagerTests
     [Fact]
     public async Task DeleteSession_Unknown_ReturnsSessionNotExists()
     {
-        Assert.Equal(DeleteSessionResult.SessionNotExists, await _manager.DeleteSessionAsync(99, UserId));
+        Assert.Equal(ErrorCode.SessionNotFound, await _manager.DeleteSessionAsync(99, UserId));
     }
 
     [Fact]

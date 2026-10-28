@@ -17,11 +17,11 @@ public interface ISessionManager : IDisposable
 {
     Task LoadSessionsAsync();
 
-    Task<(CreateSessionResult result, SessionModel? session)> CreateSessionAsync(CreateSessionModel request, int userId);
-    Task<DeleteSessionResult> DeleteSessionAsync(int sessionId, int userId);
+    Task<(ErrorCode? result, SessionModel? session)> CreateSessionAsync(CreateSessionModel request, int userId);
+    Task<ErrorCode?> DeleteSessionAsync(int sessionId, int userId);
 
     /// <summary>Saves the permission overrides of the session in place of the ones it has.</summary>
-    Task<ChangeSessionPermissionsResult> SetPermissionsAsync(int sessionId, IReadOnlyList<PermissionOverride> overrides);
+    Task<ErrorCode?> SetPermissionsAsync(int sessionId, IReadOnlyList<PermissionOverride> overrides);
 
     bool TryGetSessionModel(int sessionId, [NotNullWhen(true)] out SessionModel? session);
     IReadOnlyCollection<SessionModel> GetAllSessionModels();

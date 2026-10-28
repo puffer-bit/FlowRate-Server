@@ -1,3 +1,4 @@
+using Shared.Enums;
 using Server.Core.Models.User;
 using Server.Application.Coordinator.Connections;
 using Server.Application.Coordinator.Sessions;
@@ -28,20 +29,20 @@ public interface IUserManager
 
     /// <summary>Attaches the user of a device session, who proved themselves when the session started.</summary>
     Task<UserAttachment> AttachUser(int userId, IClientConnection clientConnection);
-    Task<ChangeUsernameResult> ChangeUsername(int userId, string newUsername);
-    Task<SetAvatarResult> SetAvatar(int userId, string? avatarUrl);
+    Task<ErrorCode?> ChangeUsername(int userId, string newUsername);
+    Task<ErrorCode?> SetAvatar(int userId, string? avatarUrl);
 
     /// <summary>Sets the status a connected user picked; announced as an update of the user.</summary>
-    Task<SetUserStatusResult> SetStatus(int userId, UserStatus status);
+    Task<ErrorCode?> SetStatus(int userId, UserStatus status);
 
     /// <summary>
     /// Bans, freezes or reinstates a user, connected or not; announced as an update of the user. Neither
     /// disconnects them.
     /// </summary>
-    Task<ModerateUserResult> SetState(int userId, UserState state);
+    Task<ErrorCode?> SetState(int userId, UserState state);
 
     /// <summary>Deletes a user, detaching them when connected; their connection stays open.</summary>
-    Task<ModerateUserResult> DeleteUser(int userId);
+    Task<ErrorCode?> DeleteUser(int userId);
 
     /// <summary>Takes the roles of a connected user saved elsewhere; announced as an update of the user.</summary>
     void SetRoles(int userId, IEnumerable<int> roleIds);

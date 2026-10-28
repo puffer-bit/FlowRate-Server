@@ -28,16 +28,11 @@ public class ChatSessionMessageHandler : IMessageHandler<ChatSessionMessageReque
 
         var result = await _chatSessionManager.FetchMessageAsync(request.ChatId, request.MessageId);
         
-        var responseData = result.result == FetchMessageResult.NoError 
-            ? request.ToResponse(result.result, result.message.ToDto()) 
-            : request.ToResponse(result.result, null);
+        var responseData = request.Answer(result.result, () => request.ToResponse(result.message!.ToDto()));
 
         _messageSender.SendMessageById(connectionId, 
             responseData);
         
-        return result.result == FetchMessageResult.NoError ? HandleMessageResult.NoError : HandleMessageResult.InternalError;
+        return result.result == null ? HandleMessageResult.NoError : HandleMessageResult.InternalError;
     }
-
-    public BaseMessage? CreateFailureResponse(ChatSessionMessageRequest request) =>
-        request.ToResponse(FetchMessageResult.InternalError, null);
 }

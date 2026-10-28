@@ -20,11 +20,5 @@ public class HybridSessionStopVideoShareHandler : HybridSessionRequestHandler<Hy
     protected override int GetSessionId(HybridSessionStopVideoRequest request) => request.SessionId;
 
     protected override async Task<BaseMessage> HandleAsync(HybridSessionStopVideoRequest request, IHybridSession session) =>
-        request.ToResponse(await session.PeerManager.StopVideoShareAsync(request.SenderId, request.SenderId));
-
-    protected override BaseMessage SessionNotFound(HybridSessionStopVideoRequest request) =>
-        request.ToResponse(StopVideoShareResult.PeerNotExists);
-
-    public override BaseMessage CreateFailureResponse(HybridSessionStopVideoRequest request) =>
-        request.ToResponse(StopVideoShareResult.InternalError);
+        request.Answer(await session.PeerManager.StopVideoShareAsync(request.SenderId, request.SenderId), request.ToResponse);
 }

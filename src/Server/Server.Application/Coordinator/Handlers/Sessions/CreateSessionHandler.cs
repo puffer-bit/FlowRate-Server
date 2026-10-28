@@ -28,13 +28,9 @@ public class CreateSessionHandler : IMessageHandler<CreateSessionRequest>
 
         var (result, session) = await _sessionManager.CreateSessionAsync(request.CreateSessionModel, request.SenderId);
 
-        _messageSender.SendMessageById(connectionId, session != null
-            ? request.ToResponse(result, session.ToDto())
-            : request.ToResponse(result));
+        _messageSender.SendMessageById(connectionId, request.Answer(result,
+            () => request.ToResponse(session!.ToDto())));
 
         return HandleMessageResult.NoError;
     }
-
-    public BaseMessage? CreateFailureResponse(CreateSessionRequest request) =>
-        request.ToResponse(CreateSessionResult.InternalError);
 }

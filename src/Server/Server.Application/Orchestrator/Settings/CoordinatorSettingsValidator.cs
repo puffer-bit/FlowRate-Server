@@ -42,9 +42,9 @@ public static class CoordinatorSettingsValidator
             errors.Add(CoordinatorSettingsFields.MaxOnlineUsers,
                 "More users cannot be online than may be registered.");
 
-        if (change.MotdText?.Length > Limits.MotdTextMaxLength)
+        if (change.MotdText?.Length > Limits.MOTDTextMaxLength)
             errors.Add(CoordinatorSettingsFields.MotdText,
-                $"The message cannot be longer than {Limits.MotdTextMaxLength} characters.");
+                $"The message cannot be longer than {Limits.MOTDTextMaxLength} characters.");
 
         ValidateIps(errors, CoordinatorSettingsFields.AllowedIps, change.AllowedIps);
         ValidateIps(errors, CoordinatorSettingsFields.BannedIps, change.BannedIps);

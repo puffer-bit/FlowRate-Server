@@ -37,42 +37,39 @@ public class SetAvatarHandler : IMessageHandler<CoordinatorSetAvatarRequest>
             return HandleMessageResult.ForbiddenRequest;
         }
 
-        var userId = request.UserId ?? request.SenderId;
+        var userId = request.TargetUserId ?? request.SenderId;
 
         var result = await SetAvatar(request, userId);
-        var user = result == SetAvatarResult.NoError && _userManager.TryGetConnectedUser(userId, out var updated)
+        var user = result == null && _userManager.TryGetConnectedUser(userId, out var updated)
             ? updated!.ToDto(request.SenderId)
             : null;
 
-        _messageSender.SendMessageById(connectionId, request.ToResponse(result, user));
+        _messageSender.SendMessageById(connectionId, request.Answer(result, () => request.ToResponse(user!)));
 
-        if (result != SetAvatarResult.NoError)
+        if (result != null)
             _logger.LogTrace("User {SenderId} failed to change the avatar of user {Id}: {Result}", request.SenderId, userId, result);
 
         return HandleMessageResult.NoError;
     }
 
-    public BaseMessage? CreateFailureResponse(CoordinatorSetAvatarRequest request) =>
-        request.ToResponse(SetAvatarResult.InternalError);
-
-    private async Task<SetAvatarResult> SetAvatar(CoordinatorSetAvatarRequest request, int userId)
+    private async Task<ErrorCode?> SetAvatar(CoordinatorSetAvatarRequest request, int userId)
     {
         var uploadId = request.UploadId?.ToLowerInvariant();
 
         if (uploadId != null && userId != request.SenderId)
-            return SetAvatarResult.NotAllowed;
+            return ErrorCode.InsufficientPermissions;
 
         if (!_userManager.TryGetConnectedUser(userId, out var user) || user!.IsSystem)
-            return SetAvatarResult.UserNotFound;
+            return ErrorCode.UserNotFound;
 
         var previousUploadId = AvatarAddress.UploadIdOf(user.AvatarUrl);
 
         if (uploadId != null && !await _media.AttachAvatarAsync(uploadId, request.SenderId))
-            return SetAvatarResult.UploadNotFound;
+            return ErrorCode.UploadNotFound;
 
         var result = await _userManager.SetAvatar(userId, uploadId == null ? null : AvatarAddress.Of(uploadId));
 
-        if (result != SetAvatarResult.NoError)
+        if (result != null)
         {
             if (uploadId != null)
                 await _media.RemoveAvatarAsync(uploadId);
@@ -83,6 +80,6 @@ public class SetAvatarHandler : IMessageHandler<CoordinatorSetAvatarRequest>
         if (previousUploadId != null && previousUploadId != uploadId)
             await _media.RemoveAvatarAsync(previousUploadId);
 
-        return SetAvatarResult.NoError;
+        return null;
     }
 }

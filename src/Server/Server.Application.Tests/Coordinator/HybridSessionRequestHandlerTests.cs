@@ -1,3 +1,4 @@
+using Shared.Models.Responses;
 using Moq;
 using Shared.Enums;
 using Shared.Models;
@@ -48,13 +49,12 @@ public class HybridSessionRequestHandlerTests
     [Fact]
     public async Task Kick_KicksTheTargetOnBehalfOfTheSender()
     {
-        _peers.Setup(p => p.KickPeerAsync(HostId, GuestId, "bye")).ReturnsAsync(LeaveSessionResult.NoError);
+        _peers.Setup(p => p.KickPeerAsync(HostId, GuestId, "bye")).ReturnsAsync((ErrorCode?)null);
 
         await _handler.HandleMessage(Kick(SessionId), "connection");
 
         _peers.Verify(p => p.KickPeerAsync(HostId, GuestId, "bye"), Times.Once);
         var response = Assert.IsType<KickFromSessionResponse>(Assert.Single(_sent));
-        Assert.Equal(LeaveSessionResult.NoError, response.Result);
     }
 
     [Fact]
@@ -62,8 +62,8 @@ public class HybridSessionRequestHandlerTests
     {
         await _handler.HandleMessage(Kick(sessionId: 99), "connection");
 
-        var response = Assert.IsType<KickFromSessionResponse>(Assert.Single(_sent));
-        Assert.Equal(LeaveSessionResult.SessionNotExists, response.Result);
+        var response = Assert.IsType<ErrorResponse>(Assert.Single(_sent));
+        Assert.Equal(ErrorCode.SessionNotFound, response.Code);
     }
 
     [Fact]
@@ -71,8 +71,8 @@ public class HybridSessionRequestHandlerTests
     {
         await _handler.HandleMessage(Kick(sessionId: 99, SessionType.Chat), "connection");
 
-        var response = Assert.IsType<KickFromSessionResponse>(Assert.Single(_sent));
-        Assert.Equal(LeaveSessionResult.UnknownSessionType, response.Result);
+        var response = Assert.IsType<ErrorResponse>(Assert.Single(_sent));
+        Assert.Equal(ErrorCode.WrongSessionType, response.Code);
     }
 
     [Fact]
@@ -90,27 +90,26 @@ public class HybridSessionRequestHandlerTests
         await _leave.HandleMessage(new LeaveSessionRequest(SessionId, SessionType.Hybrid) { SenderId = GuestId }, "phone");
 
         _peers.Verify(p => p.RemovePeerAsync(It.IsAny<int>()), Times.Never);
-        var response = Assert.IsType<LeaveSessionResponse>(Assert.Single(_sent));
-        Assert.Equal(LeaveSessionResult.InternalError, response.Result);
+        var response = Assert.IsType<ErrorResponse>(Assert.Single(_sent));
+        Assert.Equal(ErrorCode.NotMember, response.Code);
     }
 
     [Fact]
     public async Task Leave_FromTheDeviceThePeerIsOn_LeavesTheSession()
     {
         _peers.Setup(p => p.IsPeerOf(GuestId, "desktop")).Returns(true);
-        _peers.Setup(p => p.RemovePeerAsync(GuestId)).ReturnsAsync(LeaveSessionResult.NoError);
+        _peers.Setup(p => p.RemovePeerAsync(GuestId)).ReturnsAsync((ErrorCode?)null);
 
         await _leave.HandleMessage(new LeaveSessionRequest(SessionId, SessionType.Hybrid) { SenderId = GuestId }, "desktop");
 
         var response = Assert.IsType<LeaveSessionResponse>(Assert.Single(_sent));
-        Assert.Equal(LeaveSessionResult.NoError, response.Result);
     }
 
     [Fact]
     public async Task Join_TakesPartFromTheConnectionOfTheRequest()
     {
         _peers.Setup(p => p.AddPeerAsync(GuestId, It.IsAny<string>(), "desktop"))
-            .ReturnsAsync((HybridSessionJoinResult.NoError, null));
+            .ReturnsAsync((null, null));
 
         await _join.HandleMessage(new HybridSessionJoinRequest(SessionId) { SenderId = GuestId }, "desktop");
 

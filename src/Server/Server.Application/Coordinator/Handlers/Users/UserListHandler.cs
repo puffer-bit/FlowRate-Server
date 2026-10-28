@@ -30,10 +30,7 @@ public class UserListHandler : IMessageHandler<CoordinatorUserListRequest>
             .Select(user => user.ToDto(request.SenderId, showIp: true))
             .ToList();
 
-        _messageSender.SendMessageById(connectionId, request.ToResponse(users, UsersRequestResult.NoError));
+        _messageSender.SendMessageById(connectionId, request.ToResponse(users));
         return HandleMessageResult.NoError;
     }
-
-    public BaseMessage? CreateFailureResponse(CoordinatorUserListRequest request) =>
-        request.ToResponse(new List<UserDTO>(), UsersRequestResult.InternalError);
 }

@@ -18,11 +18,8 @@ public class UserSecurityInfoHandler(IMessageSender messageSender, UserSecurityR
 
         var overview = await replies.Security.GetAsync(replies.CoordinatorId, request.SenderId);
         messageSender.SendMessageById(connectionId, overview == null
-            ? request.ToResponse(UserSecurityResult.InternalError)
-            : request.ToResponse(UserSecurityResult.NoError, overview.ToDto()));
+            ? request.ToError(ErrorCode.Internal)
+            : request.ToResponse(overview.ToDto()));
         return HandleMessageResult.NoError;
     }
-
-    public BaseMessage? CreateFailureResponse(UserSecurityInfoRequest request) =>
-        request.ToResponse(UserSecurityResult.InternalError);
 }

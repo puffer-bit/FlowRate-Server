@@ -85,7 +85,7 @@ public class RateLimitingTests
         }
         Assert.Equal(RequestGuardVerdict.Rejected, guard.Check(new HybridSessionConnectTransportRequest(1)
         {
-            DtlsParameters = new() { Role = "client", Fingerprints = [] }
+            DTLSParameters = new() { Role = "client", Fingerprints = [] }
         }, out _));
 
         _time.Advance(TimeSpan.FromSeconds(5));
@@ -102,7 +102,7 @@ public class RateLimitingTests
 
         Assert.Equal(RequestGuardVerdict.Allowed, guard.Check(new HybridSessionSetMicrophoneMuteRequest(1, true), out var group));
         Assert.Equal(RequestRateGroup.MicrophoneMute, group);
-        Assert.Equal(RequestGuardVerdict.Allowed, guard.Check(new SendTextMessageRequest(1, null!), out group));
+        Assert.Equal(RequestGuardVerdict.Allowed, guard.Check(new SendMessageRequest(1, null!), out group));
         Assert.Equal(RequestRateGroup.ChatWrite, group);
     }
 

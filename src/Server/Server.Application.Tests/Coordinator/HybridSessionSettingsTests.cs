@@ -63,7 +63,7 @@ public class HybridSessionSettingsTests
 
         var result = await manager.ChangeSettingsAsync(7, "lounge", 5, true, LossyMedia, 3);
 
-        Assert.Equal(ChangeSessionSettingsResult.NoError, result);
+        Assert.Equal(null, result);
         Assert.Equal(("lounge", 5, true), (_room.Name, _room.Capacity, _room.IsHostMustApprove));
         Assert.Equal(LossyMedia, _room.Media);
         _repository.Verify(r => r.UpdateAsync(_room, It.IsAny<CancellationToken>()), Times.Once);
@@ -79,7 +79,7 @@ public class HybridSessionSettingsTests
 
         var result = await manager.ChangeSettingsAsync(7, "room", 4, false, HybridMediaSettings.Default, 1);
 
-        Assert.Equal(ChangeSessionSettingsResult.NoError, result);
+        Assert.Equal(null, result);
         Assert.Equal(4, _room.Capacity);
     }
 
@@ -90,7 +90,7 @@ public class HybridSessionSettingsTests
 
         var result = await manager.ChangeSettingsAsync(7, "hall", 10, false, HybridMediaSettings.Default, 1);
 
-        Assert.Equal(ChangeSessionSettingsResult.NameAlreadyUsed, result);
+        Assert.Equal(ErrorCode.NameTaken, result);
         Assert.Equal("room", _room.Name);
         Assert.Empty(_events.Events);
     }
@@ -103,7 +103,7 @@ public class HybridSessionSettingsTests
 
         var result = await manager.ChangeSettingsAsync(7, "room", 2, false, HybridMediaSettings.Default, 1);
 
-        Assert.Equal(ChangeSessionSettingsResult.WrongCapacity, result);
+        Assert.Equal(ErrorCode.InvalidValue, result);
         Assert.Equal(10, _room.Capacity);
         _repository.Verify(r => r.UpdateAsync(It.IsAny<HybridSessionModel>(), It.IsAny<CancellationToken>()), Times.Never);
     }
@@ -115,7 +115,7 @@ public class HybridSessionSettingsTests
 
         var result = await manager.ChangeSettingsAsync(99, "room", 10, false, HybridMediaSettings.Default, 1);
 
-        Assert.Equal(ChangeSessionSettingsResult.SessionNotExists, result);
+        Assert.Equal(ErrorCode.SessionNotFound, result);
     }
 
     [Fact]
@@ -127,7 +127,7 @@ public class HybridSessionSettingsTests
 
         var result = await manager.ChangeSettingsAsync(7, "lounge", 5, true, LossyMedia, 1);
 
-        Assert.Equal(ChangeSessionSettingsResult.InternalError, result);
+        Assert.Equal(ErrorCode.Internal, result);
         Assert.Equal(("room", 10, false), (_room.Name, _room.Capacity, _room.IsHostMustApprove));
         Assert.Equal(HybridMediaSettings.Default, _room.Media);
         Assert.Empty(_events.Events);

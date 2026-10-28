@@ -16,17 +16,17 @@ public interface IChatSessionManager
 {
     Task LoadAsync();
 
-    Task<(CreateSessionResult result, ChatSessionModel? session)> CreateAsync(CreateSessionModel request, int userId);
-    Task<DeleteSessionResult> DeleteAsync(int sessionId, int userId);
+    Task<(ErrorCode? result, ChatSessionModel? session)> CreateAsync(CreateSessionModel request, int userId);
+    Task<ErrorCode?> DeleteAsync(int sessionId, int userId);
     bool TryGetSession(int sessionId, [NotNullWhen(true)] out ChatSessionModel? session);
     IReadOnlyCollection<ChatSessionModel> GetAllSessions();
 
-    Task<(FetchMessagesResult result, List<ChatMessageModel>? messages)> FetchMessagesAsync(int sessionId, int take, int? skip);
-    Task<(FetchMessagesResult result, ChatHistoryPage? page)> FetchMessagesBeforeAsync(int sessionId, int? beforeMessageId, int take);
-    Task<(FetchMessagesResult result, ChatChanges? changes)> FetchChangesAsync(int sessionId, long afterRevision, int take);
-    Task<(FetchMessageResult result, ChatMessageModel? message)> FetchMessageAsync(int sessionId, int messageId);
-    Task<AddMessageResult> AddMessageAsync(int sessionId, NewChatMessageModel message, int senderUserId);
-    Task<EditMessageResult> EditMessageAsync(int sessionId, int messageId, string text, int userId);
+    Task<(ErrorCode? result, List<ChatMessageModel>? messages)> FetchMessagesAsync(int sessionId, int take, int? skip);
+    Task<(ErrorCode? result, ChatHistoryPage? page)> FetchMessagesBeforeAsync(int sessionId, int? beforeMessageId, int take);
+    Task<(ErrorCode? result, ChatChanges? changes)> FetchChangesAsync(int sessionId, long afterRevision, int take);
+    Task<(ErrorCode? result, ChatMessageModel? message)> FetchMessageAsync(int sessionId, int messageId);
+    Task<ErrorCode?> AddMessageAsync(int sessionId, NewChatMessageModel message, int senderUserId);
+    Task<ErrorCode?> EditMessageAsync(int sessionId, int messageId, string text, int userId);
     /// <param name="mayDeleteAny">The user may delete messages of others, by their coordinator roles.</param>
-    Task<DeleteMessageResult> DeleteMessageAsync(int sessionId, int messageId, int userId, bool mayDeleteAny = false);
+    Task<ErrorCode?> DeleteMessageAsync(int sessionId, int messageId, int userId, bool mayDeleteAny = false);
 }

@@ -46,18 +46,18 @@ public sealed class ChatReadService : IEventHandler<ChatSessionMessageAddedEvent
         return states;
     }
 
-    public async Task<(ChatReadResult result, ChatReadState? state)> MarkReadAsync(int userId, int chatId,
+    public async Task<(ErrorCode? result, ChatReadState? state)> MarkReadAsync(int userId, int chatId,
         int messageId, CancellationToken ct = default)
     {
         if (_chats == null || !_chats.TryGetSession(chatId, out _))
-            return (ChatReadResult.ChatNotExists, null);
+            return (ErrorCode.ChatNotFound, null);
 
         var lastMessageId = await _repository.GetLastMessageIdAsync(chatId, ct);
         var position = await _repository.MoveAsync(userId, chatId, Math.Min(messageId, lastMessageId), ct);
         var state = await StateOfAsync(userId, chatId, position, ct);
 
         _messageSender.SendMessageByUserId(userId, new ChatReadStateChangedNotification(state.ToDto()));
-        return (ChatReadResult.NoError, state);
+        return (null, state);
     }
 
     public async Task HandleAsync(ChatSessionMessageAddedEvent evt, CancellationToken ct = default)

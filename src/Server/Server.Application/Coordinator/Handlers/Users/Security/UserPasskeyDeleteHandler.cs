@@ -17,17 +17,14 @@ public class UserPasskeyDeleteHandler(IMessageSender messageSender, UserSecurity
 
         if (!await replies.IsProvenAsync(request.SenderId, request.Proof))
         {
-            messageSender.SendMessageById(connectionId, request.ToResponse(UserSecurityResult.ProofRequired));
+            messageSender.SendMessageById(connectionId, request.ToError(ErrorCode.ProofRequired));
             return HandleMessageResult.ForbiddenRequest;
         }
 
         var status = await replies.Security.DeletePasskeyAsync(replies.CoordinatorId, request.SenderId,
             request.PasskeyId);
         var (result, security) = await replies.AfterAsync(request.SenderId, status);
-        messageSender.SendMessageById(connectionId, request.ToResponse(result, security));
+        messageSender.SendMessageById(connectionId, request.Answer(result, () => request.ToResponse(security!)));
         return HandleMessageResult.NoError;
     }
-
-    public BaseMessage? CreateFailureResponse(UserPasskeyDeleteRequest request) =>
-        request.ToResponse(UserSecurityResult.InternalError);
 }

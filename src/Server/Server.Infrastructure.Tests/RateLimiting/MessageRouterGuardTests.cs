@@ -74,9 +74,9 @@ public class MessageRouterGuardTests
         router.RouteIncomingMessage(request, "connection-1");
 
         Assert.False(_handled.ContainsKey(typeof(CreateSessionRequest)));
-        var rejected = Assert.IsType<RequestRejectedResponse>(Assert.Single(_connection.Sent));
+        var rejected = Assert.IsType<ErrorResponse>(Assert.Single(_connection.Sent));
         Assert.Equal(request.RequestId, rejected.RequestId);
-        Assert.Equal(RequestRejectReason.InsufficientPermissions, rejected.Reason);
+        Assert.Equal(ErrorCode.InsufficientPermissions, rejected.Code);
     }
 
     [Fact]
@@ -95,9 +95,9 @@ public class MessageRouterGuardTests
         Route(request);
 
         Assert.False(_handled.ContainsKey(typeof(CreateSessionRequest)));
-        var rejected = Assert.IsType<RequestRejectedResponse>(Assert.Single(_connection.Sent));
+        var rejected = Assert.IsType<ErrorResponse>(Assert.Single(_connection.Sent));
         Assert.Equal(request.RequestId, rejected.RequestId);
-        Assert.Equal(RequestRejectReason.InvalidRequest, rejected.Reason);
+        Assert.Equal(ErrorCode.InvalidRequest, rejected.Code);
         Assert.Contains("Name", rejected.Details);
     }
 
@@ -111,9 +111,9 @@ public class MessageRouterGuardTests
 
         Assert.Equal(10, _handled[typeof(CreateSessionRequest)]);
         Assert.False(_handled.ContainsKey(typeof(DeleteSessionRequest)));
-        var rejected = Assert.IsType<RequestRejectedResponse>(Assert.Single(_connection.Sent));
+        var rejected = Assert.IsType<ErrorResponse>(Assert.Single(_connection.Sent));
         Assert.Equal(eleventh.RequestId, rejected.RequestId);
-        Assert.Equal(RequestRejectReason.RateLimited, rejected.Reason);
+        Assert.Equal(ErrorCode.RateLimited, rejected.Code);
         Assert.Null(_connection.CloseReason);
     }
 
@@ -137,7 +137,7 @@ public class MessageRouterGuardTests
         Route(new UserAuthRequest("p", "u"), senderId: 0);
 
         Assert.Equal(5, _handled[typeof(UserAuthRequest)]);
-        Assert.Equal(RequestRejectReason.RateLimited, Assert.IsType<RequestRejectedResponse>(Assert.Single(_connection.Sent)).Reason);
+        Assert.Equal(ErrorCode.RateLimited, Assert.IsType<ErrorResponse>(Assert.Single(_connection.Sent)).Code);
     }
 
     [Fact]

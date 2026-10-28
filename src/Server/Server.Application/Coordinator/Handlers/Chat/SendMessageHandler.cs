@@ -10,7 +10,7 @@ using Server.Application.Coordinator.Users;
 
 namespace Server.Application.Coordinator.Handlers.Chat;
 
-public class SendMessageHandler : IMessageHandler<SendTextMessageRequest>
+public class SendMessageHandler : IMessageHandler<SendMessageRequest>
 {
     private readonly IChatSessionManager _chatSessionManager;
     private readonly IMessageSender _messageSender;
@@ -24,22 +24,19 @@ public class SendMessageHandler : IMessageHandler<SendTextMessageRequest>
         _userManager = userManager;
     }
 
-    public async Task<HandleMessageResult> HandleMessage(SendTextMessageRequest? request, string connectionId)
+    public async Task<HandleMessageResult> HandleMessage(SendMessageRequest? request, string connectionId)
     {
         if (request == null) return HandleMessageResult.ForbiddenRequest;
 
         // The sender is checked in memory: a message from a user who is not connected is not accepted
         var result = _userManager.TryGetConnectedUser(request.SenderId, out _)
-            ? await _chatSessionManager.AddMessageAsync(request.ChatId, request.MessageModel, request.SenderId)
-            : AddMessageResult.Rejected;
-        var responseData = request.ToResponse(result);
+            ? await _chatSessionManager.AddMessageAsync(request.ChatId, request.Message, request.SenderId)
+            : ErrorCode.NotConnected;
+        var responseData = request.Answer(result, request.ToResponse);
         
         _messageSender.SendMessageById(connectionId, 
             responseData);
         
-        return result == AddMessageResult.NoError ? HandleMessageResult.NoError : HandleMessageResult.InternalError;
+        return result == null ? HandleMessageResult.NoError : HandleMessageResult.InternalError;
     }
-
-    public BaseMessage? CreateFailureResponse(SendTextMessageRequest request) =>
-        request.ToResponse(AddMessageResult.InternalError);
 }

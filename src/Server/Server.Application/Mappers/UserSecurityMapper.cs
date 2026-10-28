@@ -1,3 +1,4 @@
+using Shared.Enums;
 using Server.Application.Orchestrator.Security;
 using Shared.Enums.User;
 using Shared.Models.DataTransferObjects;
@@ -16,14 +17,14 @@ public static class UserSecurityMapper
             .Select(key => new UserPasskeyDTO(key.Id, key.Label, key.CreatedAt, key.LastUsedAt))
             .ToList());
 
-    public static UserSecurityResult ToResult(this UserSecurityStatus status) => status switch
+    public static ErrorCode? ToResult(this UserSecurityStatus status) => status switch
     {
-        UserSecurityStatus.Done => UserSecurityResult.NoError,
-        UserSecurityStatus.Invalid => UserSecurityResult.InvalidValue,
-        UserSecurityStatus.Refused => UserSecurityResult.Refused,
-        UserSecurityStatus.Unavailable => UserSecurityResult.PasskeysUnavailable,
-        UserSecurityStatus.PasskeyNotFound => UserSecurityResult.PasskeyNotFound,
+        UserSecurityStatus.Done => null,
+        UserSecurityStatus.Invalid => ErrorCode.InvalidValue,
+        UserSecurityStatus.Refused => ErrorCode.VerificationFailed,
+        UserSecurityStatus.Unavailable => ErrorCode.FeatureDisabled,
+        UserSecurityStatus.PasskeyNotFound => ErrorCode.PasskeyNotFound,
         // The sender is a user of this coordinator; anything else is a fault
-        _ => UserSecurityResult.InternalError
+        _ => ErrorCode.Internal
     };
 }

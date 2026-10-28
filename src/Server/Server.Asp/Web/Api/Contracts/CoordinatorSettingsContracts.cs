@@ -31,7 +31,7 @@ public sealed record SfuNodeDto(int Id, string Name, string Host, int Port, bool
 /// <param name="PingMs">Round trip of the last answered ping; null while the node does not answer.</param>
 /// <param name="Error">Why the node is not connected, if known.</param>
 public sealed record SfuNodeStatusDto(
-    SfuNodeConnectionState State,
+    SFUNodeConnectionState State,
     double? PingMs,
     DateTimeOffset? LastPingAtUtc,
     DateTimeOffset StateChangedAtUtc,

@@ -26,35 +26,35 @@ public interface IHybridSessionPeerManager : IDisposable
     /// The connection the user joins from. Joining from another connection than the peer has takes the peer over: the
     /// previous connection is out (<see cref="HybridSessionPeerReplacedEvent"/>).
     /// </param>
-    Task<(HybridSessionJoinResult result, TransportData? transportData)> AddPeerAsync(int userId, string clientEpoch,
+    Task<(ErrorCode? result, TransportData? transportData)> AddPeerAsync(int userId, string clientEpoch,
         string? connectionId = null);
-    Task<HybridSessionConnectTransportResult> ConnectPeerAsync(int userId, DTLSParameters dtlsParameters);
-    Task<ApproveUserSessionResult> ApprovePeerAsync(int initiatorId, int userId);
-    Task<RejectUserSessionResult> RejectPeerAsync(int initiatorId, int userId, string? reason = null);
-    Task<LeaveSessionResult> KickPeerAsync(int initiatorId, int userId, string? reason = null);
-    Task<BanFromSessionResult> BanPeerAsync(int initiatorId, int userId, string? reason = null);
-    Task<LeaveSessionResult> RemovePeerAsync(int userId);
+    Task<ErrorCode?> ConnectPeerAsync(int userId, DTLSParameters dtlsParameters);
+    Task<ErrorCode?> ApprovePeerAsync(int initiatorId, int userId);
+    Task<ErrorCode?> RejectPeerAsync(int initiatorId, int userId, string? reason = null);
+    Task<ErrorCode?> KickPeerAsync(int initiatorId, int userId, string? reason = null);
+    Task<ErrorCode?> BanPeerAsync(int initiatorId, int userId, string? reason = null);
+    Task<ErrorCode?> RemovePeerAsync(int userId);
     /// <summary>Removes the peer only while it takes part from this connection.</summary>
-    Task<LeaveSessionResult> RemovePeerOfConnectionAsync(int userId, string connectionId);
+    Task<ErrorCode?> RemovePeerOfConnectionAsync(int userId, string connectionId);
     Task KickAllPeersAsync(string? reason = null);
 
-    Task<(StartVoiceShareResult result, Outbound? outbound)> StartVoiceShareAsync(int userId);
-    Task<StopVoiceShareResult> StopVoiceShareAsync(int initiatorId, int userId);
-    Task<SetMicrophoneMuteResult> SetMicrophoneMutedAsync(int initiatorId, int userId, bool isMuted);
-    Task<SetSoundMuteResult> SetSoundMutedAsync(int initiatorId, int userId, bool isMuted);
-    Task<SetAfkResult> SetAfkAsync(int userId, bool isAfk, string? reason);
-    Task<PokeResult> PokeAsync(int initiatorId, int userId, string? message);
+    Task<(ErrorCode? result, Outbound? outbound)> StartVoiceShareAsync(int userId);
+    Task<ErrorCode?> StopVoiceShareAsync(int initiatorId, int userId);
+    Task<ErrorCode?> SetMicrophoneMutedAsync(int initiatorId, int userId, bool isMuted);
+    Task<ErrorCode?> SetSoundMutedAsync(int initiatorId, int userId, bool isMuted);
+    Task<ErrorCode?> SetAfkAsync(int userId, bool isAfk, string? reason);
+    Task<ErrorCode?> PokeAsync(int initiatorId, int userId, string? message);
 
-    Task<(StartVideoShareResult result, Outbound? outbound)> StartVideoShareAsync(int userId);
-    Task<StopVideoShareResult> StopVideoShareAsync(int initiatorId, int userId);
+    Task<(ErrorCode? result, Outbound? outbound)> StartVideoShareAsync(int userId);
+    Task<ErrorCode?> StopVideoShareAsync(int initiatorId, int userId);
     /// <param name="withAudio">Also publish the sound of the shared application or system.</param>
-    Task<(StartScreenShareResult result, Outbound? outbound, Outbound? audioOutbound)> StartScreenShareAsync(int userId,
+    Task<(ErrorCode? result, Outbound? outbound, Outbound? audioOutbound)> StartScreenShareAsync(int userId,
         bool withAudio);
-    Task<StopScreenShareResult> StopScreenShareAsync(int initiatorId, int userId);
+    Task<ErrorCode?> StopScreenShareAsync(int initiatorId, int userId);
     /// <returns>The inbound of the picture and, when the share carries sound, the inbound of the sound.</returns>
-    Task<(SetScreenShareWatchResult result, Inbound? inbound, Inbound? audioInbound)> SetScreenShareWatchAsync(
+    Task<(ErrorCode? result, Inbound? inbound, Inbound? audioInbound)> SetScreenShareWatchAsync(
         int listenerUserId, int userId, bool isWatching);
-    Task<ResumeInboundsResult> ResumeInboundsAsync(int listenerUserId, IReadOnlyCollection<string> inboundIds);
+    Task<ErrorCode?> ResumeInboundsAsync(int listenerUserId, IReadOnlyCollection<string> inboundIds);
 
     bool HasPeer(int userId);
     /// <summary>
