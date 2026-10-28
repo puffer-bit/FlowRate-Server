@@ -17,16 +17,13 @@ public class UserTwoFactorDisableHandler(IMessageSender messageSender, UserSecur
 
         if (!await replies.IsProvenAsync(request.SenderId, request.Proof))
         {
-            messageSender.SendMessageById(connectionId, request.ToResponse(UserSecurityResult.ProofRequired));
+            messageSender.SendMessageById(connectionId, request.ToError(ErrorCode.ProofRequired));
             return HandleMessageResult.ForbiddenRequest;
         }
 
         var status = await replies.Security.DisableTwoFactorAsync(replies.CoordinatorId, request.SenderId);
         var (result, security) = await replies.AfterAsync(request.SenderId, status);
-        messageSender.SendMessageById(connectionId, request.ToResponse(result, security));
+        messageSender.SendMessageById(connectionId, request.Answer(result, () => request.ToResponse(security!)));
         return HandleMessageResult.NoError;
     }
-
-    public BaseMessage? CreateFailureResponse(UserTwoFactorDisableRequest request) =>
-        request.ToResponse(UserSecurityResult.InternalError);
 }

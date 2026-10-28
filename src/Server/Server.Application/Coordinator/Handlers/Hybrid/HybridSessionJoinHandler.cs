@@ -25,19 +25,13 @@ public class HybridSessionJoinHandler : HybridSessionRequestHandler<HybridSessio
     {
         var (result, transportData) = await session.PeerManager.AddPeerAsync(request.SenderId,
             request.ClientEpoch ?? string.Empty, connectionId);
-        return request.ToResponse(result, transportData);
+        return request.Answer(result, () => request.ToResponse(transportData!));
     }
 
     protected override async Task<BaseMessage> HandleAsync(HybridSessionJoinRequest request, IHybridSession session)
     {
         var (result, transportData) = await session.PeerManager.AddPeerAsync(request.SenderId,
             request.ClientEpoch ?? string.Empty);
-        return request.ToResponse(result, transportData);
+        return request.Answer(result, () => request.ToResponse(transportData!));
     }
-
-    protected override BaseMessage SessionNotFound(HybridSessionJoinRequest request) =>
-        request.ToResponse(HybridSessionJoinResult.SessionNotExists);
-
-    public override BaseMessage CreateFailureResponse(HybridSessionJoinRequest request) =>
-        request.ToResponse(HybridSessionJoinResult.InternalError);
 }

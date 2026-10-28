@@ -45,7 +45,7 @@ public class HybridSession : IHybridSession
         if (nodeGateway != null && current != null)
             _logger.LogInformation("Hybrid session {SessionId} moves to SFU node {NodeId}: its node left the pool.",
                 Model.Id, nodeGateway.NodeId);
-        else if (nodeGateway != null && Model.State == HybridSessionNodeState.WaitingForSfuNode)
+        else if (nodeGateway != null && Model.State == HybridSessionNodeState.WaitingForSFUNode)
             _logger.LogInformation("Hybrid session {SessionId} got SFU node {NodeId}.", Model.Id, nodeGateway.NodeId);
 
         // Without a node the session waits for one, so nobody keeps using a disabled or unassigned node

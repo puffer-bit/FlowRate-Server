@@ -1,3 +1,4 @@
+using Shared.Enums;
 using Server.Application.Mappers;
 using Server.Application.Orchestrator.Security;
 using Shared.Enums.User;
@@ -17,7 +18,7 @@ public sealed class UserSecurityReplies(IUserSecurityService security, string co
         security.CheckProofAsync(userId, proof?.Password, proof?.TwoFactorCode);
 
     /// <summary>The result of a change, with what the user has now when it was made.</summary>
-    public async Task<(UserSecurityResult Result, UserSecurityDTO? Security)> AfterAsync(int userId,
+    public async Task<(ErrorCode? Result, UserSecurityDTO? Security)> AfterAsync(int userId,
         UserSecurityStatus status)
     {
         if (status != UserSecurityStatus.Done)
@@ -25,7 +26,7 @@ public sealed class UserSecurityReplies(IUserSecurityService security, string co
 
         var overview = await security.GetAsync(coordinatorInstanceId, userId);
         return overview == null
-            ? (UserSecurityResult.InternalError, null)
-            : (UserSecurityResult.NoError, overview.ToDto());
+            ? (ErrorCode.Internal, null)
+            : (null, overview.ToDto());
     }
 }

@@ -14,11 +14,11 @@ public interface IHybridSessionManager : IDisposable
 {
     Task LoadAsync();
 
-    Task<(CreateSessionResult result, HybridSessionModel? session)> CreateAsync(CreateSessionModel request, int userId);
-    Task<DeleteSessionResult> DeleteAsync(int sessionId, int userId);
+    Task<(ErrorCode? result, HybridSessionModel? session)> CreateAsync(CreateSessionModel request, int userId);
+    Task<ErrorCode?> DeleteAsync(int sessionId, int userId);
 
     /// <summary>Replaces the settings of the session, saves them and tells every client.</summary>
-    Task<ChangeSessionSettingsResult> ChangeSettingsAsync(int sessionId, string name, int capacity,
+    Task<ErrorCode?> ChangeSettingsAsync(int sessionId, string name, int capacity,
         bool isHostMustApprove, HybridMediaSettings media, int userId);
     bool TryGetSession(int sessionId, [NotNullWhen(true)] out IHybridSession? session);
     IReadOnlyCollection<IHybridSession> GetAllSessions();

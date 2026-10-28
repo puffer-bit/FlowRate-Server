@@ -50,7 +50,7 @@ public partial class HybridSessionPeerManager : IHybridSessionPeerManager
     {
         if (ReferenceEquals(_gateway, gateway))
         {
-            await SetStateAsync(gateway == null ? HybridSessionNodeState.WaitingForSfuNode : HybridSessionNodeState.Active);
+            await SetStateAsync(gateway == null ? HybridSessionNodeState.WaitingForSFUNode : HybridSessionNodeState.Active);
             return;
         }
 
@@ -69,7 +69,7 @@ public partial class HybridSessionPeerManager : IHybridSessionPeerManager
         {
             // Peers stay in the session and rejoin by themselves once a node is assigned again
             ResetSfuState();
-            await SetStateAsync(HybridSessionNodeState.WaitingForSfuNode);
+            await SetStateAsync(HybridSessionNodeState.WaitingForSFUNode);
             return;
         }
 
@@ -80,11 +80,11 @@ public partial class HybridSessionPeerManager : IHybridSessionPeerManager
         await DropSfuStateAsync(new HybridSessionSFUNodeChangedEvent(Model.Id));
     });
 
-    public Task<(HybridSessionJoinResult result, TransportData? transportData)> AddPeerAsync(int userId,
-        string clientEpoch, string? connectionId = null) => LockedAsync(async () =>
+    public Task<(ErrorCode? result, TransportData? transportData)> AddPeerAsync(int userId,
+        string clientEpoch, string? connectionId = null) => LockedAsync<(ErrorCode? result, TransportData? transportData)>(async () =>
     {
         if (!EnsureReady("join", userId))
-            return (HybridSessionJoinResult.SFUNotActive, null);
+            return (ErrorCode.SFUUnavailable, null);
 
         var isNew = !_peers.TryGetValue(userId, out var peer);
         if (isNew)
@@ -96,7 +96,7 @@ public partial class HybridSessionPeerManager : IHybridSessionPeerManager
             if (peer!.IsRejected)
             {
                 _logger.LogTrace("User with ID {userId} failed to join. Participant was rejected", userId);
-                return (HybridSessionJoinResult.Rejected, null);
+                return (ErrorCode.NotAdmitted, null);
             }
 
             var replaced = peer.ConnectionId is { } previous && previous != connectionId ? previous : null;
@@ -124,7 +124,7 @@ public partial class HybridSessionPeerManager : IHybridSessionPeerManager
             _logger.LogError("User with ID {userId} failed to join. SFU service return error: {error}", userId, result);
             if (_peers.IsEmpty)
                 await UnloadSessionAsync();
-            return (HybridSessionJoinResult.SFUError, null);
+            return (ErrorCode.SFUError, null);
         }
 
         // A new peer is added only once it has a transport, so a failed join leaves nothing behind
@@ -133,29 +133,29 @@ public partial class HybridSessionPeerManager : IHybridSessionPeerManager
 
         _logger.LogTrace("User with ID {userId} successful joined", userId);
         await _coordinatorEventBus.PublishAsync(new HybridSessionPeerJoinedEvent(Model.Id, peer.ToSnapshot()));
-        return (HybridSessionJoinResult.NoError, transportData);
-    }, timedOut: (HybridSessionJoinResult.TimedOut, null));
+        return (null, transportData);
+    }, timedOut: (ErrorCode.TimedOut, null));
 
-    public Task<HybridSessionConnectTransportResult> ConnectPeerAsync(int userId, DTLSParameters dtlsParameters) =>
-        LockedAsync(async () =>
+    public Task<ErrorCode?> ConnectPeerAsync(int userId, DTLSParameters dtlsParameters) =>
+        LockedAsync<ErrorCode?>(async () =>
     {
         if (!EnsureReady("connect", userId))
-            return HybridSessionConnectTransportResult.SFUNotActive;
+            return ErrorCode.SFUUnavailable;
 
         if (!_peers.TryGetValue(userId, out var peer))
         {
             _logger.LogError("User with ID {userId} failed to connect. Peer not exists", userId);
-            return HybridSessionConnectTransportResult.InternalError;
+            return ErrorCode.Internal;
         }
 
         if (peer.IsRejected)
-            return HybridSessionConnectTransportResult.Rejected;
+            return ErrorCode.NotAdmitted;
 
         var result = await Gateway.ConnectPeerTransport(Model.Id, userId, dtlsParameters);
         if (result != SFUTransportConnectResult.NoError)
         {
             _logger.LogError("User with ID {userId} failed to connect. SFU service return error: {error}", userId, result);
-            return HybridSessionConnectTransportResult.SFUError;
+            return ErrorCode.SFUError;
         }
 
         peer.MarkTransportConnected();
@@ -164,30 +164,30 @@ public partial class HybridSessionPeerManager : IHybridSessionPeerManager
 
         if (peer.CanReceiveMedia)
             await ConsumeExistingOutboundsAsync(userId);
-        return HybridSessionConnectTransportResult.NoError;
-    }, timedOut: HybridSessionConnectTransportResult.SFUError);
+        return null;
+    }, timedOut: ErrorCode.SFUError);
 
-    public Task<ApproveUserSessionResult> ApprovePeerAsync(int initiatorId, int userId) => LockedAsync(async () =>
+    public Task<ErrorCode?> ApprovePeerAsync(int initiatorId, int userId) => LockedAsync<ErrorCode?>(async () =>
     {
         if (!EnsureReady("approve", userId))
-            return ApproveUserSessionResult.SFUNotActive;
+            return ErrorCode.SFUUnavailable;
 
         if (!_peers.TryGetValue(userId, out var peer))
         {
             _logger.LogDebug("Attempt to approve a peer with ID {userId} failed. Peer not exists", userId);
-            return ApproveUserSessionResult.PeerNotExists;
+            return ErrorCode.PeerNotFound;
         }
 
         var wasPending = peer.Admission == PeerAdmission.Pending;
         var result = peer.Approve();
-        if (result != ApproveUserSessionResult.NoError)
+        if (result != null)
         {
             _logger.LogDebug("Attempt to approve a peer with ID {userId} failed: {result}", userId, result);
             return result;
         }
 
         if (!wasPending)
-            return ApproveUserSessionResult.NoError;
+            return null;
 
         await _coordinatorEventBus.PublishAsync(new HybridSessionPeerApprovedEvent(Model.Id, userId, initiatorId));
         await _coordinatorEventBus.PublishAsync(new HybridSessionPeerStateChangedEvent(Model.Id, userId, peer.State));
@@ -196,23 +196,23 @@ public partial class HybridSessionPeerManager : IHybridSessionPeerManager
             await ConsumeExistingOutboundsAsync(userId);
 
         _logger.LogTrace("Participant with ID {userId} approved.", userId);
-        return ApproveUserSessionResult.NoError;
-    }, timedOut: ApproveUserSessionResult.TimedOut);
+        return null;
+    }, timedOut: ErrorCode.TimedOut);
 
-    public Task<RejectUserSessionResult> RejectPeerAsync(int initiatorId, int userId, string? reason = null) =>
-        LockedAsync(async () =>
+    public Task<ErrorCode?> RejectPeerAsync(int initiatorId, int userId, string? reason = null) =>
+        LockedAsync<ErrorCode?>(async () =>
     {
         if (!EnsureReady("reject", userId))
-            return RejectUserSessionResult.SFUNotActive;
+            return ErrorCode.SFUUnavailable;
 
         if (!_peers.TryGetValue(userId, out var peer))
         {
             _logger.LogDebug("Attempt to reject a peer with ID {userId} failed. Peer not exists", userId);
-            return RejectUserSessionResult.PeerNotExists;
+            return ErrorCode.PeerNotFound;
         }
 
         var result = peer.Reject();
-        if (result != RejectUserSessionResult.NoError)
+        if (result != null)
         {
             _logger.LogDebug("Attempt to reject a peer with ID {userId} failed: {result}", userId, result);
             return result;
@@ -222,29 +222,29 @@ public partial class HybridSessionPeerManager : IHybridSessionPeerManager
         await RemovePeerLockedAsync(userId, new HybridSessionPeerRejectedEvent(Model.Id, userId, initiatorId, reason));
 
         _logger.LogTrace("Participant with ID {userId} rejected.", userId);
-        return RejectUserSessionResult.NoError;
-    }, timedOut: RejectUserSessionResult.TimedOut);
+        return null;
+    }, timedOut: ErrorCode.TimedOut);
 
-    public Task<LeaveSessionResult> KickPeerAsync(int initiatorId, int userId, string? reason = null) =>
+    public Task<ErrorCode?> KickPeerAsync(int initiatorId, int userId, string? reason = null) =>
         initiatorId == userId
-            ? Task.FromResult(LeaveSessionResult.CannotKickSelf)
+            ? Task.FromResult<ErrorCode?>(ErrorCode.CannotTargetSelf)
             : LockedAsync(() => RemovePeerLockedAsync(userId,
-                new HybridSessionPeerKickedEvent(Model.Id, userId, initiatorId, reason)), LeaveSessionResult.TimedOut);
+                new HybridSessionPeerKickedEvent(Model.Id, userId, initiatorId, reason)), ErrorCode.TimedOut);
 
-    public Task<BanFromSessionResult> BanPeerAsync(int initiatorId, int userId, string? reason = null)
+    public Task<ErrorCode?> BanPeerAsync(int initiatorId, int userId, string? reason = null)
     {
         throw new NotImplementedException();
     }
 
-    public Task<LeaveSessionResult> RemovePeerAsync(int userId) =>
+    public Task<ErrorCode?> RemovePeerAsync(int userId) =>
         LockedAsync(() => RemovePeerLockedAsync(userId, new HybridSessionPeerLeftEvent(Model.Id, userId)),
-            LeaveSessionResult.TimedOut);
+            ErrorCode.TimedOut);
 
-    public Task<LeaveSessionResult> RemovePeerOfConnectionAsync(int userId, string connectionId) =>
+    public Task<ErrorCode?> RemovePeerOfConnectionAsync(int userId, string connectionId) =>
         LockedAsync(() => _peers.TryGetValue(userId, out var peer) && peer.ConnectionId == connectionId
                 ? RemovePeerLockedAsync(userId, new HybridSessionPeerLeftEvent(Model.Id, userId))
-                : Task.FromResult(LeaveSessionResult.PeerNotExists),
-            LeaveSessionResult.TimedOut);
+                : Task.FromResult<ErrorCode?>(ErrorCode.PeerNotFound),
+            ErrorCode.TimedOut);
 
     public bool IsPeerOf(int userId, string connectionId) =>
         !_peers.TryGetValue(userId, out var peer) || peer.ConnectionId == null || peer.ConnectionId == connectionId;
@@ -278,13 +278,13 @@ public partial class HybridSessionPeerManager : IHybridSessionPeerManager
     public IReadOnlyDictionary<int, PeerSnapshot> GetAllPeerSnapshots() =>
         _peers.Values.ToDictionary(peer => peer.UserId, peer => peer.ToSnapshot());
 
-    private async Task<LeaveSessionResult> RemovePeerLockedAsync<TEvent>(int userId, TEvent removedEvent)
+    private async Task<ErrorCode?> RemovePeerLockedAsync<TEvent>(int userId, TEvent removedEvent)
         where TEvent : HybridSessionUpdatedEvent
     {
         if (!_peers.TryRemove(userId, out var peer))
         {
             _logger.LogDebug("Attempt to remove a peer with ID {userId} failed. Peer not exists.", userId);
-            return LeaveSessionResult.PeerNotExists;
+            return ErrorCode.PeerNotFound;
         }
 
         // Without a reachable node the SFU state is already dropped, so leaving must not depend on it
@@ -308,7 +308,7 @@ public partial class HybridSessionPeerManager : IHybridSessionPeerManager
         }
 
         _logger.LogTrace("User with ID {userId} left.", userId);
-        return LeaveSessionResult.NoError;
+        return null;
     }
 
     private Task HandleGatewayConnectionLost() => LockedAsync(() =>
@@ -345,7 +345,7 @@ public partial class HybridSessionPeerManager : IHybridSessionPeerManager
         if (!Model.SetState(state))
             return;
 
-        if (state == HybridSessionNodeState.WaitingForSfuNode)
+        if (state == HybridSessionNodeState.WaitingForSFUNode)
             _logger.LogWarning("Hybrid session {SessionId} waits for an SFU node.", Model.Id);
 
         await _coordinatorEventBus.PublishAsync(new HybridSessionStateChangedEvent(Model.Id, state));

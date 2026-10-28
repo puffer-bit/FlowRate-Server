@@ -1,5 +1,6 @@
 using Shared.Enums;
 using Shared.Models;
+using Shared.Models.Requests;
 using Server.Application.Coordinator.Sessions.Hybrid;
 using Server.Application.Coordinator.Messaging;
 using Server.Application.Coordinator.Sessions.Chat;
@@ -14,7 +15,7 @@ namespace Server.Application.Coordinator.Handlers.Hybrid;
 /// The sender is always the authenticated user of the connection. A user can be connected from several devices,
 /// but takes part in a session from one: what drives the media of the peer is taken only from that connection.
 /// </summary>
-public abstract class HybridSessionRequestHandler<TRequest> : IMessageHandler<TRequest> where TRequest : class
+public abstract class HybridSessionRequestHandler<TRequest> : IMessageHandler<TRequest> where TRequest : Request
 {
     private readonly IHybridSessionManager _sessionManager;
     private readonly IMessageSender _messageSender;
@@ -32,10 +33,9 @@ public abstract class HybridSessionRequestHandler<TRequest> : IMessageHandler<TR
 
         BaseMessage response;
         if (!_sessionManager.TryGetSession(GetSessionId(request), out var session))
-            response = SessionNotFound(request);
-        else if (DrivesOwnPeer && request is BaseMessage { SenderId: var senderId }
-                 && !session.PeerManager.IsPeerOf(senderId, connectionId))
-            response = CreateFailureResponse(request) ?? SessionNotFound(request);
+            response = request.ToError(SessionNotFound(request));
+        else if (DrivesOwnPeer && !session.PeerManager.IsPeerOf(request.SenderId, connectionId))
+            response = request.ToError(ErrorCode.NotMember);
         else
             response = await HandleAsync(request, session, connectionId);
 
@@ -53,7 +53,6 @@ public abstract class HybridSessionRequestHandler<TRequest> : IMessageHandler<TR
 
     protected abstract Task<BaseMessage> HandleAsync(TRequest request, IHybridSession session);
 
-    protected abstract BaseMessage SessionNotFound(TRequest request);
-
-    public abstract BaseMessage? CreateFailureResponse(TRequest request);
+    /// <summary>Why a session that is not among the hybrid ones is not found.</summary>
+    protected virtual ErrorCode SessionNotFound(TRequest request) => ErrorCode.SessionNotFound;
 }

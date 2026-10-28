@@ -1,3 +1,4 @@
+using Shared.Enums;
 using Server.Application.Coordinator.Connections;
 using Server.Application.Coordinator.Users;
 using Server.Core.Models.User;
@@ -23,7 +24,7 @@ public sealed class UserLogin(IUserManager userManager, UserSessions sessions)
             return rejected;
 
         var token = await sessions.StartAsync(attachment.User!.Id, device, connection);
-        return new LoginOutcome(AuthResult.Success, attachment.User, attachment.UserIdentity, attachment.Result, token);
+        return new LoginOutcome(null, attachment.User, attachment.UserIdentity, attachment.Result, token);
     }
 
     /// <summary>A login with the token of a session: the session goes on with the next token.</summary>
@@ -35,7 +36,7 @@ public sealed class UserLogin(IUserManager userManager, UserSessions sessions)
             return rejected;
 
         var nextToken = await sessions.ResumeAsync(session, token, device, connection);
-        return new LoginOutcome(AuthResult.Success, attachment.User, null, attachment.Result, nextToken);
+        return new LoginOutcome(null, attachment.User, null, attachment.Result, nextToken);
     }
 
     private static LoginOutcome? Rejected(UserAttachment attachment) =>
@@ -43,14 +44,15 @@ public sealed class UserLogin(IUserManager userManager, UserSessions sessions)
             ? null
             : new LoginOutcome(attachment.Result switch
             {
-                AttachUserResult.OnlineLimitReached => AuthResult.OnlineLimitReached,
-                AttachUserResult.UserLimitReached => AuthResult.UserLimitReached,
-                AttachUserResult.Banned => AuthResult.Banned,
-                _ => AuthResult.AuthFailed
+                AttachUserResult.OnlineLimitReached => ErrorCode.OnlineLimitReached,
+                AttachUserResult.UserLimitReached => ErrorCode.UserLimitReached,
+                AttachUserResult.Banned => ErrorCode.Banned,
+                _ => ErrorCode.AuthFailed
             }, null, null, attachment.Result, null);
 }
 
+/// <param name="Error">Why the user was not let in; null when it was.</param>
 /// <param name="UserIdentity">The identity the user logged in with, or got; null for a login with a session token.</param>
 /// <param name="SessionToken">The token the device logs in with next time.</param>
-public sealed record LoginOutcome(AuthResult Result, UserModel? User, string? UserIdentity, AttachUserResult Attach,
+public sealed record LoginOutcome(ErrorCode? Error, UserModel? User, string? UserIdentity, AttachUserResult Attach,
     string? SessionToken);

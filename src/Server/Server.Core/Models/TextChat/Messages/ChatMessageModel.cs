@@ -92,14 +92,14 @@ public sealed class ChatMessageModel
         _replyContent = target.ToReplyContent();
     }
 
-    public EditMessageResult Edit(int userId, string text, DateTime now)
+    public ErrorCode? Edit(int userId, string text, DateTime now)
     {
         if (!IsSentBy(userId) || IsDeleted || IsReadOnly || IsSystem)
-            return EditMessageResult.InsufficientPermissions;
+            return ErrorCode.InsufficientPermissions;
 
         _textContent = new ChatTextContentModel { Text = text };
         _editTime = now;
-        return EditMessageResult.NoError;
+        return null;
     }
 
     public void MarkDelivered() => _isDelivered = true;

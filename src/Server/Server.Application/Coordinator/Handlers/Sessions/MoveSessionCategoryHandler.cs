@@ -23,11 +23,8 @@ public class MoveSessionCategoryHandler : IMessageHandler<MoveSessionCategoryReq
             return HandleMessageResult.ForbiddenRequest;
 
         var result = await _layout.MoveCategoryAsync(request.CategoryId, request.Index);
-        _messageSender.SendMessageById(connectionId, request.ToResponse(result));
+        _messageSender.SendMessageById(connectionId, request.Answer(result, request.ToResponse));
 
         return HandleMessageResult.NoError;
     }
-
-    public BaseMessage? CreateFailureResponse(MoveSessionCategoryRequest request) =>
-        request.ToResponse(SessionLayoutResult.InternalError);
 }

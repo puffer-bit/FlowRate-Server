@@ -12,9 +12,9 @@ public interface ISessionLayoutService
     Task AddSessionAsync(int sessionId, int? categoryId);
     Task RemoveSessionAsync(int sessionId);
 
-    Task<(SessionLayoutResult Result, int? CategoryId)> CreateCategoryAsync(string name);
-    Task<SessionLayoutResult> RenameCategoryAsync(int categoryId, string name);
-    Task<SessionLayoutResult> DeleteCategoryAsync(int categoryId);
-    Task<SessionLayoutResult> MoveSessionAsync(int sessionId, int? categoryId, int index);
-    Task<SessionLayoutResult> MoveCategoryAsync(int categoryId, int index);
+    Task<(ErrorCode? Result, int? CategoryId)> CreateCategoryAsync(string name);
+    Task<ErrorCode?> RenameCategoryAsync(int categoryId, string name);
+    Task<ErrorCode?> DeleteCategoryAsync(int categoryId);
+    Task<ErrorCode?> MoveSessionAsync(int sessionId, int? categoryId, int index);
+    Task<ErrorCode?> MoveCategoryAsync(int categoryId, int index);
 }

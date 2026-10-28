@@ -18,10 +18,7 @@ public class UserSessionsHandler(IMessageSender messageSender, IConnectionManage
             return HandleMessageResult.ForbiddenRequest;
 
         var list = await sessions.GetAsync(request.SenderId, connection.UserSessionId);
-        messageSender.SendMessageById(connectionId, request.ToResponse(UserSecurityResult.NoError, list));
+        messageSender.SendMessageById(connectionId, request.ToResponse(list));
         return HandleMessageResult.NoError;
     }
-
-    public BaseMessage? CreateFailureResponse(UserSessionsRequest request) =>
-        request.ToResponse(UserSecurityResult.InternalError);
 }

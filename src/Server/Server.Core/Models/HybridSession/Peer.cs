@@ -60,10 +60,10 @@ public sealed class Peer
     /// The same user joins again, e.g. after a reconnect or from another device, which takes the peer over.
     /// A rejected peer stays rejected.
     /// </summary>
-    public HybridSessionJoinResult Rejoin(string? connectionId = null)
+    public ErrorCode? Rejoin(string? connectionId = null)
     {
         if (IsRejected)
-            return HybridSessionJoinResult.Rejected;
+            return ErrorCode.NotAdmitted;
 
         ConnectionId = connectionId;
         IsTransportConnected = false;
@@ -75,48 +75,48 @@ public sealed class Peer
         AfkReason = null;
         WatchedScreenShares = ImmutableHashSet<int>.Empty;
         State = IsAdmitted ? HybridSessionPeerState.Connecting : HybridSessionPeerState.WaitingForApprove;
-        return HybridSessionJoinResult.NoError;
+        return null;
     }
 
     /// <summary>
     /// The SFU transport is up. A peer still waiting for approval keeps waiting and becomes
     /// <see cref="HybridSessionPeerState.Connected"/> only once approved.
     /// </summary>
-    public HybridSessionConnectTransportResult MarkTransportConnected()
+    public ErrorCode? MarkTransportConnected()
     {
         if (IsRejected)
-            return HybridSessionConnectTransportResult.Rejected;
+            return ErrorCode.NotAdmitted;
 
         IsTransportConnected = true;
         if (IsAdmitted)
             State = HybridSessionPeerState.Connected;
-        return HybridSessionConnectTransportResult.NoError;
+        return null;
     }
 
-    public ApproveUserSessionResult Approve()
+    public ErrorCode? Approve()
     {
         if (IsHost)
-            return ApproveUserSessionResult.InternalError;
+            return ErrorCode.Internal;
         if (IsRejected)
-            return ApproveUserSessionResult.AlreadyRejected;
+            return ErrorCode.AlreadyRejected;
         if (Admission != PeerAdmission.Pending)
-            return ApproveUserSessionResult.NoError;
+            return null;
 
         Admission = PeerAdmission.Approved;
         State = IsTransportConnected ? HybridSessionPeerState.Connected : HybridSessionPeerState.Connecting;
-        return ApproveUserSessionResult.NoError;
+        return null;
     }
 
-    public RejectUserSessionResult Reject()
+    public ErrorCode? Reject()
     {
         if (IsHost)
-            return RejectUserSessionResult.InternalError;
+            return ErrorCode.Internal;
         if (IsApproved)
-            return RejectUserSessionResult.AlreadyApproved;
+            return ErrorCode.AlreadyApproved;
 
         Admission = PeerAdmission.Rejected;
         Close();
-        return RejectUserSessionResult.NoError;
+        return null;
     }
 
     /// <summary>The SFU node was lost or replaced; the peer has to rejoin.</summary>

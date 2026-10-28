@@ -22,14 +22,9 @@ public class LeaveSessionHandler : HybridSessionRequestHandler<LeaveSessionReque
     protected override bool DrivesOwnPeer => true;
 
     protected override async Task<BaseMessage> HandleAsync(LeaveSessionRequest request, IHybridSession session) =>
-        request.ToResponse(await session.PeerManager.RemovePeerAsync(request.SenderId));
+        request.Answer(await session.PeerManager.RemovePeerAsync(request.SenderId), request.ToResponse);
 
     // Only hybrid sessions support this request, so an id of another session type is never found
-    protected override BaseMessage SessionNotFound(LeaveSessionRequest request) =>
-        request.ToResponse(request.SessionType == SessionType.Hybrid
-            ? LeaveSessionResult.SessionNotExists
-            : LeaveSessionResult.UnknownSessionType);
-
-    public override BaseMessage CreateFailureResponse(LeaveSessionRequest request) =>
-        request.ToResponse(LeaveSessionResult.InternalError);
+    protected override ErrorCode SessionNotFound(LeaveSessionRequest request) =>
+        request.SessionType == SessionType.Hybrid ? ErrorCode.SessionNotFound : ErrorCode.WrongSessionType;
 }

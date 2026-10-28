@@ -87,9 +87,9 @@ public class CoordinatorSettingsApplierTests
 
         _applier.Apply(changed);
 
-        var dto = Assert.IsType<CoordinatorReconfiguredNotification>(Assert.Single(sent)).CoordinatorSessionDTO;
+        var dto = Assert.IsType<CoordinatorReconfiguredNotification>(Assert.Single(sent)).Coordinator;
         Assert.Equal("New", dto.Name);
-        Assert.Equal("Hello", dto.MotdText);
+        Assert.Equal("Hello", dto.MOTDText);
         Assert.True(dto.IsPasswordProtected);
         Assert.Equal(3, dto.ConnectedUsersCount);
     }

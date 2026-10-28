@@ -41,7 +41,7 @@ public class ChatSessionManagerTests
     private async Task<int> CreateChat(string name)
     {
         var (result, chat) = await _manager.CreateAsync(Chat(name), AuthorId);
-        Assert.Equal(CreateSessionResult.NoError, result);
+        Assert.Equal(null, result);
         return chat!.Id;
     }
 
@@ -69,8 +69,8 @@ public class ChatSessionManagerTests
             _manager.CreateAsync(Chat("general"), AuthorId),
             _manager.CreateAsync(Chat("general"), AuthorId));
 
-        Assert.Single(results, r => r.result == CreateSessionResult.NoError);
-        Assert.Single(results, r => r.result == CreateSessionResult.NameAlreadyUsed);
+        Assert.Single(results, r => r.result == null);
+        Assert.Single(results, r => r.result == ErrorCode.NameTaken);
         Assert.Single(_manager.GetAllSessions());
     }
 
@@ -79,7 +79,7 @@ public class ChatSessionManagerTests
     {
         var chatId = await CreateChat("general");
 
-        Assert.Equal(DeleteSessionResult.NoError, await _manager.DeleteAsync(chatId, AuthorId));
+        Assert.Equal(null, await _manager.DeleteAsync(chatId, AuthorId));
 
         Assert.False(_manager.TryGetSession(chatId, out _));
         _chats.Verify(r => r.RemoveAsync(chatId, It.IsAny<CancellationToken>()), Times.Once);
@@ -88,7 +88,7 @@ public class ChatSessionManagerTests
     [Fact]
     public async Task Delete_UnknownChat_ReturnsSessionNotExists()
     {
-        Assert.Equal(DeleteSessionResult.SessionNotExists, await _manager.DeleteAsync(42, AuthorId));
+        Assert.Equal(ErrorCode.SessionNotFound, await _manager.DeleteAsync(42, AuthorId));
     }
 
     [Fact]
@@ -100,7 +100,7 @@ public class ChatSessionManagerTests
 
         var (result, message) = await _manager.FetchMessageAsync(chatId, 5);
 
-        Assert.Equal(FetchMessageResult.MessageNotExists, result);
+        Assert.Equal(ErrorCode.MessageNotFound, result);
         Assert.Null(message);
     }
 
@@ -111,7 +111,7 @@ public class ChatSessionManagerTests
 
         var (result, message) = await _manager.FetchMessageAsync(42, 5);
 
-        Assert.Equal(FetchMessageResult.MessageNotExists, result);
+        Assert.Equal(ErrorCode.MessageNotFound, result);
         Assert.Null(message);
     }
 
@@ -120,7 +120,7 @@ public class ChatSessionManagerTests
     {
         var (result, messages) = await _manager.FetchMessagesAsync(42, 10, null);
 
-        Assert.Equal(FetchMessagesResult.ChatNotExists, result);
+        Assert.Equal(ErrorCode.ChatNotFound, result);
         Assert.Null(messages);
         _messages.Verify(r => r.GetByTakeSkipAsync(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<int>(),
             It.IsAny<CancellationToken>()), Times.Never);
@@ -134,7 +134,7 @@ public class ChatSessionManagerTests
 
         var (result, message) = await _manager.FetchMessageAsync(chatId, 5);
 
-        Assert.Equal(FetchMessageResult.NoError, result);
+        Assert.Equal(null, result);
         Assert.Equal(5, message!.Id);
     }
 
@@ -147,7 +147,7 @@ public class ChatSessionManagerTests
 
         var result = await _manager.DeleteMessageAsync(chatId, 5, AuthorId);
 
-        Assert.Equal(DeleteMessageResult.MessageNotExists, result);
+        Assert.Equal(ErrorCode.MessageNotFound, result);
         _messages.Verify(r => r.DeleteAsync(It.IsAny<int>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
@@ -160,7 +160,7 @@ public class ChatSessionManagerTests
 
         var result = await _manager.EditMessageAsync(chatId, 5, "changed", AuthorId);
 
-        Assert.Equal(EditMessageResult.MessageNotExists, result);
+        Assert.Equal(ErrorCode.MessageNotFound, result);
         _messages.Verify(r => r.UpdateAsync(It.IsAny<ChatMessageModel>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
@@ -171,7 +171,7 @@ public class ChatSessionManagerTests
         StoreMessage(messageId: 5, chatId: chatId);
         _messages.Setup(r => r.DeleteAsync(5, It.IsAny<CancellationToken>())).ReturnsAsync(7);
 
-        Assert.Equal(DeleteMessageResult.NoError, await _manager.DeleteMessageAsync(chatId, 5, AuthorId));
+        Assert.Equal(null, await _manager.DeleteMessageAsync(chatId, 5, AuthorId));
 
         var deleted = Assert.Single(_events.Of<ChatSessionMessageDeletedEvent>());
         Assert.Equal((5, 7L), (deleted.MessageId, deleted.Revision));
@@ -184,7 +184,7 @@ public class ChatSessionManagerTests
         StoreMessage(messageId: 5, chatId: chatId);
         _messages.Setup(r => r.DeleteAsync(5, It.IsAny<CancellationToken>())).ReturnsAsync((long?)null);
 
-        Assert.Equal(DeleteMessageResult.MessageNotExists, await _manager.DeleteMessageAsync(chatId, 5, AuthorId));
+        Assert.Equal(ErrorCode.MessageNotFound, await _manager.DeleteMessageAsync(chatId, 5, AuthorId));
         Assert.Empty(_events.Of<ChatSessionMessageDeletedEvent>());
     }
 
@@ -195,7 +195,7 @@ public class ChatSessionManagerTests
         StoreMessage(messageId: 5, chatId: chatId);
         _messages.Setup(r => r.UpdateAsync(It.IsAny<ChatMessageModel>(), It.IsAny<CancellationToken>())).ReturnsAsync(9);
 
-        Assert.Equal(EditMessageResult.NoError, await _manager.EditMessageAsync(chatId, 5, "changed", AuthorId));
+        Assert.Equal(null, await _manager.EditMessageAsync(chatId, 5, "changed", AuthorId));
 
         Assert.Equal(9, Assert.Single(_events.Of<ChatSessionMessageEditedEvent>()).Message.Revision);
     }
@@ -209,7 +209,7 @@ public class ChatSessionManagerTests
 
         var (result, page) = await _manager.FetchMessagesBeforeAsync(chatId, 40, 30);
 
-        Assert.Equal(FetchMessagesResult.NoError, result);
+        Assert.Equal(null, result);
         Assert.Equal(12, page!.Revision);
     }
 
@@ -218,7 +218,7 @@ public class ChatSessionManagerTests
     {
         var (result, page) = await _manager.FetchMessagesBeforeAsync(42, null, 30);
 
-        Assert.Equal(FetchMessagesResult.ChatNotExists, result);
+        Assert.Equal(ErrorCode.ChatNotFound, result);
         Assert.Null(page);
     }
 
@@ -234,7 +234,7 @@ public class ChatSessionManagerTests
 
         var (result, changes) = await _manager.FetchChangesAsync(chatId, 3, 1);
 
-        Assert.Equal(FetchMessagesResult.NoError, result);
+        Assert.Equal(null, result);
         Assert.Single(changes!.Messages);
         Assert.True(changes.HasMore);
         Assert.False(changes.Reset);
