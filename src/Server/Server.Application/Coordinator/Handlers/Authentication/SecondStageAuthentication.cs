@@ -22,7 +22,7 @@ public sealed class SecondStageAuthentication(
 {
     public async Task<HandleMessageResult> HandleAsync(string connectionId,
         Func<PendingLogin, Task<bool>> proves,
-        Func<AuthResult, UserModel?, BaseMessage> respond)
+        Func<AuthResult, UserModel?, string?, BaseMessage> respond)
     {
         if (!connectionManager.TryGetConnectionById(connectionId, out var connection))
             return HandleMessageResult.GatewayNotFound;
@@ -30,14 +30,14 @@ public sealed class SecondStageAuthentication(
         // A connection that is logged in already has nothing to finish; it is not closed for asking
         if (connection.UserId != null)
         {
-            messageSender.SendMessageById(connectionId, respond(AuthResult.AuthFailed, null));
+            messageSender.SendMessageById(connectionId, respond(AuthResult.AuthFailed, null, null));
             return HandleMessageResult.ForbiddenRequest;
         }
 
         var login = pendingLogins.Get(connectionId);
         if (login == null)
         {
-            Reject(connection, respond(AuthResult.AuthFailed, null));
+            Reject(connection, respond(AuthResult.AuthFailed, null, null));
             return HandleMessageResult.ForbiddenRequest;
         }
 
@@ -50,7 +50,7 @@ public sealed class SecondStageAuthentication(
         {
             logger.LogError(ex, "Checking the second login stage of user {UserId} failed.", login.Challenge.UserId);
             pendingLogins.Complete(connectionId);
-            Reject(connection, respond(AuthResult.AuthFailed, null));
+            Reject(connection, respond(AuthResult.AuthFailed, null, null));
             return HandleMessageResult.InternalError;
         }
 
@@ -59,21 +59,21 @@ public sealed class SecondStageAuthentication(
             logger.LogInformation("Wrong second login stage for user {UserId} from {Ip}.", login.Challenge.UserId,
                 connection.IpEndpoint);
             if (pendingLogins.RegisterFailure(connectionId))
-                Reject(connection, respond(AuthResult.AuthFailed, null));
+                Reject(connection, respond(AuthResult.AuthFailed, null, null));
             else
-                messageSender.SendMessageById(connectionId, respond(AuthResult.AuthFailed, null));
+                messageSender.SendMessageById(connectionId, respond(AuthResult.AuthFailed, null, null));
             return HandleMessageResult.ForbiddenRequest;
         }
 
         pendingLogins.Complete(connectionId);
-        var outcome = await userLogin.AttachAsync(login.UserIdentity, connection);
+        var outcome = await userLogin.AttachAsync(login.UserIdentity, login.Device, connection);
         if (outcome.Result != AuthResult.Success)
         {
-            Reject(connection, respond(outcome.Result, null));
+            Reject(connection, respond(outcome.Result, null, null));
             return HandleMessageResult.ForbiddenRequest;
         }
 
-        messageSender.SendMessageById(connectionId, respond(AuthResult.Success, outcome.User));
+        messageSender.SendMessageById(connectionId, respond(AuthResult.Success, outcome.User, outcome.SessionToken));
         return HandleMessageResult.NoError;
     }
 

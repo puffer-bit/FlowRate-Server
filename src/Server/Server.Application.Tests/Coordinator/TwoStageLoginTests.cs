@@ -6,6 +6,7 @@ using Server.Application.Coordinator.Connections;
 using Server.Application.Coordinator.Handlers.Authentication;
 using Server.Application.Coordinator.Messaging;
 using Server.Application.Coordinator.Users;
+using Server.Application.Tests.Fakes;
 using Server.Core.Models.User;
 using Shared.Enums.Auth;
 using Shared.Enums.User;
@@ -28,6 +29,8 @@ public class TwoStageLoginTests
     private readonly Mock<IClientConnection> _connection = new();
     private readonly Mock<IMessageSender> _sender = new();
     private readonly List<BaseMessage> _sent = [];
+    private readonly InMemoryUserSessionRepository _sessions = new();
+    private readonly Microsoft.Extensions.Time.Testing.FakeTimeProvider _time = new(DateTimeOffset.UtcNow);
     private readonly AuthenticationActionHandler _firstStage;
     private readonly TwoFactorAuthenticationHandler _codes;
     private readonly Fido2AuthenticationHandler _passkeys;
@@ -51,7 +54,14 @@ public class TwoStageLoginTests
             .ReturnsAsync(new UserAttachment(AttachUserResult.Attached, user, Identity));
         _authenticator.Setup(a => a.CheckLoginData(It.IsAny<string?>())).Returns(true);
 
-        var userLogin = new UserLogin(_users.Object);
+        _users.Setup(u => u.AttachUser(It.IsAny<int>(), It.IsAny<IClientConnection>()))
+            .Callback((int id, IClientConnection attached) => attached.UserId = id)
+            .ReturnsAsync(new UserAttachment(AttachUserResult.Attached, user));
+        _connection.SetupProperty(c => c.UserSessionId);
+        _connection.Setup(c => c.IpEndpoint).Returns("10.0.0.1");
+
+        var userLogin = new UserLogin(_users.Object,
+            new UserSessions(_sessions, _connections.Object, "coordinator", _time));
         var pending = new PendingLogins();
         var secondStage = new SecondStageAuthentication(NullLogger.Instance, _sender.Object, _connections.Object,
             userLogin, pending);
@@ -123,6 +133,106 @@ public class TwoStageLoginTests
         Assert.Equal(UserId, response.UserDTO!.Id);
         Assert.Equal(UserId, _connection.Object.UserId);
         _users.Verify(u => u.AttachUser(Identity, _connection.Object), Times.Once);
+    }
+
+    [Fact]
+    public async Task LoginWithTheIdentity_StartsASession_AndGivesItsToken()
+    {
+        await _firstStage.HandleMessage(new UserAuthRequest(null, Identity,
+            Device: new DeviceInfoDTO("desk", "Linux", "0.8.0")), ConnectionId);
+
+        var response = Assert.IsType<UserAuthResponse>(Assert.Single(_sent));
+        var session = Assert.Single(_sessions.All);
+        Assert.False(string.IsNullOrEmpty(response.SessionToken));
+        Assert.Equal(SecretHash.Of(response.SessionToken!), session.TokenHash);
+        Assert.Equal(("desk", "Linux", "0.8.0"), (session.DeviceName, session.DevicePlatform, session.AppVersion));
+        Assert.Equal(session.Id, _connection.Object.UserSessionId);
+    }
+
+    [Fact]
+    public async Task SecondStage_GivesTheTokenOfANewSession()
+    {
+        RequireSecondStage();
+        _authenticator.Setup(a => a.CheckUserLoginData(UserId, null, "123456")).ReturnsAsync(true);
+        await Login();
+
+        await SendCode("123456");
+
+        var response = Assert.IsType<TwoFactorUserAuthResponse>(_sent[^1]);
+        Assert.Equal(SecretHash.Of(response.SessionToken!), Assert.Single(_sessions.All).TokenHash);
+    }
+
+    [Fact]
+    public async Task Token_LetsTheDeviceIn_WithoutTheSecondStage_AndIsReplaced()
+    {
+        var token = await StartSession();
+        RequireSecondStage(passkey: true);
+
+        await _firstStage.HandleMessage(new UserAuthRequest(null, Identity, SessionToken: token), ConnectionId);
+
+        var response = Assert.IsType<UserAuthResponse>(_sent[^1]);
+        Assert.Equal(AuthResult.Success, response.AuthResult);
+        Assert.NotEqual(token, response.SessionToken);
+        Assert.Null(response.UserIdentity);
+        var session = Assert.Single(_sessions.All);
+        Assert.Equal(SecretHash.Of(response.SessionToken!), session.TokenHash);
+        Assert.Equal(SecretHash.Of(token), session.PreviousTokenHash);
+        _users.Verify(u => u.AttachUser(UserId, _connection.Object), Times.Once);
+    }
+
+    [Fact]
+    public async Task PreviousToken_WorksUntilTheNextOneIsUsed()
+    {
+        var first = await StartSession();
+        await LoginWithToken(first); // the answer with the next token never reached the device
+        var third = await LoginWithToken(first);
+        Assert.Equal(AuthResult.Success, Assert.IsType<UserAuthResponse>(_sent[^1]).AuthResult);
+
+        await LoginWithToken(third);
+        RequireSecondStage();
+        await _firstStage.HandleMessage(new UserAuthRequest(null, Identity, SessionToken: first), ConnectionId);
+
+        Assert.Equal(AuthResult.SecondStageRequeried, Assert.IsType<UserAuthResponse>(_sent[^1]).AuthResult);
+    }
+
+    [Fact]
+    public async Task ExpiredToken_FallsBackToTheIdentity()
+    {
+        var token = await StartSession();
+        _time.Advance(UserSessions.Lifetime + TimeSpan.FromMinutes(1));
+        RequireSecondStage();
+
+        await _firstStage.HandleMessage(new UserAuthRequest(null, Identity, SessionToken: token), ConnectionId);
+
+        Assert.Equal(AuthResult.SecondStageRequeried, Assert.IsType<UserAuthResponse>(_sent[^1]).AuthResult);
+    }
+
+    [Fact]
+    public async Task UsedToken_KeepsTheSessionAlive()
+    {
+        var token = await StartSession();
+        _time.Advance(UserSessions.Lifetime - TimeSpan.FromDays(1));
+        token = await LoginWithToken(token);
+        _time.Advance(TimeSpan.FromDays(2));
+
+        await LoginWithToken(token);
+
+        Assert.Equal(AuthResult.Success, Assert.IsType<UserAuthResponse>(_sent[^1]).AuthResult);
+    }
+
+    /// <summary>Logs in with the identity, as a fresh connection; returns the token of the session.</summary>
+    private async Task<string> StartSession()
+    {
+        await Login();
+        _connection.Object.UserId = null;
+        return Assert.IsType<UserAuthResponse>(_sent[^1]).SessionToken!;
+    }
+
+    private async Task<string> LoginWithToken(string token)
+    {
+        await _firstStage.HandleMessage(new UserAuthRequest(null, Identity, SessionToken: token), ConnectionId);
+        _connection.Object.UserId = null;
+        return Assert.IsType<UserAuthResponse>(_sent[^1]).SessionToken!;
     }
 
     [Fact]
@@ -257,7 +367,7 @@ public class PendingLoginsTests
     [Fact]
     public void Login_ExpiresAfterItsLifetime()
     {
-        _logins.Start("c", "identity", Challenge);
+        _logins.Start("c", "identity", null, Challenge);
         _time.Advance(PendingLogins.Lifetime + TimeSpan.FromSeconds(1));
 
         Assert.Null(_logins.Get("c"));
@@ -266,10 +376,10 @@ public class PendingLoginsTests
     [Fact]
     public void OldLogins_AreSweptWhenANewOneStarts()
     {
-        _logins.Start("old", "identity", Challenge);
+        _logins.Start("old", "identity", null, Challenge);
         _time.Advance(PendingLogins.Lifetime + TimeSpan.FromSeconds(1));
 
-        _logins.Start("new", "identity", Challenge);
+        _logins.Start("new", "identity", null, Challenge);
 
         Assert.Equal(1, _logins.Count);
     }

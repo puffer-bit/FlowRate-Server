@@ -183,6 +183,7 @@ namespace Server.Asp
             services.AddSingleton<IPasskeyService, PasskeyService>();
             services.AddSingleton<IUserSecurityDataRepository, UserSecurityDataRepository>();
             services.AddSingleton<IUserPasskeyRepository, UserPasskeyRepository>();
+            services.AddSingleton<IUserSessionRepository, UserSessionRepository>();
         }
 
         private static void ConfigureMiddleware(WebApplication app)

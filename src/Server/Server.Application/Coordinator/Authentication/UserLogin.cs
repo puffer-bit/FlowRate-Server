@@ -2,31 +2,55 @@ using Server.Application.Coordinator.Connections;
 using Server.Application.Coordinator.Users;
 using Server.Core.Models.User;
 using Shared.Enums.Auth;
+using Shared.Models.DataTransferObjects;
 
 namespace Server.Application.Coordinator.Authentication;
 
 /// <summary>
-/// The last step of every login: the user is attached and the connection is theirs. The other connections of the
-/// user stay: a user can be connected from several devices.
+/// The last step of every login: the user is attached, the connection is theirs and the device gets the token of its
+/// session. The other connections of the user stay: a user can be connected from several devices.
 /// </summary>
-public sealed class UserLogin(IUserManager userManager)
+public sealed class UserLogin(IUserManager userManager, UserSessions sessions)
 {
-    public async Task<LoginOutcome> AttachAsync(string? userIdentity, IClientConnection connection)
+    public UserSessions Sessions => sessions;
+
+    /// <summary>A login with the identity, proven by the second stage when the user has one: a new session.</summary>
+    public async Task<LoginOutcome> AttachAsync(string? userIdentity, DeviceInfoDTO? device,
+        IClientConnection connection)
     {
         var attachment = await userManager.AttachUser(userIdentity, connection);
-        if (attachment is not { Result: AttachUserResult.Attached, User: { } user, UserIdentity: { } identity })
-        {
-            return new LoginOutcome(attachment.Result switch
+        if (Rejected(attachment) is { } rejected)
+            return rejected;
+
+        var token = await sessions.StartAsync(attachment.User!.Id, device, connection);
+        return new LoginOutcome(AuthResult.Success, attachment.User, attachment.UserIdentity, attachment.Result, token);
+    }
+
+    /// <summary>A login with the token of a session: the session goes on with the next token.</summary>
+    public async Task<LoginOutcome> ResumeAsync(UserSession session, string token, DeviceInfoDTO? device,
+        IClientConnection connection)
+    {
+        var attachment = await userManager.AttachUser(session.UserId, connection);
+        if (Rejected(attachment) is { } rejected)
+            return rejected;
+
+        var nextToken = await sessions.ResumeAsync(session, token, device, connection);
+        return new LoginOutcome(AuthResult.Success, attachment.User, null, attachment.Result, nextToken);
+    }
+
+    private static LoginOutcome? Rejected(UserAttachment attachment) =>
+        attachment is { Result: AttachUserResult.Attached, User: not null }
+            ? null
+            : new LoginOutcome(attachment.Result switch
             {
                 AttachUserResult.OnlineLimitReached => AuthResult.OnlineLimitReached,
                 AttachUserResult.UserLimitReached => AuthResult.UserLimitReached,
                 AttachUserResult.Banned => AuthResult.Banned,
                 _ => AuthResult.AuthFailed
-            }, null, null, attachment.Result);
-        }
-
-        return new LoginOutcome(AuthResult.Success, user, identity, attachment.Result);
-    }
+            }, null, null, attachment.Result, null);
 }
 
-public sealed record LoginOutcome(AuthResult Result, UserModel? User, string? UserIdentity, AttachUserResult Attach);
+/// <param name="UserIdentity">The identity the user logged in with, or got; null for a login with a session token.</param>
+/// <param name="SessionToken">The token the device logs in with next time.</param>
+public sealed record LoginOutcome(AuthResult Result, UserModel? User, string? UserIdentity, AttachUserResult Attach,
+    string? SessionToken);

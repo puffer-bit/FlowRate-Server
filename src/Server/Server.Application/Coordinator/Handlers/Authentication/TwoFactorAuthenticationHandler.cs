@@ -19,6 +19,6 @@ public class TwoFactorAuthenticationHandler(IAuthenticator authenticator, Second
             login => login.Challenge.AcceptsCodes
                 ? authenticator.CheckUserLoginData(login.Challenge.UserId, request.Password, request.TwoFactorCode)
                 : Task.FromResult(false),
-            (result, user) => request.ToResponse(result, user?.ToDto(user.Id)));
+            (result, user, token) => request.ToResponse(result, user?.ToDto(user.Id), sessionToken: token));
     }
 }
