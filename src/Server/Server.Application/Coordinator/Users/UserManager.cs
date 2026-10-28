@@ -51,6 +51,9 @@ public class UserManager : IUserManager
         _nameProvider = new NameProvider();
     }
 
+    /// <summary>A new identity: what a user logs in with until it is reset.</summary>
+    public static string NewIdentity() => "#" + Guid.NewGuid();
+
     public async Task<UserAttachment> AttachUser(string? userIdentity, IClientConnection clientConnection)
     {
         // Checked before anything is created, so a full server does not register users it then turns away
@@ -61,37 +64,39 @@ public class UserManager : IUserManager
         // If client provided null identity -> create new user with generated identity
         if (userIdentity == null)
         {
-            userIdentity = "#" + Guid.NewGuid().ToString();
+            userIdentity = NewIdentity();
             user = await CreateUserAsync(userIdentity, clientConnection);
         }
         else if (userIdentity == "system")
         {
             user = UserModel.CreateSystem(_coordinatorInstanceId, clientConnection.IpEndpoint, DateTime.UtcNow);
         }
+        else if (await _userRepository.GetByIdentityAsync(_coordinatorInstanceId, userIdentity) is { } foundUser)
+        {
+            user = foundUser;
+            user.MarkConnected(clientConnection.IpEndpoint, DateTime.UtcNow);
+        }
         else
         {
-            // If client provided something that might be an existing user id (GUID-like), try to resolve by id first
-            if (IsProbableId(userIdentity) && await _userRepository.GetByIdentityAsync(_coordinatorInstanceId, userIdentity) is { } userById)
-            {
-                user = userById;
-                user.MarkConnected(clientConnection.IpEndpoint, DateTime.UtcNow);
-                // we have an id, but need the stored identity value from DB
-                var storedIdentity = await _userRepository.GetIdentityByIdAsync(user.Id);
-                if (!string.IsNullOrEmpty(storedIdentity))
-                    userIdentity = storedIdentity;
-            }
-            else if (await _userRepository.GetByIdentityAsync(_coordinatorInstanceId, userIdentity) is { } foundedUser)
-            {
-                user = foundedUser;
-                user.MarkConnected(clientConnection.IpEndpoint, DateTime.UtcNow);
-            }
-            else
-            {
-                _logger.LogInformation("Unknown user identity received, login rejected");
-                return UserAttachment.Rejected(AttachUserResult.UnknownIdentity);
-            }
+            _logger.LogInformation("Unknown user identity received, login rejected");
+            return UserAttachment.Rejected(AttachUserResult.UnknownIdentity);
         }
 
+        return Attach(user, userIdentity, clientConnection);
+    }
+
+    public async Task<UserAttachment> AttachUser(int userId, IClientConnection clientConnection)
+    {
+        var user = await _userRepository.GetByIdAsync(userId);
+        if (user == null || user.CoordinatorInstanceId != _coordinatorInstanceId || user.IsSystem)
+            return UserAttachment.Rejected(AttachUserResult.UnknownIdentity);
+
+        user.MarkConnected(clientConnection.IpEndpoint, DateTime.UtcNow);
+        return Attach(user, null, clientConnection);
+    }
+
+    private UserAttachment Attach(UserModel? user, string? userIdentity, IClientConnection clientConnection)
+    {
         if (user == null)
             return UserAttachment.Rejected(AttachUserResult.UserLimitReached);
         if (user.IsBanned)
@@ -416,11 +421,5 @@ public class UserManager : IUserManager
 
         var online = _context.AttachedUsers.Values.Count(user => !user.IsSystem && user.Id != exceptUserId);
         return online >= maxOnlineUsers;
-    }
-
-    private static bool IsProbableId(string value)
-    {
-        // crude check: GUIDs in this project are 36 chars with hyphens, db ids may be 36
-        return !string.IsNullOrEmpty(value) && value.Length == 36 && value.Contains('-');
     }
 }

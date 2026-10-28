@@ -17,6 +17,6 @@ public interface IUserRepository
     Task UpdateAsync(UserModel model, CancellationToken cancellationToken = default);
     Task RemoveAsync(int userId, CancellationToken cancellationToken = default);
     
-    // New: return stored UserIdentity for given user id (or null if not found)
-    Task<string?> GetIdentityByIdAsync(int userId, CancellationToken cancellationToken = default);
+    /// <summary>Gives the user a new identity; the old one no longer finds the user.</summary>
+    Task SetIdentityAsync(int userId, string userIdentity, CancellationToken cancellationToken = default);
 }
