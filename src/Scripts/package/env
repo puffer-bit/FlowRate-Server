@@ -1,5 +1,10 @@
 # Public IP clients reach the SFU at; install.sh detects it and asks on the first run
 PUBLIC_IP=
+# The address the SFU binds; empty for all of them. Set it to PUBLIC_IP when that address is on this
+# machine and clients may reach it over another interface (the server is the router, LAN clients come
+# to the public IP): bound to all addresses, the answers to UDP go out from the LAN address, the
+# clients drop them and the media falls back to TCP. Ignored with docker-compose.bridge.yml
+RTC_LISTEN_IP=
 # Where the control panel (port 7114) listens. It has no authentication, so it stays on localhost:
 # reach it through ssh -L 7114:127.0.0.1:7114, or set the LAN address of this machine
 PANEL_LISTEN_IP=127.0.0.1
