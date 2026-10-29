@@ -11,7 +11,8 @@ services:
     environment:
       # Only the server on this machine talks to the SFU
       GRPC_BIND: 127.0.0.1:50051
-      RTC_LISTEN_IP: 0.0.0.0
+      # The address the SFU binds; see RTC_LISTEN_IP in .env
+      RTC_LISTEN_IP: ${RTC_LISTEN_IP:-0.0.0.0}
       # Public IP clients reach the SFU at; set it in .env on the server
       RTC_ANNOUNCED_IPS: ${PUBLIC_IP:?set PUBLIC_IP in .env to the server's public IP}
       RTC_PORT: 4433
