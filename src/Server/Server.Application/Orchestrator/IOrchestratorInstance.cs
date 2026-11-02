@@ -55,7 +55,7 @@ namespace Server.Application.Orchestrator {
         // CoordinatorInstances actions
         ICoordinatorInstance? GetCoordinator(string coordinatorId);
         IReadOnlyList<CoordinatorSnapshot> GetCoordinatorSnapshots();
-        Task<CoordinatorInstanceModel> CreateCoordinatorInstanceAsync(string name, string ip, int port);
+        Task<CoordinatorCreationResult> CreateCoordinatorInstanceAsync(CreateCoordinator request, CancellationToken ct = default);
         Task AttachCoordinatorInstance(CoordinatorInstanceModel coordinatorInstanceEntity);
         Task DetachCoordinatorInstanceAsync(string coordinatorInstanceId);
         Task DisableCoordinatorInstanceAsync(string coordinatorInstanceId);

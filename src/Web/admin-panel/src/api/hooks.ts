@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { hashKey, useMutation, useQuery, useQueryClient, type QueryKey } from '@tanstack/react-query'
 import {
   assignRole,
+  createCoordinator,
   confirmTwoFactor,
   createRole,
   deletePasskey,
@@ -37,6 +38,14 @@ const refetchDebounceMs = 300
 
 // Every change is signalled, see useLiveUpdates; only the SFU round trips are polled
 export const useOverview = () => useQuery({ queryKey: queryKeys.overview, queryFn: getOverview })
+
+export function useCreateCoordinator() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: createCoordinator,
+    onSuccess: () => { void queryClient.invalidateQueries({ queryKey: queryKeys.overview }) },
+  })
+}
 
 export const useCoordinator = (id: string) =>
   useQuery({ queryKey: queryKeys.coordinator(id), queryFn: () => getCoordinator(id) })
