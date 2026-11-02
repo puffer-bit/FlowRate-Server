@@ -2,6 +2,9 @@ import type { components } from './schema'
 
 type Schemas = components['schemas']
 
+export type CreateCoordinator = Schemas['CreateCoordinatorDto']
+export type CoordinatorCreated = Schemas['CoordinatorCreatedDto']
+
 export type PanelOverview = Schemas['PanelOverviewDto']
 export type CoordinatorSummary = Schemas['CoordinatorSummaryDto']
 export type CoordinatorDetails = Schemas['CoordinatorDetailsDto']
@@ -14,7 +17,7 @@ export type UpdateCoordinatorSettings = Schemas['UpdateCoordinatorSettingsDto']
 export type RateLimitSettings = Schemas['RateLimitSettingsDto']
 export type SfuNode = Schemas['SfuNodeDto']
 export type SfuNodeStatus = Schemas['SfuNodeStatusDto']
-export type SfuNodeConnectionState = Schemas['SfuNodeConnectionState']
+export type SfuNodeConnectionState = Schemas['SFUNodeConnectionState']
 export type Role = Schemas['RoleDto']
 export type RoleChange = Schemas['RoleChangeDto']
 export type UpdateRole = Schemas['UpdateRoleDto']
@@ -73,6 +76,8 @@ const send = <T>(method: 'POST' | 'PUT' | 'DELETE', path: string, body?: unknown
   request<T>(path, { method, body: body === undefined ? undefined : JSON.stringify(body) })
 
 const coordinatorPath = (id: string) => `/coordinators/${encodeURIComponent(id)}`
+
+export const createCoordinator = (settings: CreateCoordinator) => send<CoordinatorCreated>('POST', '/coordinators', settings)
 
 export const getOverview = () => get<PanelOverview>('/overview')
 

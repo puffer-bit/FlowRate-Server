@@ -27,6 +27,7 @@ public class PanelControllerTests
         context.Setup(c => c.CurrentLaunchTime).Returns(LaunchedAt);
         _orchestrator.Setup(o => o.Context).Returns(context.Object);
 
+        _orchestrator.Setup(o => o.GetCoordinatorSnapshots()).Returns([]);
         _controller = new PanelController(_orchestrator.Object);
     }
 

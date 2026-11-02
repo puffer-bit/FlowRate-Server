@@ -61,6 +61,9 @@ internal sealed class FakeSfuGateway : ISFUGateway
         return Connected?.Invoke() ?? Task.CompletedTask;
     }
 
+    public Func<Task>? CaptureConnectionLostHandlers() => ConnectionLost;
+    public Func<Task>? CaptureConnectedHandlers() => Connected;
+
     public Task Connect() => Task.CompletedTask;
     public Task Disconnect() => Task.CompletedTask;
 

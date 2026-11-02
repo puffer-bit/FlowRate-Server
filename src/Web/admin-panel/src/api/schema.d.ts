@@ -187,6 +187,74 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/panel/coordinators": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["CreateCoordinatorDto"];
+                    "text/json": components["schemas"]["CreateCoordinatorDto"];
+                    "application/*+json": components["schemas"]["CreateCoordinatorDto"];
+                };
+            };
+            responses: {
+                /** @description Created */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["CoordinatorCreatedDto"];
+                    };
+                };
+                /** @description Bad Request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ValidationProblemDetails"];
+                    };
+                };
+                /** @description Conflict */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Service Unavailable */
+                503: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/panel/coordinators/{id}": {
         parameters: {
             query?: never;
@@ -937,6 +1005,10 @@ export interface components {
             /** Format: date-time */
             connectedAtUtc: string;
         };
+        CoordinatorCreatedDto: {
+            id: string;
+            state: components["schemas"]["CoordinatorState"];
+        };
         CoordinatorDetailsDto: {
             summary: components["schemas"]["CoordinatorSummaryDto"];
             sessions: components["schemas"]["HybridSessionDto"][];
@@ -992,6 +1064,17 @@ export interface components {
             lastConnectionAtUtc: string;
             roleIds: number[];
         };
+        CreateCoordinatorDto: {
+            name: string;
+            ip: string;
+            /** Format: int32 */
+            port?: number;
+            /** Format: int32 */
+            maxOnlineUsers?: number;
+            /** Format: int32 */
+            maxUsers?: number;
+            sfuNodeIds: number[];
+        };
         HeartbeatSettingsDto: {
             /** Format: int32 */
             intervalSeconds?: number;
@@ -1012,7 +1095,7 @@ export interface components {
             peers: components["schemas"]["PeerDto"][];
         };
         /** @enum {unknown} */
-        HybridSessionNodeState: "Active" | "WaitingForSfuNode";
+        HybridSessionNodeState: "Active" | "WaitingForSFUNode";
         /** @enum {unknown} */
         HybridSessionPeerState: "New" | "WaitingForApprove" | "Connecting" | "WaitingForServer" | "Connected" | "Closed";
         JsonElement: unknown;
@@ -1126,7 +1209,7 @@ export interface components {
             password?: null | string;
         };
         /** @enum {unknown} */
-        SfuNodeConnectionState: "Connecting" | "Connected" | "Unresponsive" | "Disconnected";
+        SFUNodeConnectionState: "Connecting" | "Connected" | "Unresponsive" | "Disconnected";
         SfuNodeDto: {
             /** Format: int32 */
             id: number;
@@ -1139,7 +1222,7 @@ export interface components {
             status: null | components["schemas"]["SfuNodeStatusDto"];
         };
         SfuNodeStatusDto: {
-            state: components["schemas"]["SfuNodeConnectionState"];
+            state: components["schemas"]["SFUNodeConnectionState"];
             /** Format: double */
             pingMs: null | number;
             /** Format: date-time */

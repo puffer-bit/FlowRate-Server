@@ -1,3 +1,4 @@
+using System.ComponentModel.DataAnnotations;
 using Server.Core.Enums;
 using Shared.Enums;
 using Shared.Enums.User;
@@ -53,3 +54,17 @@ public sealed record ConnectedUserDto(
     string? DisplayName,
     UserStatus Status,
     DateTime ConnectedAtUtc);
+
+/// <summary>Creates and starts a coordinator using standard heartbeat, media and rate limit settings.</summary>
+public sealed class CreateCoordinatorDto
+{
+    [Required] public string Name { get; init; } = string.Empty;
+    [Required] public string Ip { get; init; } = "0.0.0.0";
+    public int Port { get; init; }
+    public int MaxOnlineUsers { get; init; } = 64;
+    public int MaxUsers { get; init; } = 256;
+    [Required] public IReadOnlyList<int> SfuNodeIds { get; init; } = [];
+}
+
+/// <summary>The configuration was saved. Failed means its listener could not start; edit its settings to retry.</summary>
+public sealed record CoordinatorCreatedDto(string Id, CoordinatorState State);
