@@ -117,7 +117,7 @@ function RolesTable({ coordinatorId, roles }: { coordinatorId: string, roles: Ro
       {error && <Alert color="red" title="The change was not made">{error.message}</Alert>}
 
       <Table.ScrollContainer minWidth={560}>
-        <Table striped>
+        <Table>
           <Table.Thead>
             <Table.Tr>
               <Table.Th>Role</Table.Th>
@@ -286,7 +286,7 @@ function UsersTable({ coordinatorId, roles, users }: {
     <Stack>
       {setUserRole.error && <Alert color="red" title="The role was not changed">{setUserRole.error.message}</Alert>}
       <Table.ScrollContainer minWidth={640}>
-        <Table striped>
+        <Table>
           <Table.Thead>
             <Table.Tr>
               <Table.Th>ID</Table.Th>

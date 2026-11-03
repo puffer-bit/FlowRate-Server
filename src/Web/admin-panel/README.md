@@ -36,7 +36,7 @@ npm run build      # writes to ../../Server/Server.Asp/Web/wwwroot/panel (git-ig
 - `src/api/hooks.ts` — queries, and `useLiveUpdates`, which refetches what the server says changed
   (`staleQueries` maps each signal to the queries it makes stale).
 - `src/api/webauthn.ts` — the browser side of adding a passkey.
-- `src/pages/` — overview, coordinator, coordinator settings and roles pages. Roles are described in
+- `src/pages/` — separate statistics, coordinator list, SFU node list, coordinator details, settings and roles pages. Roles are described in
   `docs/roles.md` at the repository root.
 - `src/components/UserSecurityModal.tsx` — password, one-time codes and passkeys of a user, opened from the users
   of the roles page; see `docs/authentication.md`. Passkeys need the panel opened by the `Fido2:RelyingPartyId`
@@ -54,3 +54,19 @@ Everything the panel talks to lives in `Server.Asp/Web`:
 
 Every change the panel shows is signalled: sessions and users of a coordinator, coordinators starting, failing
 and stopping, settings, roles and SFU node connections. Only SFU round trips are polled.
+
+## Creating coordinators
+
+Open **Coordinators → Create coordinator**. Choose a name, local listen IP, free port, user limits and the SFU
+nodes available to the coordinator. Coordinators run in the server process and can share SFU nodes. Each needs
+its own non-overlapping listen endpoint; expose its TCP port when clients connect from another machine.
+
+The server validates the endpoint and SFU IDs before saving and serializes creation requests to enforce the
+stored `MaxCoordinators` limit (4 by default). New coordinators use a 5-second heartbeat interval, a 40-second
+timeout and the standard media, upload and rate limit settings. Without assigned SFU nodes, voice and video
+sessions cannot start. The configuration survives server restarts.
+
+`POST /api/panel/coordinators` returns `201` with the saved ID and actual state. Validation errors return `400`
+with field errors, the coordinator limit returns `409`, and server startup/shutdown returns `503`. If a listener
+fails after the preflight check, the saved coordinator remains visible as **Failed**. Open its settings, correct
+the configuration and save to retry; other coordinators continue running.

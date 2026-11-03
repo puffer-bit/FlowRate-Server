@@ -31,6 +31,8 @@ public partial class HybridSessionPeerManager : IHybridSessionPeerManager
     private readonly ConcurrentDictionary<int, Peer> _peers = new();
 
     private ISFUGateway? _gateway;
+    private Func<Task>? _connectionLostHandler;
+    private Func<Task>? _connectedHandler;
     private bool _isSessionLoaded;
 
     public HybridSessionPeerManager(
@@ -50,14 +52,14 @@ public partial class HybridSessionPeerManager : IHybridSessionPeerManager
     {
         if (ReferenceEquals(_gateway, gateway))
         {
-            await SetStateAsync(gateway == null ? HybridSessionNodeState.WaitingForSFUNode : HybridSessionNodeState.Active);
+            await SetStateAsync(gateway is { IsConnected: true } ? HybridSessionNodeState.Active : HybridSessionNodeState.WaitingForSFUNode);
             return;
         }
 
         if (_gateway != null)
         {
-            _gateway.ConnectionLost -= HandleGatewayConnectionLost;
-            _gateway.Connected -= HandleGatewayConnected;
+            _gateway.ConnectionLost -= _connectionLostHandler;
+            _gateway.Connected -= _connectedHandler;
 
             // The old node may still be running: free what the session holds there
             if (_isSessionLoaded && _gateway.IsConnected)
@@ -65,7 +67,7 @@ public partial class HybridSessionPeerManager : IHybridSessionPeerManager
         }
 
         _gateway = gateway;
-        if (_gateway == null)
+        if (gateway == null)
         {
             // Peers stay in the session and rejoin by themselves once a node is assigned again
             ResetSfuState();
@@ -73,19 +75,19 @@ public partial class HybridSessionPeerManager : IHybridSessionPeerManager
             return;
         }
 
-        _gateway.ConnectionLost += HandleGatewayConnectionLost;
-        _gateway.Connected += HandleGatewayConnected;
+        // Capture the source: callbacks already queued by a previous node must not reset its replacement.
+        _connectionLostHandler = () => HandleGatewayConnectionLost(gateway);
+        _connectedHandler = () => HandleGatewayConnected(gateway);
+        _gateway.ConnectionLost += _connectionLostHandler;
+        _gateway.Connected += _connectedHandler;
 
-        await SetStateAsync(HybridSessionNodeState.Active);
+        await SetStateAsync(gateway.IsConnected ? HybridSessionNodeState.Active : HybridSessionNodeState.WaitingForSFUNode);
         await DropSfuStateAsync(new HybridSessionSFUNodeChangedEvent(Model.Id));
     });
 
     public Task<(ErrorCode? result, TransportData? transportData)> AddPeerAsync(int userId,
         string clientEpoch, string? connectionId = null) => LockedAsync<(ErrorCode? result, TransportData? transportData)>(async () =>
     {
-        if (!EnsureReady("join", userId))
-            return (ErrorCode.SFUUnavailable, null);
-
         var isNew = !_peers.TryGetValue(userId, out var peer);
         if (isNew)
         {
@@ -100,7 +102,8 @@ public partial class HybridSessionPeerManager : IHybridSessionPeerManager
             }
 
             var replaced = peer.ConnectionId is { } previous && previous != connectionId ? previous : null;
-            await ReleasePeerMediaAsync(userId);
+            if (IsReady)
+                await ReleasePeerMediaAsync(userId);
             peer.Rejoin(connectionId);
 
             // The device the user was on loses its media either way, so it is told even when the join fails
@@ -110,6 +113,15 @@ public partial class HybridSessionPeerManager : IHybridSessionPeerManager
                     userId);
                 await _coordinatorEventBus.PublishAsync(new HybridSessionPeerReplacedEvent(Model.Id, userId, replaced));
             }
+        }
+
+        if (!IsReady)
+        {
+            peer!.WaitForServer();
+            _peers[userId] = peer;
+            await SetStateAsync(HybridSessionNodeState.WaitingForSFUNode);
+            await _coordinatorEventBus.PublishAsync(new HybridSessionPeerJoinedEvent(Model.Id, peer.ToSnapshot()));
+            return (null, null);
         }
 
         if (!_isSessionLoaded)
@@ -169,9 +181,6 @@ public partial class HybridSessionPeerManager : IHybridSessionPeerManager
 
     public Task<ErrorCode?> ApprovePeerAsync(int initiatorId, int userId) => LockedAsync<ErrorCode?>(async () =>
     {
-        if (!EnsureReady("approve", userId))
-            return ErrorCode.SFUUnavailable;
-
         if (!_peers.TryGetValue(userId, out var peer))
         {
             _logger.LogDebug("Attempt to approve a peer with ID {userId} failed. Peer not exists", userId);
@@ -189,6 +198,9 @@ public partial class HybridSessionPeerManager : IHybridSessionPeerManager
         if (!wasPending)
             return null;
 
+        if (!IsReady)
+            peer.WaitForServer();
+
         await _coordinatorEventBus.PublishAsync(new HybridSessionPeerApprovedEvent(Model.Id, userId, initiatorId));
         await _coordinatorEventBus.PublishAsync(new HybridSessionPeerStateChangedEvent(Model.Id, userId, peer.State));
 
@@ -202,9 +214,6 @@ public partial class HybridSessionPeerManager : IHybridSessionPeerManager
     public Task<ErrorCode?> RejectPeerAsync(int initiatorId, int userId, string? reason = null) =>
         LockedAsync<ErrorCode?>(async () =>
     {
-        if (!EnsureReady("reject", userId))
-            return ErrorCode.SFUUnavailable;
-
         if (!_peers.TryGetValue(userId, out var peer))
         {
             _logger.LogDebug("Attempt to reject a peer with ID {userId} failed. Peer not exists", userId);
@@ -311,14 +320,24 @@ public partial class HybridSessionPeerManager : IHybridSessionPeerManager
         return null;
     }
 
-    private Task HandleGatewayConnectionLost() => LockedAsync(() =>
-        DropSfuStateAsync(new HybridSessionSFUNodeDisconnectedEvent(Model.Id)));
-
-    private async Task HandleGatewayConnected()
+    private Task HandleGatewayConnectionLost(ISFUGateway source) => LockedAsync(async () =>
     {
+        if (!ReferenceEquals(_gateway, source) || source.IsConnected)
+            return;
+
+        await SetStateAsync(HybridSessionNodeState.WaitingForSFUNode);
+        await DropSfuStateAsync(new HybridSessionSFUNodeDisconnectedEvent(Model.Id));
+    });
+
+    private Task HandleGatewayConnected(ISFUGateway source) => LockedAsync(async () =>
+    {
+        if (!ReferenceEquals(_gateway, source) || !source.IsConnected)
+            return;
+
+        await SetStateAsync(HybridSessionNodeState.Active);
         if (!_peers.IsEmpty)
             await _coordinatorEventBus.PublishAsync(new HybridSessionSFUNodeConnectedEvent(Model.Id));
-    }
+    });
 
     /// <summary>
     /// Everything the SFU held for this session is gone: peers have to rejoin and the session has to be loaded again.
@@ -427,8 +446,8 @@ public partial class HybridSessionPeerManager : IHybridSessionPeerManager
     {
         if (_gateway != null)
         {
-            _gateway.ConnectionLost -= HandleGatewayConnectionLost;
-            _gateway.Connected -= HandleGatewayConnected;
+            _gateway.ConnectionLost -= _connectionLostHandler;
+            _gateway.Connected -= _connectedHandler;
         }
 
         _lock.Dispose();

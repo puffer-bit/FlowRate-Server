@@ -45,16 +45,20 @@ public class HybridSessionPeerManagerTests
     // Joining
 
     [Fact]
-    public async Task AddPeer_WhenSfuIsNotConnected_ReturnsSfuNotActive()
+    public async Task AddPeer_WhenSfuIsNotConnected_JoinsWhileWaitingForServer()
     {
         var manager = await CreateManager();
         _gateway.IsConnected = false;
 
         var (result, transport) = await manager.AddPeerAsync(HostId, "epoch");
 
-        Assert.Equal(ErrorCode.SFUUnavailable, result);
+        Assert.Null(result);
         Assert.Null(transport);
-        Assert.False(manager.HasPeer(HostId));
+        Assert.True(manager.HasPeer(HostId));
+        Assert.Equal(HybridSessionPeerState.WaitingForServer, StateOf(manager, HostId));
+        Assert.Empty(_gateway.Calls);
+        Assert.Equal(HybridSessionPeerState.WaitingForServer,
+            Assert.Single(_events.Of<HybridSessionPeerJoinedEvent>()).Peer.State);
     }
 
     [Fact]
@@ -129,7 +133,9 @@ public class HybridSessionPeerManagerTests
         var changed = Assert.Single(_events.Of<HybridSessionStateChangedEvent>());
         Assert.Equal(HybridSessionNodeState.WaitingForSFUNode, changed.State);
         Assert.Equal(1, _gateway.CallCount("UnloadSession"));
-        Assert.Equal(ErrorCode.SFUUnavailable, (await manager.AddPeerAsync(HostId, "epoch")).result);
+        var (result, transport) = await manager.AddPeerAsync(HostId, "epoch");
+        Assert.Null(result);
+        Assert.Null(transport);
 
         // The detached node is not followed any more
         await _gateway.RaiseConnectionLost();
@@ -224,6 +230,137 @@ public class HybridSessionPeerManagerTests
     }
 
     // Devices
+
+    [Fact]
+    public async Task AddPeer_WithoutAnAssignedNode_JoinsAndCanLeave()
+    {
+        var manager = await CreateManager();
+        await manager.ChangeGatewayAsync(null);
+
+        var (result, transport) = await manager.AddPeerAsync(GuestId, "epoch", "device");
+
+        Assert.Null(result);
+        Assert.Null(transport);
+        Assert.True(manager.IsPeerOf(GuestId, "device"));
+        Assert.Equal(HybridSessionPeerState.WaitingForServer, StateOf(manager, GuestId));
+        Assert.Equal(ErrorCode.SFUUnavailable, await manager.ConnectPeerAsync(GuestId, FakeSfuGateway.Dtls()));
+        Assert.Null(await manager.RemovePeerAsync(GuestId));
+        Assert.False(manager.HasPeer(GuestId));
+        Assert.Empty(_gateway.Calls);
+    }
+
+    [Fact]
+    public async Task AddPeer_WhileWaitingForNode_CanTakeOverFromAnotherDevice()
+    {
+        var manager = await CreateManager();
+        await manager.ChangeGatewayAsync(null);
+        await manager.AddPeerAsync(GuestId, "epoch", "old");
+
+        var (result, transport) = await manager.AddPeerAsync(GuestId, "epoch", "new");
+
+        Assert.Null(result);
+        Assert.Null(transport);
+        Assert.True(manager.IsPeerOf(GuestId, "new"));
+        Assert.False(manager.IsPeerOf(GuestId, "old"));
+        Assert.Single(manager.GetAllPeerSnapshots());
+        Assert.Single(_events.Of<HybridSessionPeerReplacedEvent>());
+        Assert.Empty(_gateway.Calls);
+    }
+
+    [Fact]
+    public async Task AddPeer_JoinedWithoutANode_CreatesTransportOnceANodeIsAssigned()
+    {
+        var manager = await CreateManager();
+        await manager.ChangeGatewayAsync(null);
+        await manager.AddPeerAsync(GuestId, "epoch");
+        var replacement = new FakeSfuGateway { NodeId = 2 };
+
+        await manager.ChangeGatewayAsync(replacement);
+        var (result, transport) = await manager.AddPeerAsync(GuestId, "new-epoch");
+
+        Assert.Null(result);
+        Assert.NotNull(transport);
+        Assert.Single(manager.GetAllPeerSnapshots());
+        Assert.Equal(1, replacement.CallCount("LoadSession"));
+        Assert.Null(await manager.ConnectPeerAsync(GuestId, FakeSfuGateway.Dtls()));
+        Assert.Equal(HybridSessionPeerState.Connected, StateOf(manager, GuestId));
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task WaitingForNode_DoesNotBypassHostAdmission(bool approve)
+    {
+        var manager = await CreateManager(isHostMustApprove: true);
+        await manager.ChangeGatewayAsync(null);
+        await manager.AddPeerAsync(GuestId, "epoch");
+
+        var result = approve
+            ? await manager.ApprovePeerAsync(HostId, GuestId)
+            : await manager.RejectPeerAsync(HostId, GuestId);
+
+        Assert.Null(result);
+        if (approve)
+        {
+            Assert.True(manager.GetAllPeerSnapshots()[GuestId].IsApproved);
+            Assert.Equal(HybridSessionPeerState.WaitingForServer, StateOf(manager, GuestId));
+        }
+        else
+            Assert.False(manager.HasPeer(GuestId));
+        Assert.Empty(_gateway.Calls);
+    }
+
+    [Fact]
+    public async Task GatewayEvents_UpdateTheSessionAvailability()
+    {
+        var manager = await CreateManager();
+
+        await _gateway.RaiseConnectionLost();
+        await _gateway.RaiseConnected();
+
+        Assert.Equal([HybridSessionNodeState.WaitingForSFUNode, HybridSessionNodeState.Active],
+            _events.Of<HybridSessionStateChangedEvent>().Select(e => e.State));
+        Assert.True(manager.IsReady);
+    }
+
+    [Fact]
+    public async Task ChangeGateway_ToAnUnavailableNode_WaitsUntilItConnects()
+    {
+        var manager = await CreateManager();
+        var replacement = new FakeSfuGateway { NodeId = 2, IsConnected = false };
+
+        await manager.ChangeGatewayAsync(replacement);
+        Assert.False(manager.IsReady);
+        Assert.Equal(HybridSessionNodeState.WaitingForSFUNode,
+            Assert.Single(_events.Of<HybridSessionStateChangedEvent>()).State);
+
+        await replacement.RaiseConnected();
+        Assert.True(manager.IsReady);
+        Assert.Equal(HybridSessionNodeState.Active, _events.Of<HybridSessionStateChangedEvent>().Last().State);
+    }
+
+    [Fact]
+    public async Task ChangeGateway_IgnoresAlreadyQueuedEventsFromTheOldNode()
+    {
+        var manager = await CreateManager();
+        var lost = _gateway.CaptureConnectionLostHandlers()!;
+        var connected = _gateway.CaptureConnectedHandlers()!;
+        var replacement = new FakeSfuGateway { NodeId = 2 };
+        await manager.ChangeGatewayAsync(replacement);
+        await JoinAndConnect(manager, HostId);
+
+        _gateway.IsConnected = false;
+        await lost();
+        _gateway.IsConnected = true;
+        await connected();
+
+        Assert.Same(replacement, manager.CurrentGateway);
+        Assert.Empty(_events.Of<HybridSessionSFUNodeDisconnectedEvent>());
+        Assert.Empty(_events.Of<HybridSessionSFUNodeConnectedEvent>());
+        Assert.NotEqual(HybridSessionPeerState.WaitingForServer, StateOf(manager, HostId));
+        Assert.Null(await manager.ConnectPeerAsync(HostId, FakeSfuGateway.Dtls()));
+        Assert.Equal(1, replacement.CallCount("LoadSession"));
+    }
 
     [Fact]
     public async Task AddPeer_FromAnotherConnection_TakesThePeerOverAndReportsTheOldOne()

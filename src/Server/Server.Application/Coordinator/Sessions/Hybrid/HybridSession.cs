@@ -38,12 +38,16 @@ public class HybridSession : IHybridSession
     public async Task AssignSfuNodeAsync()
     {
         var current = PeerManager.CurrentGateway;
-        if (current != null && _nodeSelector.Contains(current))
+        if (current is { IsConnected: true } && _nodeSelector.Contains(current))
             return;
 
         var nodeGateway = _nodeSelector.GetBestSFUNode(Model.Id);
-        if (nodeGateway != null && current != null)
-            _logger.LogInformation("Hybrid session {SessionId} moves to SFU node {NodeId}: its node left the pool.",
+        // With no reachable alternative, follow the existing connection until it recovers.
+        if (current != null && _nodeSelector.Contains(current) && nodeGateway is not { IsConnected: true })
+            return;
+
+        if (nodeGateway != null && current != null && !ReferenceEquals(current, nodeGateway))
+            _logger.LogInformation("Hybrid session {SessionId} moves to SFU node {NodeId}: its node is unavailable or left the pool.",
                 Model.Id, nodeGateway.NodeId);
         else if (nodeGateway != null && Model.State == HybridSessionNodeState.WaitingForSFUNode)
             _logger.LogInformation("Hybrid session {SessionId} got SFU node {NodeId}.", Model.Id, nodeGateway.NodeId);
