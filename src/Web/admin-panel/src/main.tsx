@@ -16,8 +16,13 @@ const queryClient = new QueryClient({
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <MantineProvider defaultColorScheme="auto" theme={{
-      primaryColor: 'teal', defaultRadius: 'md',
+    <MantineProvider defaultColorScheme="dark" theme={{
+      // Primary and neutral shades match the client's standard theme.
+      primaryColor: 'flowrate', primaryShade: { light: 6, dark: 6 }, defaultRadius: 'md',
+      colors: {
+        flowrate: ['#f0efff', '#e8e8ff', '#d0ccff', '#a39dff', '#8b7fff', '#7d75ff', '#6c63ff', '#5a52e0', '#4a43c0', '#3e3e6b'],
+        dark: ['#e7e7e7', '#cbcbcb', '#aaa', '#727272', '#656565', '#3d3d3d', '#2f2f2f', '#232323', '#1e1e1e', '#161616'],
+      },
       fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
       spacing: { xs: '0.5rem', sm: '0.625rem', md: '0.75rem', lg: '1rem', xl: '1.25rem' },
       headings: { fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif", fontWeight: '650' },
