@@ -52,6 +52,19 @@ The control panel has no authentication and listens on 127.0.0.1 only. Reach it 
 
 Push notifications and passkeys are off until `.env` turns them on; the comments there say how.
 
+## SFU node selection and recovery
+
+Each coordinator uses its assigned subset of the global SFU pool. New sessions are distributed by session ID
+across the connected nodes; this is distribution by session count, not measured CPU or bandwidth load.
+Healthy sessions keep their node when another node is added or recovers.
+
+When a node loses its connection, sessions move to a connected alternative if one is assigned. Participants
+stay in the session, but their media state is reset and clients must rejoin the SFU transport, so media can pause
+during recovery. If all assigned nodes are unavailable, sessions wait for a connection to recover. Users may
+still join and leave: they appear as `WaitingForServer`, and a successful join returns no transport until an
+SFU becomes available. The client shows its existing waiting-for-SFU status and connects media automatically
+when a node is ready. Host admission remains required for sessions that use it.
+
 ## Development
 
 Requirements: .NET SDK 10, Node.js 24 or newer, Docker for the full stack.

@@ -1,6 +1,10 @@
+using System.Net;
+using Server.Application.Coordinator.Snapshots;
+using Server.Core.Models.Orchestrator;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Server.Core.Enums;
+using Server.Application.Abstractions.Gateway;
 using Server.Core.Models.Coordinator;
 using Server.Application.Abstractions.Factories;
 using Server.Application.Abstractions.Persistence;
@@ -21,6 +25,8 @@ public class OrchestratorSettingsChangeTests
     // Ports a coordinator fails to start on, as when another program holds them
     private readonly HashSet<int> _takenPorts = [];
     private readonly OrchestratorInstance _orchestrator;
+    private readonly Mock<IListenEndpointProbe> _probe = new();
+    private readonly Mock<IOrchestratorInstanceContext> _context = new();
 
     public OrchestratorSettingsChangeTests()
     {
@@ -29,19 +35,28 @@ public class OrchestratorSettingsChangeTests
             {
                 var coordinator = new Mock<ICoordinatorInstance>();
                 coordinator.Setup(c => c.Context).Returns(new CoordinatorInstanceContext(model, version));
+                coordinator.Setup(c => c.State).Returns(CoordinatorState.Online);
+                coordinator.Setup(c => c.GetSnapshot()).Returns(() => new CoordinatorSnapshot(model.Id, model.Name,
+                    model.Ip, model.Port, CoordinatorState.Online, model.CurrentLaunchTime, [], []));
                 if (_takenPorts.Contains(model.Port))
                     coordinator.Setup(c => c.StartAsync()).ThrowsAsync(new InvalidOperationException("taken"));
                 _created.Add(coordinator);
                 return coordinator.Object;
             });
 
-        var context = new Mock<IOrchestratorInstanceContext>();
+        var context = _context;
         context.Setup(c => c.ServerVersion).Returns("1.0");
+        context.Setup(c => c.MaxCoordinators).Returns(4);
+        _probe.Setup(p => p.IsLocalAddress(It.IsAny<IPAddress>())).Returns(true);
+        _probe.Setup(p => p.IsPortFree(It.IsAny<IPAddress>(), It.IsAny<int>())).Returns(true);
+        var nodes = new Mock<ISfuNodeStore>();
+        nodes.Setup(n => n.GetAllAsync(It.IsAny<CancellationToken>())).ReturnsAsync(
+            [new SfuNodeSettingsModel { Id = 1, Name = "local", Host = "127.0.0.1", Port = 50051, Username = "", Key = "" }]);
         var seeder = new ConfigurationSeeder(Microsoft.Extensions.Options.Options.Create(new OrchestratorOptions()),
             new Mock<ISfuNodeStore>().Object, _store, NullLoggerFactory.Instance);
 
         _orchestrator = new OrchestratorInstance(context.Object, NullLoggerFactory.Instance, _factory.Object,
-            new Mock<IOrchestratorInstanceRepository>().Object, _store, seeder, new Mock<ISfuNodeRegistry>().Object)
+            new Mock<IOrchestratorInstanceRepository>().Object, _store, seeder, new Mock<ISfuNodeRegistry>().Object, _probe.Object, nodes.Object)
         {
             Context = context.Object,
             CoordinatorsPool = new()
@@ -157,6 +172,114 @@ public class OrchestratorSettingsChangeTests
         Assert.Single(_orchestrator.CoordinatorsPool);
     }
 
+    [Fact]
+    public async Task Create_InitializesSavesAndStartsAnIndependentCoordinator()
+    {
+        var first = await StartWithAsync();
+        var result = await _orchestrator.CreateCoordinatorInstanceAsync(new(" Second ", " 127.0.0.1 ", 5001, [1]));
+
+        Assert.Equal(CoordinatorCreationStatus.Created, result.Status);
+        Assert.Equal(CoordinatorState.Online, result.State);
+        var saved = (await _store.GetAsync(result.Settings!.Id))!;
+        Assert.NotEqual(first.Id, saved.Id);
+        Assert.Equal("Second", saved.Name);
+        Assert.Equal((64, 256), (saved.MaxOnlineUsers, saved.MaxUsers));
+        Assert.Equal((5, 40), (saved.Heartbeat.IntervalSeconds, saved.Heartbeat.TimeoutSeconds));
+        Assert.Equal([1], saved.SfuNodeIds);
+        Assert.Equal(2, _orchestrator.CoordinatorsPool.Count);
+        _created[0].Verify(c => c.CloseAsync(), Times.Never);
+        _created[1].Verify(c => c.StartAsync(), Times.Once);
+    }
+
+    [Theory]
+    [InlineData("", "127.0.0.1", 5001, "Name")]
+    [InlineData("new", "wrong", 5001, "Ip")]
+    [InlineData("new", "127.0.0.1", 0, "Port")]
+    public async Task Create_InvalidSettings_AreNotSaved(string name, string ip, int port, string field)
+    {
+        await _orchestrator.StartAsync();
+        var result = await _orchestrator.CreateCoordinatorInstanceAsync(new(name, ip, port, []));
+        Assert.Equal(CoordinatorCreationStatus.Invalid, result.Status);
+        Assert.Contains(field, result.Errors!.Keys);
+        Assert.Empty(await _store.GetAllAsync());
+    }
+
+    [Fact]
+    public async Task Create_UnknownSfuNode_IsNotSaved()
+    {
+        await _orchestrator.StartAsync();
+        var result = await _orchestrator.CreateCoordinatorInstanceAsync(new("new", "127.0.0.1", 5001, [99]));
+        Assert.Equal(CoordinatorCreationStatus.Invalid, result.Status);
+        Assert.Contains("SfuNodeIds", result.Errors!.Keys);
+        Assert.Empty(_created);
+    }
+
+    [Fact]
+    public async Task Create_NonLocalAddressAndTakenPort_AreNotSaved()
+    {
+        await _orchestrator.StartAsync();
+        _probe.Setup(p => p.IsLocalAddress(It.IsAny<IPAddress>())).Returns(false);
+        var addressResult = await _orchestrator.CreateCoordinatorInstanceAsync(new("new", "192.0.2.1", 5001, []));
+        Assert.Contains("Ip", addressResult.Errors!.Keys);
+        _probe.Setup(p => p.IsLocalAddress(It.IsAny<IPAddress>())).Returns(true);
+        _probe.Setup(p => p.IsPortFree(It.IsAny<IPAddress>(), 5001)).Returns(false);
+        var portResult = await _orchestrator.CreateCoordinatorInstanceAsync(new("new", "127.0.0.1", 5001, []));
+        Assert.Contains("Port", portResult.Errors!.Keys);
+        Assert.Empty(await _store.GetAllAsync());
+    }
+
+    [Fact]
+    public async Task Create_ConcurrentRequests_CannotExceedLimit()
+    {
+        await _orchestrator.StartAsync();
+        _context.Setup(c => c.MaxCoordinators).Returns(2);
+        var results = await Task.WhenAll(Enumerable.Range(0, 10).Select(i =>
+            _orchestrator.CreateCoordinatorInstanceAsync(new($"new{i}", "127.0.0.1", 5000 + i, []))));
+        Assert.Equal(2, results.Count(r => r.Status == CoordinatorCreationStatus.Created));
+        Assert.Equal(8, results.Count(r => r.Status == CoordinatorCreationStatus.LimitReached));
+        Assert.Equal(2, (await _store.GetAllAsync()).Count);
+    }
+
+    [Fact]
+    public async Task Create_ConcurrentRequests_CannotReserveOverlappingEndpoints()
+    {
+        await _orchestrator.StartAsync();
+        var results = await Task.WhenAll(
+            _orchestrator.CreateCoordinatorInstanceAsync(new("one", "0.0.0.0", 5000, [])),
+            _orchestrator.CreateCoordinatorInstanceAsync(new("two", "127.0.0.1", 5000, [])));
+        Assert.Single(results, r => r.Status == CoordinatorCreationStatus.Created);
+        Assert.Single(results, r => r.Status == CoordinatorCreationStatus.Invalid);
+        Assert.Single(await _store.GetAllAsync());
+    }
+
+    [Fact]
+    public async Task Create_FailedListener_StaysVisibleAndCanBeFixed()
+    {
+        await _orchestrator.StartAsync();
+        _takenPorts.Add(5000); // The port becomes unavailable after its preflight check.
+        var result = await _orchestrator.CreateCoordinatorInstanceAsync(new("new", "127.0.0.1", 5000, [1]));
+        Assert.Equal(CoordinatorCreationStatus.Created, result.Status);
+        Assert.Equal(CoordinatorState.Failed, result.State);
+        Assert.Equal(CoordinatorState.Failed, Assert.Single(_orchestrator.GetCoordinatorSnapshots()).State);
+        Assert.NotNull(await _store.GetAsync(result.Settings!.Id));
+        _created[0].Verify(c => c.Dispose(), Times.Once);
+
+        var changed = Copy(result.Settings);
+        changed.Listen("127.0.0.1", 5001);
+        await _store.UpdateAsync(changed);
+        Assert.Equal(CoordinatorState.Online, Assert.Single(_orchestrator.GetCoordinatorSnapshots()).State);
+    }
+
+    [Fact]
+    public async Task Create_WhenServerIsStopped_DoesNotSave()
+    {
+        await _orchestrator.StartAsync();
+        await _orchestrator.StopAsync();
+        var result = await _orchestrator.CreateCoordinatorInstanceAsync(new("new", "127.0.0.1", 5000, []));
+        Assert.Equal(CoordinatorCreationStatus.Unavailable, result.Status);
+        Assert.Empty(await _store.GetAllAsync());
+    }
+
     // A restart runs off the change, so its outcome is waited for
     private static async Task WaitUntil(Func<bool> condition)
     {
@@ -205,6 +328,7 @@ public class OrchestratorSettingsChangeTests
         public async Task UpdateAsync(CoordinatorInstanceModel coordinator, CancellationToken ct = default)
         {
             Seed(coordinator);
+            await Task.Yield();
             if (Changed != null)
                 await Changed(coordinator.Id);
         }

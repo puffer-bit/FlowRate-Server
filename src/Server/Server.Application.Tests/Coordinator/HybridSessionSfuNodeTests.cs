@@ -147,4 +147,88 @@ public class HybridSessionSfuNodeTests
         Assert.False(pool.Contains(_second));
         Assert.False(pool.Contains(new FakeSfuGateway { NodeId = 1 }));
     }
+
+    [Fact]
+    public void Pool_DistributesSessionsAcrossConnectedNodesRegardlessOfOrderOrDuplicates()
+    {
+        var pool = new CoordinatorSfuPool(_registry.Object, [2, 1, 1]);
+        var reordered = new CoordinatorSfuPool(_registry.Object, [1, 2]);
+
+        var selected = Enumerable.Range(1, 100).Select(id => pool.GetBestSFUNode(id)).ToList();
+
+        Assert.Equal(50, selected.Count(node => ReferenceEquals(node, _first)));
+        Assert.Equal(50, selected.Count(node => ReferenceEquals(node, _second)));
+        Assert.All(Enumerable.Range(1, 100), id =>
+            Assert.Same(pool.GetBestSFUNode(id), reordered.GetBestSFUNode(id)));
+    }
+
+    [Fact]
+    public void Pool_DoesNotSelectAnUnavailableNodeWhileAnotherIsConnected()
+    {
+        _first.IsConnected = false;
+        var pool = new CoordinatorSfuPool(_registry.Object, [1, 2]);
+
+        Assert.All(Enumerable.Range(1, 100), id => Assert.Same(_second, pool.GetBestSFUNode(id)));
+    }
+
+    [Fact]
+    public async Task AssignSfuNode_WhenTheNodeIsDown_MovesToAConnectedAlternativeAndKeepsPeers()
+    {
+        var (session, _) = await CreateSession(1, 2);
+        await session.PeerManager.AddPeerAsync(1, "epoch");
+        await _first.RaiseConnectionLost();
+
+        await session.AssignSfuNodeAsync();
+
+        Assert.Same(_second, session.PeerManager.CurrentGateway);
+        Assert.True(session.PeerManager.HasPeer(1));
+        Assert.Equal(HybridSessionPeerState.WaitingForServer, session.PeerManager.GetAllPeerSnapshots()[1].State);
+        Assert.Single(_events.Of<HybridSessionSFUNodeChangedEvent>());
+        Assert.Null((await session.PeerManager.AddPeerAsync(1, "new-epoch")).result);
+        Assert.Equal(1, _second.CallCount("LoadSession"));
+        Assert.Equal(0, _first.CallCount("UnloadSession"));
+    }
+
+    [Fact]
+    public async Task AssignSfuNode_WhenAllNodesAreDown_KeepsItsNodeUntilOneRecovers()
+    {
+        var (session, _) = await CreateSession(1, 2);
+        await _first.RaiseConnectionLost();
+        _second.IsConnected = false;
+
+        await session.AssignSfuNodeAsync();
+
+        Assert.Same(_first, session.PeerManager.CurrentGateway);
+        Assert.Equal(HybridSessionNodeState.WaitingForSFUNode, session.Model.State);
+
+        await _second.RaiseConnected();
+        await session.AssignSfuNodeAsync();
+
+        Assert.Same(_second, session.PeerManager.CurrentGateway);
+        Assert.Equal(HybridSessionNodeState.Active, session.Model.State);
+    }
+
+    [Fact]
+    public async Task AssignSfuNode_WhenTheOldNodeRecovers_DoesNotMoveBack()
+    {
+        var (session, _) = await CreateSession(1, 2);
+        await _first.RaiseConnectionLost();
+        await session.AssignSfuNodeAsync();
+
+        await _first.RaiseConnected();
+        await session.AssignSfuNodeAsync();
+
+        Assert.Same(_second, session.PeerManager.CurrentGateway);
+    }
+
+    [Fact]
+    public async Task AssignSfuNode_WhenANodeIsAdded_DoesNotMoveAHealthySession()
+    {
+        var (session, pool) = await CreateSession(2);
+
+        pool.SetNodes([1, 2]);
+        await session.AssignSfuNodeAsync();
+
+        Assert.Same(_second, session.PeerManager.CurrentGateway);
+    }
 }
