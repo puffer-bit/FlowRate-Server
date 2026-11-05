@@ -122,6 +122,7 @@ public sealed class ChatMessageModel
     public ChatReplyContentModel ToReplyContent() => new()
     {
         MessageId = Id,
+        HasAttachments = !IsDeleted && (Images.Count > 0 || Videos.Count > 0 || Files.Count > 0),
         SenderUserId = SenderUserId,
         SentTime = SentTime,
         TextContent = TextContent,

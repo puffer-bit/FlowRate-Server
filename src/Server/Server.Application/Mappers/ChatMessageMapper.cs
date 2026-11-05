@@ -72,6 +72,7 @@ public static class ChatMessageMapperExtensions
         return new ChatReplyContentDTO
         {
             MessageId = model.MessageId,
+            HasAttachments = model.HasAttachments,
             TextContent = model.TextContent?.ToDto(),
             SenderUserId = model.SenderUserId,
             SentTime = model.SentTime,

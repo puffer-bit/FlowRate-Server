@@ -249,6 +249,9 @@ public class MessagesRepository : IMessagesRepository
             : await context.ChatMessagesEntities
                 .AsNoTracking()
                 .IgnoreQueryFilters()
+                .Include(x => x.Images)
+                .Include(x => x.Videos)
+                .Include(x => x.Files)
                 .Where(x => targetIds.Contains(x.Id))
                 .ToDictionaryAsync(x => x.Id, cancellationToken);
 
