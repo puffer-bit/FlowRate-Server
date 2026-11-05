@@ -26,6 +26,7 @@ public interface IChatSessionManager
     Task<(ErrorCode? result, ChatChanges? changes)> FetchChangesAsync(int sessionId, long afterRevision, int take);
     Task<(ErrorCode? result, ChatMessageModel? message)> FetchMessageAsync(int sessionId, int messageId);
     Task<ErrorCode?> AddMessageAsync(int sessionId, NewChatMessageModel message, int senderUserId);
+    Task<ErrorCode?> SetReactionAsync(int sessionId, int messageId, string emoji, bool isAdded, int userId);
     Task<ErrorCode?> EditMessageAsync(int sessionId, int messageId, string text, int userId);
     /// <param name="mayDeleteAny">The user may delete messages of others, by their coordinator roles.</param>
     Task<ErrorCode?> DeleteMessageAsync(int sessionId, int messageId, int userId, bool mayDeleteAny = false);

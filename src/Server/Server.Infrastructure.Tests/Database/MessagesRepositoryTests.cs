@@ -63,6 +63,37 @@ public sealed class MessagesRepositoryTests : IDisposable
     }
 
     [Fact]
+    public async Task Reactions_InsertAndDeleteOwnedRows_AndSurviveTextEditsAndHistorySync()
+    {
+        var id = await Add("hello");
+        var message = (await _repository.GetByIdAsync(id))!;
+        message.AddReaction(2, "👍");
+        message.AddReaction(3, "👍");
+        var reactionRevision = await _repository.UpdateAsync(message);
+
+        var stored = (await _repository.GetByIdAsync(id))!;
+        Assert.Equal(2, stored.Reactions.Count);
+        Assert.Null(stored.EditTime);
+        stored.RemoveReaction(2, "👍");
+        stored.AddReaction(2, "❤️");
+        await _repository.UpdateAsync(stored);
+        await Edit(id, "changed");
+
+        stored = (await _repository.GetByIdAsync(id))!;
+        Assert.Equal("changed", stored.TextContent!.Text);
+        Assert.Equal(2, stored.Reactions.Count);
+        Assert.Contains(stored.Reactions, r => r.UserId == 3 && r.Emoji == "👍");
+        Assert.Contains(stored.Reactions, r => r.UserId == 2 && r.Emoji == "❤️");
+        var changes = await _repository.GetChangesAsync(_chatId, reactionRevision, 50);
+        Assert.Equal(2, Assert.Single(changes).Reactions.Count);
+
+        stored.RemoveReaction(3, "👍");
+        stored.RemoveReaction(2, "❤️");
+        await _repository.UpdateAsync(stored);
+        Assert.Empty((await _repository.GetByIdAsync(id))!.Reactions);
+    }
+
+    [Fact]
     public async Task EveryChange_TakesTheNextRevisionOfTheChat()
     {
         var first = await _repository.AddAsync(NewMessage("one"));
