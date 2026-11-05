@@ -74,6 +74,7 @@ public static class RequestPolicies
         SendMessageRequest request => InSession(request.ChatId, View | Permission.SendMessages
             | (HasAttachments(request) ? Permission.AttachFiles : Permission.None)),
         ChatTypingRequest request => InSession(request.ChatId, View | Permission.SendMessages),
+        SetMessageReactionRequest request => InSession(request.ChatId, View | Permission.SendMessages),
         EditMessageRequest request => InSession(request.ChatId, View | Permission.SendMessages),
         // Deleting messages of others needs ManageMessages; the chat checks it, knowing the author
         DeleteMessageRequest request => InSession(request.ChatId, View),

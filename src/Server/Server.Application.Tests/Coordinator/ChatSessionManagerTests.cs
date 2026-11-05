@@ -53,6 +53,69 @@ public class ChatSessionManagerTests
     }
 
     [Fact]
+    public async Task Reactions_ArePerUserAndIdempotent_WithoutEditingTheText()
+    {
+        var chatId = await CreateChat("general");
+        StoreMessage(5, chatId);
+        _messages.Setup(r => r.UpdateAsync(It.IsAny<ChatMessageModel>(), It.IsAny<CancellationToken>())).ReturnsAsync(9);
+
+        Assert.Null(await _manager.SetReactionAsync(chatId, 5, "👍", true, 2));
+        Assert.Null(await _manager.SetReactionAsync(chatId, 5, "👍", true, 2));
+        Assert.Null(await _manager.SetReactionAsync(chatId, 5, "👍", true, 3));
+        Assert.Equal(2, _storedMessages[5].Reactions.Count);
+        Assert.Null(await _manager.SetReactionAsync(chatId, 5, "👍", false, 2));
+        Assert.Null(await _manager.SetReactionAsync(chatId, 5, "👍", false, 2));
+
+        var reaction = Assert.Single(_storedMessages[5].Reactions);
+        Assert.Equal(3, reaction.UserId);
+        Assert.Null(_storedMessages[5].EditTime);
+        Assert.Equal("hello", _storedMessages[5].TextContent!.Text);
+        Assert.Equal(3, _events.Of<ChatSessionMessageEditedEvent>().Count());
+        Assert.All(_events.Of<ChatSessionMessageEditedEvent>(), e => Assert.Equal(9, e.Message.Revision));
+        _messages.Verify(r => r.UpdateAsync(It.IsAny<ChatMessageModel>(), It.IsAny<CancellationToken>()), Times.Exactly(3));
+    }
+
+    [Fact]
+    public async Task Reactions_RejectUnknownChat_CrossChatMessage_AndInvalidEmoji()
+    {
+        var chatId = await CreateChat("general");
+        var otherChat = await CreateChat("other");
+        StoreMessage(5, otherChat);
+
+        Assert.Equal(ErrorCode.ChatNotFound, await _manager.SetReactionAsync(999, 5, "👍", true, 2));
+        Assert.Equal(ErrorCode.MessageNotFound, await _manager.SetReactionAsync(chatId, 5, "👍", true, 2));
+        Assert.NotNull(await _manager.SetReactionAsync(otherChat, 5, "text", true, 2));
+        _messages.Verify(r => r.UpdateAsync(It.IsAny<ChatMessageModel>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Theory]
+    [InlineData(true, false, false)]
+    [InlineData(false, true, false)]
+    [InlineData(false, false, true)]
+    public async Task Reactions_RejectDeletedSystemAndReadOnlyMessages(bool deleted, bool system, bool readOnly)
+    {
+        var chatId = await CreateChat("general");
+        _storedMessages[5] = new ChatMessageModel
+        {
+            Id = 5, ChatId = chatId, SenderUserId = AuthorId, SentTime = DateTime.UtcNow,
+            IsDeleted = deleted, IsSystem = system, IsReadOnly = readOnly
+        };
+        Assert.NotNull(await _manager.SetReactionAsync(chatId, 5, "👍", true, 2));
+        _messages.Verify(r => r.UpdateAsync(It.IsAny<ChatMessageModel>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task Reactions_RejectArchivedChats()
+    {
+        var chatId = await CreateChat("general");
+        StoreMessage(5, chatId);
+        Assert.True(_manager.TryGetSession(chatId, out var chat));
+        chat.Archive();
+        Assert.Equal(ErrorCode.ChatReadOnly, await _manager.SetReactionAsync(chatId, 5, "👍", true, 2));
+        _messages.Verify(r => r.UpdateAsync(It.IsAny<ChatMessageModel>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
     public async Task Create_RegistersTheChatAndAnnouncesIt()
     {
         var chatId = await CreateChat("general");

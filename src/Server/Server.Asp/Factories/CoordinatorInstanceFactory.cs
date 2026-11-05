@@ -294,6 +294,7 @@ public class CoordinatorInstanceFactory : ICoordinatorInstanceFactory
         yield return ActivatorUtilities.CreateInstance<HybridSessionPokeHandler>(_provider, hybridSessionManager, messageSender);
         
         yield return ActivatorUtilities.CreateInstance<SendMessageHandler>(_provider, chatSessionManager, messageSender, userManager);
+        yield return ActivatorUtilities.CreateInstance<SetMessageReactionHandler>(_provider, chatSessionManager, messageSender);
         yield return ActivatorUtilities.CreateInstance<EditTextMessageHandler>(_provider, chatSessionManager, messageSender);
         yield return new DeleteTextMessageHandler(chatSessionManager, messageSender, permissions);
         yield return ActivatorUtilities.CreateInstance<ChatSessionHistoryHandler>(_provider, chatSessionManager, messageSender);
