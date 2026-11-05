@@ -299,6 +299,7 @@ public class CoordinatorInstanceFactory : ICoordinatorInstanceFactory
         yield return ActivatorUtilities.CreateInstance<ChatSessionChangesHandler>(_provider, chatSessionManager, messageSender);
         yield return new ChatReadStatesHandler(readService, messageSender);
         yield return new ChatMarkReadHandler(readService, messageSender);
+        yield return new ChatTypingHandler(chatSessionManager, userManager, visibility, messageSender);
 
         yield return new SessionInfoHandler(visibility, sessionLayout, messageSender);
         yield return ActivatorUtilities.CreateInstance<UserActionHandler>(_provider, messageSender, userManager, logger);
