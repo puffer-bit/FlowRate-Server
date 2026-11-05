@@ -117,7 +117,7 @@ public sealed class RequestRateLimits
         SendMessageRequest or EditMessageRequest or DeleteMessageRequest or ChatTypingRequest
             or HybridSessionPokeRequest => RequestRateGroup.ChatWrite,
         ChatSessionHistoryRequest or ChatSessionMessageRequest or ChatSessionHistoryPageRequest
-            or ChatSessionChangesRequest or ChatReadStatesRequest or ChatMarkReadRequest => RequestRateGroup.ChatRead,
+            or ChatSessionChangesRequest or ChatReadStatesRequest or ChatMarkReadRequest or ChatViewersRequest => RequestRateGroup.ChatRead,
         RegisterPushTokenRequest or UnregisterPushTokenRequest => RequestRateGroup.PushRegistration,
         MediaTokenRequest => RequestRateGroup.MediaToken,
         HeartbeatRequest => RequestRateGroup.Heartbeat,
