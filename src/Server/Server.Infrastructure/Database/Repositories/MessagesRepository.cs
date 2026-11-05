@@ -192,10 +192,22 @@ public class MessagesRepository : IMessagesRepository
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
 
-        var entity = message.ToEntity();
-        entity.Revision = await NextRevisionAsync(context, message.ChatId, cancellationToken);
+        var entity = await context.ChatMessagesEntities
+            .Include(x => x.TextContent)
+            .Include(x => x.Reactions)
+            .SingleAsync(x => x.Id == message.Id && x.ChatId == message.ChatId, cancellationToken);
+        var updated = message.ToEntity();
+        context.Entry(entity).CurrentValues.SetValues(updated);
+        entity.TextContent = updated.TextContent;
 
-        context.ChatMessagesEntities.Update(entity);
+        // Keep existing owned rows tracked so new reactions are inserted and removed ones deleted.
+        entity.Reactions.RemoveAll(existing => !updated.Reactions.Any(
+            reaction => reaction.UserId == existing.UserId && reaction.Emoji == existing.Emoji));
+        foreach (var reaction in updated.Reactions)
+            if (!entity.Reactions.Any(existing => existing.UserId == reaction.UserId && existing.Emoji == reaction.Emoji))
+                entity.Reactions.Add(reaction);
+
+        entity.Revision = await NextRevisionAsync(context, message.ChatId, cancellationToken);
         await context.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
 
