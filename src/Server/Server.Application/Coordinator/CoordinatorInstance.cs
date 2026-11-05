@@ -37,6 +37,7 @@ public partial class CoordinatorInstance : ICoordinatorInstance
     private readonly IMediaService? _mediaService;
     private readonly CoordinatorSettingsApplier? _settingsApplier;
     private readonly CoordinatorRoles? _roles;
+    private readonly IDisposable? _chatViewers;
 
     public CoordinatorInstance(
         ICoordinatorInstanceContext coordinatorInstanceContext,
@@ -52,8 +53,10 @@ public partial class CoordinatorInstance : ICoordinatorInstance
         PushNotifier? pushNotifier = null,
         IMediaService? mediaService = null,
         CoordinatorSettingsApplier? settingsApplier = null,
-        CoordinatorRoles? roles = null)
+        CoordinatorRoles? roles = null,
+        IDisposable? chatViewers = null)
     {
+        _chatViewers = chatViewers;
         _roles = roles;
         _settingsApplier = settingsApplier;
         _mediaService = mediaService;
@@ -192,6 +195,7 @@ public partial class CoordinatorInstance : ICoordinatorInstance
 
     public void Dispose()
     {
+        _chatViewers?.Dispose();
         UnsubscribeFromEvents();
 
         RunCloseStep("disposing the gateway", _gatewayService.Dispose);

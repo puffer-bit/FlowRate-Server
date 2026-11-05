@@ -262,6 +262,48 @@ public class ChatSessionManager : IChatSessionManager
         }
     }
 
+    public async Task<ErrorCode?> SetReactionAsync(int sessionId, int messageId, string emoji, bool isAdded, int userId)
+    {
+        if (!Shared.Models.DataTransferObjects.ChatSession.Messages.Reactions.ChatReactionEmoji.IsSupported(emoji))
+            return ErrorCode.InvalidRequest;
+
+        try
+        {
+            if (!_sessions.TryGetValue(sessionId, out var chat))
+                return ErrorCode.ChatNotFound;
+            if (!chat.CanPost)
+                return ErrorCode.ChatReadOnly;
+
+            var writeLock = MessageWriteLockOf(sessionId);
+            await writeLock.WaitAsync();
+            try
+            {
+                var message = await GetMessageAsync(sessionId, messageId);
+                if (message == null || message.IsDeleted)
+                    return ErrorCode.MessageNotFound;
+                if (message.IsSystem || message.IsReadOnly)
+                    return ErrorCode.InsufficientPermissions;
+
+                var changed = isAdded ? message.AddReaction(userId, emoji) : message.RemoveReaction(userId, emoji);
+                if (!changed)
+                    return null;
+
+                message.MarkChanged(await _messagesRepository.UpdateAsync(message));
+                await _coordinatorEventBus.PublishAsync(new ChatSessionMessageEditedEvent(sessionId, message));
+                return null;
+            }
+            finally
+            {
+                writeLock.Release();
+            }
+        }
+        catch (Exception e)
+        {
+            _logger.LogError(e, "Error while setting a chat reaction.");
+            return ErrorCode.Internal;
+        }
+    }
+
     public async Task<ErrorCode?> EditMessageAsync(int sessionId, int messageId, string text, int userId)
     {
         try

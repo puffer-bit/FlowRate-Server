@@ -73,6 +73,8 @@ public static class RequestPolicies
 
         SendMessageRequest request => InSession(request.ChatId, View | Permission.SendMessages
             | (HasAttachments(request) ? Permission.AttachFiles : Permission.None)),
+        ChatTypingRequest request => InSession(request.ChatId, View | Permission.SendMessages),
+        SetMessageReactionRequest request => InSession(request.ChatId, View | Permission.SendMessages),
         EditMessageRequest request => InSession(request.ChatId, View | Permission.SendMessages),
         // Deleting messages of others needs ManageMessages; the chat checks it, knowing the author
         DeleteMessageRequest request => InSession(request.ChatId, View),
@@ -81,6 +83,8 @@ public static class RequestPolicies
         ChatSessionHistoryPageRequest request => InSession(request.ChatId, View),
         ChatSessionChangesRequest request => InSession(request.ChatId, View),
         ChatMarkReadRequest request => InSession(request.ChatId, View),
+        ChatViewersRequest { Subscribe: false } => Open,
+        ChatViewersRequest request => InSession(request.ChatId, View),
         ChatReadStatesRequest => Open,
 
         // The sender's own account; changes are proven with the current password and code by the handlers
@@ -105,7 +109,7 @@ public static class RequestPolicies
         LeaveSessionRequest or SessionInfoRequest or HybridSessionLeaveRequest => true,
 
         ChatSessionHistoryRequest or ChatSessionMessageRequest or ChatSessionHistoryPageRequest
-            or ChatSessionChangesRequest or ChatReadStatesRequest or ChatMarkReadRequest => true,
+            or ChatSessionChangesRequest or ChatReadStatesRequest or ChatMarkReadRequest or ChatViewersRequest => true,
 
         // Securing one's own account is never held back
         UserSecurityInfoRequest or UserSetPasswordRequest or UserTwoFactorSetupRequest or UserTwoFactorEnableRequest

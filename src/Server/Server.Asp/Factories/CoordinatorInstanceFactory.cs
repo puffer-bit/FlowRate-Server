@@ -112,10 +112,12 @@ public class CoordinatorInstanceFactory : ICoordinatorInstanceFactory
         var connectionManager = CreateConnectionManager(logger, connectionsContext, heartbeatManager,
             new ClientConnectionFactory(rateLimits));
 
+        var chatViewers = new ChatViewersHandler(chatSessionManager, userManager, roles, messageSender,
+            connectionManager, visibility, logger);
         var messagesHandlers = CreateMessageHandlers(logger, 
             coordinatorInstanceContext, coordinatorInstanceModel.Id, userManager, sessionManager, sessionLayout,
             chatSessionManager, hybridSessionManager, messageSender, heartbeatManager, connectionManager, authenticator,
-            mediaService, readService, roles, visibility);
+            mediaService, readService, roles, visibility).Append(chatViewers);
         
         var messageRouter = CreateMessageRouter(logger, messagesHandlers, connectionManager, rateLimits,
             new RequestAuthorizer(roles, hybridSessionManager, sessionManager));
@@ -136,7 +138,8 @@ public class CoordinatorInstanceFactory : ICoordinatorInstanceFactory
             pushNotifier,
             mediaService,
             settingsApplier,
-            roles);
+            roles,
+            chatViewers);
 
         return coordinatorInstance;
     }
@@ -291,6 +294,7 @@ public class CoordinatorInstanceFactory : ICoordinatorInstanceFactory
         yield return ActivatorUtilities.CreateInstance<HybridSessionPokeHandler>(_provider, hybridSessionManager, messageSender);
         
         yield return ActivatorUtilities.CreateInstance<SendMessageHandler>(_provider, chatSessionManager, messageSender, userManager);
+        yield return ActivatorUtilities.CreateInstance<SetMessageReactionHandler>(_provider, chatSessionManager, messageSender);
         yield return ActivatorUtilities.CreateInstance<EditTextMessageHandler>(_provider, chatSessionManager, messageSender);
         yield return new DeleteTextMessageHandler(chatSessionManager, messageSender, permissions);
         yield return ActivatorUtilities.CreateInstance<ChatSessionHistoryHandler>(_provider, chatSessionManager, messageSender);
@@ -299,6 +303,7 @@ public class CoordinatorInstanceFactory : ICoordinatorInstanceFactory
         yield return ActivatorUtilities.CreateInstance<ChatSessionChangesHandler>(_provider, chatSessionManager, messageSender);
         yield return new ChatReadStatesHandler(readService, messageSender);
         yield return new ChatMarkReadHandler(readService, messageSender);
+        yield return new ChatTypingHandler(chatSessionManager, userManager, visibility, messageSender);
 
         yield return new SessionInfoHandler(visibility, sessionLayout, messageSender);
         yield return ActivatorUtilities.CreateInstance<UserActionHandler>(_provider, messageSender, userManager, logger);
