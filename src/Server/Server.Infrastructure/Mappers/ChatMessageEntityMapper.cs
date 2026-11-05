@@ -107,6 +107,7 @@ public static class ChatMessageEntityMapper
         return new ChatReplyContentModel
         {
             MessageId = target.Id,
+            HasAttachments = !target.IsDeleted && (target.Images.Count > 0 || target.Videos.Count > 0 || target.Files.Count > 0),
             SenderUserId = target.SenderUserId,
             SentTime = target.SentTime,
             TextContent = target.IsDeleted ? null : target.TextContent?.ToModel(),

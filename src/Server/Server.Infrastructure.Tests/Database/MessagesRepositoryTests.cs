@@ -187,6 +187,31 @@ public sealed class MessagesRepositoryTests : IDisposable
         Assert.Equal(2, afterDelete.Revision);
     }
 
+    [Fact]
+    public async Task ReplyPreview_PreservesAttachmentsWhenLoadedAndHidesThemAfterDeletion()
+    {
+        var targetId = await Add("with file");
+        await using (var context = _factory.CreateDbContext())
+        {
+            var target = await context.ChatMessagesEntities.SingleAsync(m => m.Id == targetId);
+            target.Files.Add(new ChatFileContentEntity
+            {
+                Id = 0, MessageId = targetId, FileName = "report.txt", Size = 12,
+                MimeType = "text/plain", UploadId = "uploaded-file"
+            });
+            await context.SaveChangesAsync();
+        }
+        var reply = await Add("answer", replyTo: targetId);
+
+        Assert.True((await _repository.GetByIdAsync(reply))!.ReplyContent!.HasAttachments);
+        Assert.True((await _repository.GetBeforeAsync(_chatId, null, 10))
+            .Single(m => m.Id == reply).ReplyContent!.HasAttachments);
+
+        await _repository.DeleteAsync(targetId);
+
+        Assert.False((await _repository.GetByIdAsync(reply))!.ReplyContent!.HasAttachments);
+    }
+
     private sealed class TestContextFactory(DbContextOptions<ServerDbContext> options) : IDbContextFactory<ServerDbContext>
     {
         public ServerDbContext CreateDbContext() => new(options);

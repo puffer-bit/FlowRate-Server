@@ -9,5 +9,6 @@ public sealed record ChatReplyContentModel
     public int? SenderUserId { get; init; }
     public DateTime SentTime { get; init; }
     public ChatTextContentModel? TextContent { get; init; }
+    public bool HasAttachments { get; init; }
     public bool IsDeleted { get; init; }
 }
