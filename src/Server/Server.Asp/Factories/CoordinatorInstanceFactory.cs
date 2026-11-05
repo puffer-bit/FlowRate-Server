@@ -112,10 +112,12 @@ public class CoordinatorInstanceFactory : ICoordinatorInstanceFactory
         var connectionManager = CreateConnectionManager(logger, connectionsContext, heartbeatManager,
             new ClientConnectionFactory(rateLimits));
 
+        var chatViewers = new ChatViewersHandler(chatSessionManager, userManager, roles, messageSender,
+            connectionManager, visibility, logger);
         var messagesHandlers = CreateMessageHandlers(logger, 
             coordinatorInstanceContext, coordinatorInstanceModel.Id, userManager, sessionManager, sessionLayout,
             chatSessionManager, hybridSessionManager, messageSender, heartbeatManager, connectionManager, authenticator,
-            mediaService, readService, roles, visibility);
+            mediaService, readService, roles, visibility).Append(chatViewers);
         
         var messageRouter = CreateMessageRouter(logger, messagesHandlers, connectionManager, rateLimits,
             new RequestAuthorizer(roles, hybridSessionManager, sessionManager));
@@ -136,7 +138,8 @@ public class CoordinatorInstanceFactory : ICoordinatorInstanceFactory
             pushNotifier,
             mediaService,
             settingsApplier,
-            roles);
+            roles,
+            chatViewers);
 
         return coordinatorInstance;
     }
