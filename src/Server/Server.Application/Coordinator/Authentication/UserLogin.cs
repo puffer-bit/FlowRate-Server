@@ -11,12 +11,17 @@ namespace Server.Application.Coordinator.Authentication;
 /// The last step of every login: the user is attached, the connection is theirs and the device gets the token of its
 /// session. The other connections of the user stay: a user can be connected from several devices.
 /// </summary>
-public sealed class UserLogin(IUserManager userManager, UserSessions sessions)
+public sealed class UserLogin(IUserManager userManager, UserSessions sessions,
+    Server.Application.Coordinator.Moderation.ModerationService? moderation = null)
 {
     public UserSessions Sessions => sessions;
 
     /// <summary>A login with the identity, proven by the second stage when the user has one: a new session.</summary>
-    public async Task<LoginOutcome> AttachAsync(string? userIdentity, DeviceInfoDTO? device,
+    public Task<LoginOutcome> AttachAsync(string? userIdentity, DeviceInfoDTO? device, IClientConnection connection) =>
+        moderation == null ? AttachCoreAsync(userIdentity, device, connection) :
+        moderation.AdmitAsync(userIdentity, null, connection, () => AttachCoreAsync(userIdentity, device, connection));
+
+    private async Task<LoginOutcome> AttachCoreAsync(string? userIdentity, DeviceInfoDTO? device,
         IClientConnection connection)
     {
         var attachment = await userManager.AttachUser(userIdentity, connection);
@@ -28,7 +33,11 @@ public sealed class UserLogin(IUserManager userManager, UserSessions sessions)
     }
 
     /// <summary>A login with the token of a session: the session goes on with the next token.</summary>
-    public async Task<LoginOutcome> ResumeAsync(UserSession session, string token, DeviceInfoDTO? device,
+    public Task<LoginOutcome> ResumeAsync(UserSession session, string token, DeviceInfoDTO? device, IClientConnection connection) =>
+        moderation == null ? ResumeCoreAsync(session, token, device, connection) :
+        moderation.AdmitAsync(null, session.UserId, connection, () => ResumeCoreAsync(session, token, device, connection));
+
+    private async Task<LoginOutcome> ResumeCoreAsync(UserSession session, string token, DeviceInfoDTO? device,
         IClientConnection connection)
     {
         var attachment = await userManager.AttachUser(session.UserId, connection);
@@ -55,4 +64,4 @@ public sealed class UserLogin(IUserManager userManager, UserSessions sessions)
 /// <param name="UserIdentity">The identity the user logged in with, or got; null for a login with a session token.</param>
 /// <param name="SessionToken">The token the device logs in with next time.</param>
 public sealed record LoginOutcome(ErrorCode? Error, UserModel? User, string? UserIdentity, AttachUserResult Attach,
-    string? SessionToken);
+    string? SessionToken, string? BanReason = null);

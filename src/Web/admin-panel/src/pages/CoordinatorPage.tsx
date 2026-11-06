@@ -27,6 +27,7 @@ export function CoordinatorPage() {
             </div>
             <Group gap="sm">
               <StateBadge state={summary.state} />
+              <Button component={Link} to="bans" variant="default" size="xs">Bans</Button>
               <Button component={Link} to="roles" variant="default" size="xs">Roles</Button>
               <Button component={Link} to="settings" variant="default" size="xs">Settings</Button>
             </Group>

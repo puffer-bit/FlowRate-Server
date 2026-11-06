@@ -37,7 +37,7 @@ be renamed, given a color, moved, deleted, assigned or unassigned. Only its perm
 | `CreateSessions`            | Creating sessions. The creator of a hybrid session becomes its host.            |
 | `ManageSessions`            | Changing and deleting any session, and arranging sessions and categories.       |
 | `KickMembers`               | Kicking from any hybrid session.                                                |
-| `BanMembers`                | Banning from any hybrid session.                                                |
+| `BanMembers`                | Global account/IP bans, freezing, reinstatement and history.                    |
 | `ApproveMembers`            | Approving or rejecting users who wait to enter a hybrid session.                |
 | `ManageMessages`            | Deleting other users' chat messages.                                            |
 | `ManageUsers`               | Changing other users' names and avatars.                                        |
@@ -62,7 +62,7 @@ A role manages only what is below it:
 ### Session hosts
 
 The host of a hybrid session (`HybridSessionModel.HostId`) has `RequestAuthorizer.HostPermissions` in that
-session, whatever their roles: `ManageSessions`, `KickMembers`, `BanMembers` and `ApproveMembers`. A host may
+session, whatever their roles: `ManageSessions`, `KickMembers` and `ApproveMembers`. A host may
 act on users of the same rank, so a plain user can moderate their own session. Users ranked above the host are
 out of reach. A request goes through if either the role or the host route allows it.
 

@@ -146,6 +146,15 @@ public class RequestAuthorizerTests
     }
 
     [Fact]
+    public async Task GlobalBanHistoryAndRevocation_AreNotGrantedToSessionHosts()
+    {
+        Assert.False(await _authorizer.IsAllowedAsync(From(HostId, new CoordinatorBansRequest())));
+        Assert.False(await _authorizer.IsAllowedAsync(From(HostId, new CoordinatorRevokeBanRequest(Guid.NewGuid()))));
+        Assert.True(await _authorizer.IsAllowedAsync(From(AdminId, new CoordinatorBansRequest(true))));
+        Assert.True(await _authorizer.IsAllowedAsync(From(AdminId, new CoordinatorRevokeBanRequest(Guid.NewGuid()))));
+    }
+
+    [Fact]
     public void FrozenUser_MayRead_ButNotWrite()
     {
         _permissions.Setup(p => p.IsFrozen(PlainId)).Returns(true);

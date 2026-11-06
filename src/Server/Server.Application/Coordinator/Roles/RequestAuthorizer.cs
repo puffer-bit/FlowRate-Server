@@ -11,7 +11,7 @@ public sealed class RequestAuthorizer
 {
     /// <summary>What the host of a hybrid session may do in it, whatever their roles.</summary>
     public const Permission HostPermissions =
-        Permission.ManageSessions | Permission.KickMembers | Permission.BanMembers | Permission.ApproveMembers;
+        Permission.ManageSessions | Permission.KickMembers | Permission.ApproveMembers;
 
     private readonly ICoordinatorPermissions _permissions;
     private readonly IHybridSessionManager _hybridSessions;

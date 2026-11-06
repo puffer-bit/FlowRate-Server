@@ -35,6 +35,108 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/panel/coordinators/{id}/bans": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: {
+                    history?: boolean;
+                };
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["BanDTO"][];
+                        "application/json": components["schemas"]["BanDTO"][];
+                        "text/json": components["schemas"]["BanDTO"][];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["CreateBan"];
+                    "text/json": components["schemas"]["CreateBan"];
+                    "application/*+json": components["schemas"]["CreateBan"];
+                };
+            };
+            responses: {
+                /** @description No Content */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/panel/coordinators/{id}/bans/{banId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                    banId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description No Content */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/panel/coordinators/{id}/settings": {
         parameters: {
             query?: never;
@@ -996,6 +1098,27 @@ export interface components {
             allowedIps?: string[];
             bannedIps?: string[];
         };
+        BanDTO: {
+            /** Format: uuid */
+            id: string;
+            kind: components["schemas"]["BanKind"];
+            /** Format: int32 */
+            userId: null | number;
+            address: null | string;
+            reason: string;
+            /** Format: int32 */
+            createdBy: number;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            expiresAt: null | string;
+            /** Format: int32 */
+            revokedBy: null | number;
+            /** Format: date-time */
+            revokedAt: null | string;
+        };
+        /** @enum {unknown} */
+        BanKind: "Account" | "Ip" | "Hardware";
         ConnectedUserDto: {
             /** Format: int32 */
             id: number;
@@ -1063,6 +1186,15 @@ export interface components {
             /** Format: date-time */
             lastConnectionAtUtc: string;
             roleIds: number[];
+        };
+        CreateBan: {
+            /** Format: int32 */
+            userId: number;
+            kind: components["schemas"]["BanKind"];
+            reason?: null | string;
+            /** Format: date-time */
+            expiresAt?: null | string;
+            address?: null | string;
         };
         CreateCoordinatorDto: {
             name: string;

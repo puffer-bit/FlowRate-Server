@@ -42,6 +42,8 @@ using Server.Application.Coordinator.Handlers.Roles;
 using Server.Application.Coordinator.Roles;
 using Server.Application.Coordinator.Handlers.Users.Security;
 using Server.Application.Orchestrator.Security;
+using Server.Application.Coordinator.Moderation;
+using Server.Core.Models.Moderation;
 
 
 
@@ -112,17 +114,26 @@ public class CoordinatorInstanceFactory : ICoordinatorInstanceFactory
         var connectionManager = CreateConnectionManager(logger, connectionsContext, heartbeatManager,
             new ClientConnectionFactory(rateLimits));
 
+        var moderation = new ModerationService(coordinatorInstanceModel.Id,
+            _provider.GetRequiredService<IBanRepository>(), _provider.GetRequiredService<IUserRepository>(),
+            userManager, connectionManager, hybridSessionManager, roles, _provider.GetRequiredService<TimeProvider>(), logger);
+        gatewayService.CheckAddress = async address =>
+        {
+            if (!coordinatorInstanceContext.Model.AccessList.IsAllowed(address)) return "This IP address is not allowed.";
+            return (await moderation.CheckAddressAsync(address))?.Reason;
+        };
+
         var chatViewers = new ChatViewersHandler(chatSessionManager, userManager, roles, messageSender,
             connectionManager, visibility, logger);
         var messagesHandlers = CreateMessageHandlers(logger, 
             coordinatorInstanceContext, coordinatorInstanceModel.Id, userManager, sessionManager, sessionLayout,
             chatSessionManager, hybridSessionManager, messageSender, heartbeatManager, connectionManager, authenticator,
-            mediaService, readService, roles, visibility).Append(chatViewers);
+            mediaService, readService, roles, visibility, moderation).Append(chatViewers);
         
         var messageRouter = CreateMessageRouter(logger, messagesHandlers, connectionManager, rateLimits,
             new RequestAuthorizer(roles, hybridSessionManager, sessionManager));
         var settingsApplier = new CoordinatorSettingsApplier(logger, coordinatorInstanceContext, heartbeatManager,
-            sfuPool, messageSender, userManager, rateLimits, mediaService);
+            sfuPool, messageSender, userManager, rateLimits, mediaService, connectionManager);
         
         var coordinatorInstance = ActivatorUtilities.CreateInstance<CoordinatorInstance>(_provider, 
             coordinatorInstanceContext,
@@ -139,7 +150,8 @@ public class CoordinatorInstanceFactory : ICoordinatorInstanceFactory
             mediaService,
             settingsApplier,
             roles,
-            chatViewers);
+            chatViewers,
+            moderation);
 
         return coordinatorInstance;
     }
@@ -158,7 +170,7 @@ public class CoordinatorInstanceFactory : ICoordinatorInstanceFactory
     private IAuthenticator CreateAuthenticator(ILogger logger, ICoordinatorInstanceContext coordinatorInstanceContext) =>
         ActivatorUtilities.CreateInstance<Authenticator>(_provider, logger, coordinatorInstanceContext);
     
-    private IGatewayService CreateGatewayService(ILogger logger, CoordinatorInstanceModel coordinatorInstanceModel,
+    private GatewayService CreateGatewayService(ILogger logger, CoordinatorInstanceModel coordinatorInstanceModel,
         IMessageParser parser, IMediaHttpEndpoints mediaEndpoints, IPushHttpEndpoints pushEndpoints,
         RequestRateLimits rateLimits) =>
         ActivatorUtilities.CreateInstance<GatewayService>(
@@ -235,11 +247,11 @@ public class CoordinatorInstanceFactory : ICoordinatorInstanceFactory
         IMediaService mediaService,
         ChatReadService readService,
         ICoordinatorPermissions permissions,
-        SessionVisibility visibility)
+        SessionVisibility visibility, ModerationService moderation)
     {
         var userSessions = new UserSessions(_provider.GetRequiredService<IUserSessionRepository>(), connectionManager,
             coordinatorInstanceId, _provider.GetRequiredService<TimeProvider>());
-        var userLogin = new UserLogin(userManager, userSessions);
+        var userLogin = new UserLogin(userManager, userSessions, moderation);
         var pendingLogins = new PendingLogins();
         var secondStage = new SecondStageAuthentication(logger, messageSender, connectionManager, userLogin, pendingLogins);
         yield return new AuthenticationActionHandler(logger, messageSender, authenticator, connectionManager, userLogin,
@@ -273,7 +285,6 @@ public class CoordinatorInstanceFactory : ICoordinatorInstanceFactory
         yield return new MoveSessionHandler(sessionLayout, messageSender);
         yield return new MoveSessionCategoryHandler(sessionLayout, messageSender);
         yield return ActivatorUtilities.CreateInstance<KickFromSessionHandler>(_provider, hybridSessionManager, messageSender);
-        yield return ActivatorUtilities.CreateInstance<BanInSessionHandler>(_provider, hybridSessionManager, messageSender);
         yield return ActivatorUtilities.CreateInstance<ApproveInSessionHandler>(_provider, hybridSessionManager, messageSender);
         yield return ActivatorUtilities.CreateInstance<RejectInSessionHandler>(_provider, hybridSessionManager, messageSender);
         
@@ -315,7 +326,9 @@ public class CoordinatorInstanceFactory : ICoordinatorInstanceFactory
         yield return ActivatorUtilities.CreateInstance<ChangeUserNameHandler>(_provider, messageSender, userManager, logger);
         yield return new SetAvatarHandler(logger, messageSender, userManager, mediaService);
         yield return new SetUserStatusHandler(logger, messageSender, userManager);
-        yield return new SetUserStateHandler(logger, messageSender, userManager, connectionManager, hybridSessionManager);
+        yield return new SetUserStateHandler(messageSender, userManager, moderation);
+        yield return new BansHandler(messageSender, moderation);
+        yield return new RevokeBanHandler(messageSender, moderation);
         yield return new DeleteUserHandler(logger, messageSender, userManager, connectionManager);
         yield return ActivatorUtilities.CreateInstance<RegisterPushTokenHandler>(_provider, logger, messageSender, coordinatorInstanceId);
         yield return ActivatorUtilities.CreateInstance<UnregisterPushTokenHandler>(_provider, logger, messageSender, coordinatorInstanceId);

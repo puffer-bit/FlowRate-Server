@@ -83,7 +83,9 @@ public sealed class KestrelCoordinatorInstanceGateway : ICoordinatorInstanceGate
             await Task.WhenAny(sendLoop, Task.Delay(CloseTimeout));
             await DrainUntilCloseAsync();
             _abort.Cancel();
-            _socket.Abort();
+            // Aborting a completed handshake can discard the close frame in the underlying transport.
+            if (_socket.State != WebSocketState.Closed)
+                _socket.Abort();
             await sendLoop;
 
             _logger.LogTrace("Web socket connection {ConnectionId} closed.", ConnectionId);
