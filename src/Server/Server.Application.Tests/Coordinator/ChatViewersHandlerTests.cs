@@ -62,7 +62,7 @@ public sealed class ChatViewersHandlerTests : IDisposable
         _handler.HandleMessage(new ChatViewersRequest(7, id ?? Guid.NewGuid(), active) { SenderId = 1 }, "device");
 
     [Fact]
-    public async Task SnapshotIncludesOfflineViewersAndFiltersHiddenBannedAndSystemUsers()
+    public async Task SnapshotIncludesOfflineAndBannedViewersAndFiltersHiddenAndSystemUsers()
     {
         _all[3] = User(3, "offline");
         _all[4] = User(4, "hidden", UserState.Normal, 2);
@@ -70,7 +70,9 @@ public sealed class ChatViewersHandlerTests : IDisposable
         _all[-1] = User(-1, "system", UserState.System);
         await Subscribe();
         var snapshot = Assert.IsType<ChatViewersResponse>(Assert.Single(_sent));
-        var user = Assert.Single(snapshot.Users);
+        Assert.Equal(new[] { 5, 3 }, snapshot.Users.Select(user => user.Id));
+        Assert.Equal(UserState.Banned, snapshot.Users[0].State);
+        var user = snapshot.Users[1];
         Assert.Equal(3, user.Id);
         Assert.Equal(UserStatus.Offline, user.Status);
         Assert.Null(user.Ip);
@@ -95,6 +97,25 @@ public sealed class ChatViewersHandlerTests : IDisposable
         Assert.Equal(id, delta.SubscriptionId);
         Assert.Equal(new[] { 3, 5 }, delta.Upserted.Select(u => u.Id));
         Assert.Equal(new[] { 4 }, delta.Removed);
+    }
+
+    [Fact]
+    public async Task BanningAndUnbanningUpdateTheRowWithoutRemovingIt()
+    {
+        _all[3] = User(3, "Alice");
+        await Subscribe();
+        _sent.Clear();
+        _all[3].Ban();
+        _users.Raise(u => u.UserUpdated += null, _all[3]);
+        var banned = Assert.IsType<ChatViewersChangedNotification>(Assert.Single(_sent));
+        Assert.Empty(banned.Removed);
+        Assert.Equal(UserState.Banned, Assert.Single(banned.Upserted).State);
+        _sent.Clear();
+        _all[3].Reinstate();
+        _users.Raise(u => u.UserUpdated += null, _all[3]);
+        var unbanned = Assert.IsType<ChatViewersChangedNotification>(Assert.Single(_sent));
+        Assert.Empty(unbanned.Removed);
+        Assert.Equal(UserState.Normal, Assert.Single(unbanned.Upserted).State);
     }
 
     [Fact]

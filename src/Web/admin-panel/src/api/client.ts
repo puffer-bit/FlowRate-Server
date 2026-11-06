@@ -156,3 +156,9 @@ export const queryKeys = {
   coordinatorUsers: (id: string) => ['coordinator', id, 'users'] as const,
   userSecurity: (id: string, userId: number) => ['coordinator', id, 'users', userId, 'security'] as const,
 }
+
+export type GlobalBan = Schemas['BanDTO']
+export type CreateGlobalBan = Schemas['CreateBan']
+export const getBans = (id: string) => get<GlobalBan[]>(`${coordinatorPath(id)}/bans?history=true`)
+export const createBan = (id: string, ban: CreateGlobalBan) => send<void>('POST', `${coordinatorPath(id)}/bans`, ban)
+export const revokeBan = (id: string, banId: string) => send<void>('DELETE', `${coordinatorPath(id)}/bans/${encodeURIComponent(banId)}`)

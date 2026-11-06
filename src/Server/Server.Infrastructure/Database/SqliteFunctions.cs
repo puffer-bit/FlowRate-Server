@@ -6,8 +6,7 @@ using Microsoft.Data.Sqlite;
 namespace Server.Infrastructure.Database;
 
 /// <summary>
-/// The functions SQLite lacks: <c>sha256(text)</c>, the hash of the UTF-8 text as a blob, which a migration uses to
-/// replace the stored identities with their hashes.
+/// Migration helpers: <c>sha256(text)</c> hashes identities, and <c>normalize_ip(text)</c> canonicalizes legacy IP bans.
 /// </summary>
 public static class SqliteFunctions
 {
@@ -18,7 +17,10 @@ public static class SqliteFunctions
     public static void Register(DbConnection connection)
     {
         if (connection is SqliteConnection sqlite)
+        {
+            sqlite.CreateFunction("normalize_ip", (string? value) => Server.Core.Models.Moderation.GlobalBan.NormalizeAddress(value), isDeterministic: true);
             sqlite.CreateFunction("sha256", (string? text) =>
                 text == null ? null : SHA256.HashData(Encoding.UTF8.GetBytes(text)), isDeterministic: true);
+        }
     }
 }

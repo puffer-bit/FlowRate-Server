@@ -70,7 +70,7 @@ public sealed class SecondStageAuthentication(
         var outcome = await userLogin.AttachAsync(login.UserIdentity, login.Device, connection);
         if (outcome.Error is { } error)
         {
-            Reject(connection, request.ToError(error));
+            Reject(connection, request.ToError(error, outcome.BanReason));
             return HandleMessageResult.ForbiddenRequest;
         }
 

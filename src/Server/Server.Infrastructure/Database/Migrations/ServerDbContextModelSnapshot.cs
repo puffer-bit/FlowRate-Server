@@ -47,6 +47,59 @@ namespace Server.Infrastructure.Database.Migrations
                     b.ToTable("CoordinatorSfuNodes");
                 });
 
+            modelBuilder.Entity("Server.Infrastructure.Database.Entities.BanEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Address")
+                        .HasMaxLength(45)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("CoordinatorId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("CreatedBy")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime?>("ExpiresAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Kind")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("PreviousState")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Reason")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("RevokedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int?>("RevokedBy")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int?>("UserId")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CoordinatorId", "Kind", "Address");
+
+                    b.HasIndex("CoordinatorId", "Kind", "UserId");
+
+                    b.ToTable("GlobalBans", (string)null);
+                });
+
             modelBuilder.Entity("Server.Infrastructure.Database.Entities.CoordinatorInstanceEntity", b =>
                 {
                     b.Property<string>("Id")

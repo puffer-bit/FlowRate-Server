@@ -99,7 +99,7 @@ public class AuthenticationActionHandler : IMessageHandler<UserAuthRequest>
         {
             _logger.LogTrace("User auth rejected for connection {ConnectionId}: {Result}",
                 clientConnection.ConnectionId, outcome.Attach);
-            Reject(request, clientConnection, error);
+            Reject(request, clientConnection, error, outcome.BanReason);
             return HandleMessageResult.ForbiddenRequest;
         }
 
@@ -124,10 +124,10 @@ public class AuthenticationActionHandler : IMessageHandler<UserAuthRequest>
             };
 
     private void Reject(UserAuthRequest? request, IClientConnection clientConnection,
-        ErrorCode error = ErrorCode.AuthFailed)
+        ErrorCode error = ErrorCode.AuthFailed, string? reason = null)
     {
         if (request != null)
-            _messageSender.SendMessageById(clientConnection.ConnectionId, request.ToError(error));
+            _messageSender.SendMessageById(clientConnection.ConnectionId, request.ToError(error, reason));
         clientConnection.Close();
     }
 }

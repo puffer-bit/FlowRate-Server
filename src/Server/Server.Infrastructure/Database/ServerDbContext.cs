@@ -9,6 +9,7 @@ public class ServerDbContext : DbContext
     public DbSet<OrchestratorInstanceEntity> OrchestratorInstance { get; set; }
     public DbSet<CoordinatorInstanceEntity> CoordinatorInstances { get; set; }
     public DbSet<SfuNodeEntity> SfuNodes { get; set; }
+    public DbSet<BanEntity> GlobalBans { get; set; }
     public DbSet<UserEntity> UserEntities { get; set; }
     public DbSet<UserSessionEntity> UserSessions { get; set; }
     public DbSet<SessionEntity> Sessions { get; set; }

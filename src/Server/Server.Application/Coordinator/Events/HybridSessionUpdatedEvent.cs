@@ -30,9 +30,6 @@ public record HybridSessionPeerReplacedEvent(int SessionId, int UserId, string R
 public record HybridSessionPeerKickedEvent(int SessionId, int UserId, int? InitiatorUserId = null, string? Reason = null)
     : HybridSessionUpdatedEvent(SessionId);
 
-public record HybridSessionPeerBannedEvent(int SessionId, int UserId, int? InitiatorUserId = null, string? Reason = null)
-    : HybridSessionUpdatedEvent(SessionId);
-
 public record HybridSessionPeerApprovedEvent(int SessionId, int UserId, int InitiatorUserId)
     : HybridSessionUpdatedEvent(SessionId);
 

@@ -327,8 +327,7 @@ function SettingsForm({ id, saved: latest }: { id: string, saved: CoordinatorSet
           <TagsInput label="Allowed IPs" description="When not empty, only these addresses may connect"
             placeholder="Type an IP and press Enter" value={form.allowedIps} onChange={set('allowedIps')}
             error={fieldErrors.take('AccessList.AllowedIps')} />
-          <TagsInput label="Banned IPs" placeholder="Type an IP and press Enter" value={form.bannedIps}
-            onChange={set('bannedIps')} error={fieldErrors.take('AccessList.BannedIps')} />
+
         </Stack>
       </Fieldset>
 

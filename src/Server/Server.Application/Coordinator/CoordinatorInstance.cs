@@ -20,6 +20,7 @@ namespace Server.Application.Coordinator;
 
 public partial class CoordinatorInstance : ICoordinatorInstance
 {
+    public Moderation.ModerationService? Moderation { get; }
     public ICoordinatorInstanceContext Context { get; }
     public CoordinatorState State { get; private set; } = CoordinatorState.Offline;
 
@@ -54,9 +55,10 @@ public partial class CoordinatorInstance : ICoordinatorInstance
         IMediaService? mediaService = null,
         CoordinatorSettingsApplier? settingsApplier = null,
         CoordinatorRoles? roles = null,
-        IDisposable? chatViewers = null)
+        IDisposable? chatViewers = null, Moderation.ModerationService? moderation = null)
     {
         _chatViewers = chatViewers;
+        Moderation = moderation;
         _roles = roles;
         _settingsApplier = settingsApplier;
         _mediaService = mediaService;
@@ -93,6 +95,7 @@ public partial class CoordinatorInstance : ICoordinatorInstance
             // Requests are checked against the roles, so they are there before the first connection
             if (_roles != null)
                 await _roles.LoadAsync();
+            if (Moderation != null) { await Moderation.ListAsync(true); Moderation.Start(); }
             await _sessionManager.LoadSessionsAsync();
             await _gatewayService.StartAsync(_messageRouter);
             _mediaService?.Start();
@@ -195,6 +198,7 @@ public partial class CoordinatorInstance : ICoordinatorInstance
 
     public void Dispose()
     {
+        Moderation?.Dispose();
         _chatViewers?.Dispose();
         UnsubscribeFromEvents();
 

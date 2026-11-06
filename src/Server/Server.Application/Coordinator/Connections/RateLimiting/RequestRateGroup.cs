@@ -109,10 +109,10 @@ public sealed class RequestRateLimits
         HybridSessionSetMicrophoneMuteRequest or HybridSessionSetSoundMuteRequest
             or HybridSessionSetAfkRequest => RequestRateGroup.MicrophoneMute,
         HybridSessionResumeInboundsRequest => RequestRateGroup.InboundResume,
-        ApproveUserRequest or RejectUserRequest or KickFromSessionRequest or BanInSessionRequest
+        ApproveUserRequest or RejectUserRequest or KickFromSessionRequest
             or CoordinatorCreateRoleRequest or CoordinatorUpdateRoleRequest or CoordinatorDeleteRoleRequest
             or CoordinatorReorderRolesRequest or CoordinatorAssignRoleRequest or CoordinatorUnassignRoleRequest
-            or CoordinatorSetUserStateRequest or CoordinatorDeleteUserRequest
+            or CoordinatorSetUserStateRequest or CoordinatorDeleteUserRequest or CoordinatorRevokeBanRequest
             => RequestRateGroup.Moderation,
         SetMessagePinnedRequest or SendMessageRequest or SetMessageReactionRequest or EditMessageRequest or DeleteMessageRequest or ChatTypingRequest
             or HybridSessionPokeRequest => RequestRateGroup.ChatWrite,

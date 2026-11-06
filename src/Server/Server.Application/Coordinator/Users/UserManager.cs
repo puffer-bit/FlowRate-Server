@@ -83,7 +83,10 @@ public class UserManager : IUserManager
             return UserAttachment.Rejected(AttachUserResult.UnknownIdentity);
         }
 
-        return Attach(user, userIdentity, clientConnection);
+        var attachment = Attach(user, userIdentity, clientConnection);
+        if (attachment.Result == AttachUserResult.Attached && !attachment.User!.IsSystem)
+            await _userRepository.UpdateAsync(attachment.User);
+        return attachment;
     }
 
     public async Task<UserAttachment> AttachUser(int userId, IClientConnection clientConnection)
@@ -93,7 +96,9 @@ public class UserManager : IUserManager
             return UserAttachment.Rejected(AttachUserResult.UnknownIdentity);
 
         user.MarkConnected(clientConnection.IpEndpoint, DateTime.UtcNow);
-        return Attach(user, null, clientConnection);
+        var attachment = Attach(user, null, clientConnection);
+        if (attachment.Result == AttachUserResult.Attached) await _userRepository.UpdateAsync(attachment.User!);
+        return attachment;
     }
 
     private UserAttachment Attach(UserModel? user, string? userIdentity, IClientConnection clientConnection)

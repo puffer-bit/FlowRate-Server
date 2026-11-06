@@ -10,6 +10,7 @@ import { SfuNodesPage } from './pages/SfuNodesPage'
 import { CoordinatorPage } from './pages/CoordinatorPage'
 import { CoordinatorSettingsPage } from './pages/CoordinatorSettingsPage'
 import { OverviewPage } from './pages/OverviewPage'
+import { BansPage } from './pages/BansPage'
 import { RolesPage } from './pages/RolesPage'
 
 export function App() {
@@ -40,7 +41,7 @@ export function App() {
 
   const coordinatorId = location.pathname.match(/^\/coordinators\/([^/]+)/)?.[1]
   const coordinator = overview.data?.coordinators.find(item => item.id === coordinatorId)
-  const section = location.pathname.endsWith('/settings') ? 'Settings' : location.pathname.endsWith('/roles') ? 'Roles & access' : coordinatorId ? 'Coordinator' : location.pathname === '/coordinators' ? 'Coordinators' : location.pathname === '/sfu-nodes' ? 'SFU nodes' : 'Statistics'
+  const section = location.pathname.endsWith('/bans') ? 'Global bans' : location.pathname.endsWith('/settings') ? 'Settings' : location.pathname.endsWith('/roles') ? 'Roles & access' : coordinatorId ? 'Coordinator' : location.pathname === '/coordinators' ? 'Coordinators' : location.pathname === '/sfu-nodes' ? 'SFU nodes' : 'Statistics'
 
   return (
     <div className={`panel-shell ${sidebarCollapsed ? 'sidebar-collapsed' : ''}`}>
@@ -59,6 +60,7 @@ export function App() {
             <div className="nav-label coordinator-label">COORDINATOR</div>
             <NavLink to={`/coordinators/${coordinatorId}`} end className="nav-link" aria-label="Activity" title="Activity"><PanelIcon name="activity" /><span className="nav-text">Activity</span></NavLink>
             <NavLink to={`/coordinators/${coordinatorId}/roles`} className="nav-link" aria-label="Roles & access" title="Roles & access"><PanelIcon name="shield" /><span className="nav-text">Roles & access</span></NavLink>
+            <NavLink to={`/coordinators/${coordinatorId}/bans`} className="nav-link" aria-label="Global bans" title="Global bans"><PanelIcon name="shield" /><span className="nav-text">Global bans</span></NavLink>
             <NavLink to={`/coordinators/${coordinatorId}/settings`} className="nav-link" aria-label="Settings" title="Settings"><PanelIcon name="settings" /><span className="nav-text">Settings</span></NavLink>
           </>}
         </nav>
@@ -84,6 +86,7 @@ export function App() {
             <Route path="sfu-nodes" element={<SfuNodesPage />} />
             <Route path="coordinators/:id" element={<CoordinatorPage />} />
             <Route path="coordinators/:id/settings" element={<CoordinatorSettingsPage />} />
+            <Route path="coordinators/:id/bans" element={<BansPage />} />
             <Route path="coordinators/:id/roles" element={<RolesPage />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
