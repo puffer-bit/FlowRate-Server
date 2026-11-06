@@ -43,6 +43,20 @@ public sealed class ChatMessageModel
 
     public IReadOnlyList<string> UsersIds { get; init; } = [];
 
+    private DateTime? _pinnedAt;
+    private int? _pinnedByUserId;
+    public DateTime? PinnedAt { get => _pinnedAt; init => _pinnedAt = value; }
+    public int? PinnedByUserId { get => _pinnedByUserId; init => _pinnedByUserId = value; }
+    public bool IsPinned => PinnedAt.HasValue;
+
+    public bool SetPinned(bool pinned, int userId, DateTime now)
+    {
+        if (IsPinned == pinned) return false;
+        _pinnedAt = pinned ? now : null;
+        _pinnedByUserId = pinned ? userId : null;
+        return true;
+    }
+
     public bool IsDelivered { get => _isDelivered; init => _isDelivered = value; }
     public bool IsReposted { get; init; }
     public bool IsDeleted { get; init; }
