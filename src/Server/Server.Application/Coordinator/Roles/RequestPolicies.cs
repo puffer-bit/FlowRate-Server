@@ -74,6 +74,9 @@ public static class RequestPolicies
         SendMessageRequest request => InSession(request.ChatId, View | Permission.SendMessages
             | (HasAttachments(request) ? Permission.AttachFiles : Permission.None)),
         ChatTypingRequest request => InSession(request.ChatId, View | Permission.SendMessages),
+        SetMessagePinnedRequest request => InSession(request.ChatId, View | Permission.ManageMessages),
+        ChatPinnedMessagesRequest request => InSession(request.ChatId, View),
+        ChatHistoryWindowRequest request => InSession(request.ChatId, View),
         SetMessageReactionRequest request => InSession(request.ChatId, View | Permission.SendMessages),
         EditMessageRequest request => InSession(request.ChatId, View | Permission.SendMessages),
         // Deleting messages of others needs ManageMessages; the chat checks it, knowing the author
@@ -108,7 +111,7 @@ public static class RequestPolicies
         JoinSessionRequest request => request.SessionType == SessionType.Chat,
         LeaveSessionRequest or SessionInfoRequest or HybridSessionLeaveRequest => true,
 
-        ChatSessionHistoryRequest or ChatSessionMessageRequest or ChatSessionHistoryPageRequest
+        ChatPinnedMessagesRequest or ChatHistoryWindowRequest or ChatSessionHistoryRequest or ChatSessionMessageRequest or ChatSessionHistoryPageRequest
             or ChatSessionChangesRequest or ChatReadStatesRequest or ChatMarkReadRequest or ChatViewersRequest => true,
 
         // Securing one's own account is never held back

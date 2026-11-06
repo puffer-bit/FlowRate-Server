@@ -86,6 +86,26 @@ public class MessagesRepository : IMessagesRepository
         return await ToModelsAsync(context, entities, cancellationToken);
     }
 
+    public async Task<List<ChatMessageModel>> GetAfterAsync(int chatId, int afterMessageId, int take,
+        CancellationToken cancellationToken = default)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+        var entities = await WithContent(context.ChatMessagesEntities)
+            .Where(x => x.ChatId == chatId && x.Id > afterMessageId)
+            .OrderBy(x => x.Id).Take(take).ToListAsync(cancellationToken);
+        return await ToModelsAsync(context, entities, cancellationToken);
+    }
+
+    public async Task<List<ChatMessageModel>> GetPinnedAsync(int chatId, CancellationToken cancellationToken = default)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+        var entities = await WithContent(context.ChatMessagesEntities)
+            .Where(x => x.ChatId == chatId && x.PinnedAt != null)
+            .OrderByDescending(x => x.PinnedAt).ThenByDescending(x => x.Id)
+            .ToListAsync(cancellationToken);
+        return await ToModelsAsync(context, entities, cancellationToken);
+    }
+
     public async Task<List<ChatMessageModel>> GetChangesAsync(int chatId,
         long afterRevision,
         int take,
@@ -175,6 +195,8 @@ public class MessagesRepository : IMessagesRepository
             return null;
 
         entity.IsDeleted = true;
+        entity.PinnedAt = null;
+        entity.PinnedByUserId = null;
         entity.Revision = await NextRevisionAsync(context, entity.ChatId, cancellationToken);
         await context.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);

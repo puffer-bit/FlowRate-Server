@@ -30,6 +30,8 @@ public static class ChatMessageMapperExtensions
             DelayedSentTime = model.DelayedSentTime,
             DisposeTime = model.DisposeTime,
             EditTime = model.EditTime,
+            PinnedAt = model.PinnedAt,
+            PinnedByUserId = model.PinnedByUserId,
             IsDelayed = model.IsDelayed,
             IsEdited = model.IsEdited,
             IsReposted = model.IsReposted,
