@@ -257,7 +257,11 @@ function SettingsForm({ id, saved: latest }: { id: string, saved: CoordinatorSet
         </Alert>
       )}
 
-      <Fieldset legend="General">
+      <nav className="settings-jumps" aria-label="Settings sections">
+        {['General', 'Users', 'Access', 'Heartbeat', 'Media', 'Uploads', 'Rate limits', 'SFU nodes'].map(label => <a key={label} href={`#settings-${label.toLowerCase().replaceAll(' ', '-')}`}>{label}</a>)}
+      </nav>
+
+      <Fieldset legend="General" id="settings-general" className="settings-section">
         <Stack>
           <TextInput label="Name" required value={form.name} onChange={e => set('name')(e.currentTarget.value)}
             error={fieldErrors.take('Name')} />
@@ -281,7 +285,7 @@ function SettingsForm({ id, saved: latest }: { id: string, saved: CoordinatorSet
         </Stack>
       </Fieldset>
 
-      <Fieldset legend="Users">
+      <Fieldset legend="Users" id="settings-users" className="settings-section">
         <Stack>
           <SimpleGrid cols={{ base: 1, sm: 2 }}>
             <NumberInput label="Max online users" description="Further logins are refused while this many are online"
@@ -299,7 +303,7 @@ function SettingsForm({ id, saved: latest }: { id: string, saved: CoordinatorSet
         </Stack>
       </Fieldset>
 
-      <Fieldset legend="Access">
+      <Fieldset legend="Access" id="settings-access" className="settings-section">
         <Stack>
           <div>
             <Group gap="xs" mb={4}>
@@ -323,12 +327,11 @@ function SettingsForm({ id, saved: latest }: { id: string, saved: CoordinatorSet
           <TagsInput label="Allowed IPs" description="When not empty, only these addresses may connect"
             placeholder="Type an IP and press Enter" value={form.allowedIps} onChange={set('allowedIps')}
             error={fieldErrors.take('AccessList.AllowedIps')} />
-          <TagsInput label="Banned IPs" placeholder="Type an IP and press Enter" value={form.bannedIps}
-            onChange={set('bannedIps')} error={fieldErrors.take('AccessList.BannedIps')} />
+
         </Stack>
       </Fieldset>
 
-      <Fieldset legend="Heartbeat">
+      <Fieldset legend="Heartbeat" id="settings-heartbeat" className="settings-section">
         <SimpleGrid cols={{ base: 1, sm: 2 }}>
           <NumberInput label="Check interval, s" required min={1} max={3600} allowDecimal={false}
             value={form.heartbeatInterval} onChange={set('heartbeatInterval')}
@@ -339,7 +342,7 @@ function SettingsForm({ id, saved: latest }: { id: string, saved: CoordinatorSet
         </SimpleGrid>
       </Fieldset>
 
-      <Fieldset legend="Media">
+      <Fieldset legend="Media" id="settings-media" className="settings-section">
         <SimpleGrid cols={{ base: 1, sm: 2 }}>
           <NumberInput label="Max file size, MB" required min={1} allowDecimal={false} thousandSeparator=" "
             value={form.maxFileSizeMb} onChange={set('maxFileSizeMb')}
@@ -350,7 +353,7 @@ function SettingsForm({ id, saved: latest }: { id: string, saved: CoordinatorSet
         </SimpleGrid>
       </Fieldset>
 
-      <Fieldset legend="Uploads">
+      <Fieldset legend="Uploads" id="settings-uploads" className="settings-section">
         <SimpleGrid cols={{ base: 1, sm: 3 }}>
           <NumberInput label="Unattached uploads per user"
             description="Files uploaded but not sent in a message yet" required min={1} max={1000}
@@ -365,7 +368,7 @@ function SettingsForm({ id, saved: latest }: { id: string, saved: CoordinatorSet
         </SimpleGrid>
       </Fieldset>
 
-      <Fieldset legend="Rate limits">
+      <Fieldset legend="Rate limits" id="settings-rate-limits" className="settings-section">
         <Stack>
           <Text size="sm" c="dimmed">
             At most this many requests of a group per period, for each connection. A request over the limit is refused;
@@ -420,7 +423,7 @@ function SettingsForm({ id, saved: latest }: { id: string, saved: CoordinatorSet
         </Stack>
       </Fieldset>
 
-      <Fieldset legend="SFU nodes">
+      <Fieldset legend="SFU nodes" id="settings-sfu-nodes" className="settings-section">
         <QueryState query={sfuNodes}>
           {nodes => (
             <SfuNodesPicker nodes={nodes} value={form.sfuNodeIds} onChange={set('sfuNodeIds')}
@@ -437,7 +440,8 @@ function SettingsForm({ id, saved: latest }: { id: string, saved: CoordinatorSet
           save()
         }} />
 
-      <Group justify="flex-end">
+      <Group justify="flex-end" className="settings-savebar">
+        <Text size="xs" c="dimmed" mr="auto">{isDirty ? 'You have unsaved changes' : 'All changes saved'}</Text>
         <Button variant="default" disabled={!isDirty || update.isPending} onClick={() => setForm(initial)}>
           Reset
         </Button>

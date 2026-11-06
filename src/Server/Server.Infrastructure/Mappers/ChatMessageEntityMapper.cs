@@ -25,6 +25,8 @@ public static class ChatMessageEntityMapper
             DelayedSentTime = model.DelayedSentTime,
             DisposeTime = model.DisposeTime,
             EditTime = model.EditTime,
+            PinnedAt = model.PinnedAt,
+            PinnedByUserId = model.PinnedByUserId,
             IsDelayed = model.IsDelayed,
             IsEdited = model.IsEdited,
             IsReposted = model.IsReposted,
@@ -51,7 +53,7 @@ public static class ChatMessageEntityMapper
         if (entity == null)
             return null!;
         
-        return new ChatMessageModel
+        var model = new ChatMessageModel
         {
             Id = entity.Id,
             ChatId = entity.ChatId,
@@ -61,6 +63,8 @@ public static class ChatMessageEntityMapper
             DelayedSentTime = entity.DelayedSentTime,
             DisposeTime = entity.DisposeTime,
             EditTime = entity.EditTime,
+            PinnedAt = entity.PinnedAt,
+            PinnedByUserId = entity.PinnedByUserId,
             IsReposted = entity.IsReposted,
             IsDelivered = entity.IsDelivered,
             IsDeleted = entity.IsDeleted,
@@ -75,6 +79,7 @@ public static class ChatMessageEntityMapper
             Reactions = entity.Reactions?.Select(r => r.ToModel()).ToList() ?? [],
             UsersIds = entity.UsersIds ?? []
         };
+        return model;
     }
     
     // -----------------------------------------------------------------
@@ -107,6 +112,7 @@ public static class ChatMessageEntityMapper
         return new ChatReplyContentModel
         {
             MessageId = target.Id,
+            HasAttachments = !target.IsDeleted && (target.Images.Count > 0 || target.Videos.Count > 0 || target.Files.Count > 0),
             SenderUserId = target.SenderUserId,
             SentTime = target.SentTime,
             TextContent = target.IsDeleted ? null : target.TextContent?.ToModel(),

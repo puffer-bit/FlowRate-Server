@@ -6,7 +6,6 @@ using Shared.Models.Requests.Coordinator.Security;
 using Shared.Models.Requests.SessionActions.ChatSession;
 using Shared.Models.Requests.SessionActions.Generic;
 using Shared.Models.Requests.SessionActions.HybridSession;
-using Shared.Models.Requests.WebRTC;
 using Shared.Models.Requests.Heartbeat;
 
 namespace Server.Application.Coordinator.Connections.RateLimiting;
@@ -95,7 +94,7 @@ public sealed class RequestRateLimits
         // A proof can be guessed like a login, so it counts against the same limit per IP
         UserSetPasswordRequest or UserTwoFactorSetupRequest or UserTwoFactorEnableRequest
             or UserTwoFactorDisableRequest or UserPasskeyOptionsRequest or UserPasskeyRegisterRequest
-            or UserPasskeyDeleteRequest => RequestRateGroup.Authentication,
+            or UserPasskeyDeleteRequest or UserIdentityResetRequest => RequestRateGroup.Authentication,
         CreateSessionRequest or DeleteSessionRequest or ChangeHybridSessionSettingsRequest
             or ChangeSessionPermissionsRequest
             => RequestRateGroup.SessionManagement,
@@ -106,20 +105,19 @@ public sealed class RequestRateLimits
             or HybridSessionStartVoiceRequest or HybridSessionStopVoiceRequest
             or HybridSessionStartVideoRequest or HybridSessionStopVideoRequest
             or HybridSessionStartScreenShareRequest or HybridSessionStopScreenShareRequest
-            or HybridSessionSetScreenShareWatchRequest
-            or WebRtcConnectRequest => RequestRateGroup.SessionMedia,
+            or HybridSessionSetScreenShareWatchRequest => RequestRateGroup.SessionMedia,
         HybridSessionSetMicrophoneMuteRequest or HybridSessionSetSoundMuteRequest
             or HybridSessionSetAfkRequest => RequestRateGroup.MicrophoneMute,
         HybridSessionResumeInboundsRequest => RequestRateGroup.InboundResume,
-        ApproveUserRequest or RejectUserRequest or KickFromSessionRequest or BanInSessionRequest
+        ApproveUserRequest or RejectUserRequest or KickFromSessionRequest
             or CoordinatorCreateRoleRequest or CoordinatorUpdateRoleRequest or CoordinatorDeleteRoleRequest
             or CoordinatorReorderRolesRequest or CoordinatorAssignRoleRequest or CoordinatorUnassignRoleRequest
-            or CoordinatorSetUserStateRequest or CoordinatorDeleteUserRequest
+            or CoordinatorSetUserStateRequest or CoordinatorDeleteUserRequest or CoordinatorRevokeBanRequest
             => RequestRateGroup.Moderation,
-        SendTextMessageRequest or EditTextMessageRequest or DeleteTextMessageRequest
+        SetMessagePinnedRequest or SendMessageRequest or SetMessageReactionRequest or EditMessageRequest or DeleteMessageRequest or ChatTypingRequest
             or HybridSessionPokeRequest => RequestRateGroup.ChatWrite,
-        ChatSessionHistoryRequest or ChatSessionMessageRequest or ChatSessionHistoryPageRequest
-            or ChatSessionChangesRequest or ChatReadStatesRequest or ChatMarkReadRequest => RequestRateGroup.ChatRead,
+        ChatPinnedMessagesRequest or ChatHistoryWindowRequest or ChatSessionHistoryRequest or ChatSessionMessageRequest or ChatSessionHistoryPageRequest
+            or ChatSessionChangesRequest or ChatReadStatesRequest or ChatMarkReadRequest or ChatViewersRequest => RequestRateGroup.ChatRead,
         RegisterPushTokenRequest or UnregisterPushTokenRequest => RequestRateGroup.PushRegistration,
         MediaTokenRequest => RequestRateGroup.MediaToken,
         HeartbeatRequest => RequestRateGroup.Heartbeat,

@@ -38,7 +38,7 @@ public class PushReplyServiceTests
             .ReturnsAsync(new PushDeviceModel(CoordinatorId, UserId, "fcm", PushPlatform.Android, "00", new byte[32]));
         _users.Setup(u => u.GetUserAsync(UserId)).ReturnsAsync(User(UserState.Normal));
         _chats.Setup(c => c.AddMessageAsync(ChatId, It.IsAny<NewChatMessageModel>(), UserId))
-            .ReturnsAsync(AddMessageResult.NoError);
+            .ReturnsAsync((ErrorCode?)null);
         var chat = ChatSessionModel.Create(CoordinatorId, "general", UserId);
         _chats.Setup(c => c.TryGetSession(ChatId, out chat)).Returns(true);
         _reads.Setup(r => r.GetLastMessageIdAsync(ChatId, It.IsAny<CancellationToken>())).ReturnsAsync(50);
@@ -105,10 +105,10 @@ public class PushReplyServiceTests
     }
 
     [Theory]
-    [InlineData(AddMessageResult.ChatNotExists, PushReplyResult.ChatNotExists)]
-    [InlineData(AddMessageResult.Rejected, PushReplyResult.Forbidden)]
-    [InlineData(AddMessageResult.InternalError, PushReplyResult.InternalError)]
-    public async Task Reply_ReportsWhatTheChatAnswered(AddMessageResult added, PushReplyResult expected)
+    [InlineData(ErrorCode.ChatNotFound, PushReplyResult.ChatNotExists)]
+    [InlineData(ErrorCode.ChatReadOnly, PushReplyResult.Forbidden)]
+    [InlineData(ErrorCode.Internal, PushReplyResult.InternalError)]
+    public async Task Reply_ReportsWhatTheChatAnswered(ErrorCode? added, PushReplyResult expected)
     {
         _chats.Setup(c => c.AddMessageAsync(ChatId, It.IsAny<NewChatMessageModel>(), UserId)).ReturnsAsync(added);
 

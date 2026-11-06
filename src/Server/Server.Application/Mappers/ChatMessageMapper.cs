@@ -30,6 +30,8 @@ public static class ChatMessageMapperExtensions
             DelayedSentTime = model.DelayedSentTime,
             DisposeTime = model.DisposeTime,
             EditTime = model.EditTime,
+            PinnedAt = model.PinnedAt,
+            PinnedByUserId = model.PinnedByUserId,
             IsDelayed = model.IsDelayed,
             IsEdited = model.IsEdited,
             IsReposted = model.IsReposted,
@@ -72,6 +74,7 @@ public static class ChatMessageMapperExtensions
         return new ChatReplyContentDTO
         {
             MessageId = model.MessageId,
+            HasAttachments = model.HasAttachments,
             TextContent = model.TextContent?.ToDto(),
             SenderUserId = model.SenderUserId,
             SentTime = model.SentTime,

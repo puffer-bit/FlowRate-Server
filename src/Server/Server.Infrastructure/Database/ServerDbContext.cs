@@ -9,7 +9,9 @@ public class ServerDbContext : DbContext
     public DbSet<OrchestratorInstanceEntity> OrchestratorInstance { get; set; }
     public DbSet<CoordinatorInstanceEntity> CoordinatorInstances { get; set; }
     public DbSet<SfuNodeEntity> SfuNodes { get; set; }
+    public DbSet<BanEntity> GlobalBans { get; set; }
     public DbSet<UserEntity> UserEntities { get; set; }
+    public DbSet<UserSessionEntity> UserSessions { get; set; }
     public DbSet<SessionEntity> Sessions { get; set; }
     public DbSet<HybridSessionEntity> VideoSessionsEntities { get; set; }
     public DbSet<ChatSessionEntity> ChatSessionEntities { get; set; }
@@ -26,8 +28,11 @@ public class ServerDbContext : DbContext
     public DbSet<UserRoleEntity> UserRoles { get; set; }
     public DbSet<SessionPermissionOverrideEntity> SessionPermissionOverrides { get; set; }
 
-    public ServerDbContext(DbContextOptions<ServerDbContext> options) : base(options) { }
-    
+    // On the connection, not in the options: a pooled context cannot change them, and every context gets the
+    // functions this way, the migrations of the server, of `dotnet ef` and of the tests included
+    public ServerDbContext(DbContextOptions<ServerDbContext> options) : base(options) =>
+        SqliteFunctions.Register(Database.GetDbConnection());
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);

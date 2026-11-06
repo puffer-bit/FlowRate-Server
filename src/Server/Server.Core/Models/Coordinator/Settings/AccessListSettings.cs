@@ -15,5 +15,6 @@ public sealed record AccessListSettings
     }
 
     public bool IsAllowed(string ip) =>
-        !BannedIps.Contains(ip) && (AllowedIps.Count == 0 || AllowedIps.Contains(ip));
+        !BannedIps.Any(value => Server.Core.Models.Moderation.GlobalBan.NormalizeAddress(value) == Server.Core.Models.Moderation.GlobalBan.NormalizeAddress(ip))
+        && (AllowedIps.Count == 0 || AllowedIps.Any(value => Server.Core.Models.Moderation.GlobalBan.NormalizeAddress(value) == Server.Core.Models.Moderation.GlobalBan.NormalizeAddress(ip)));
 }

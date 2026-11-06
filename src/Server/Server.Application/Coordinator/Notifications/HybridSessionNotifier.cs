@@ -23,7 +23,6 @@ public class HybridSessionNotifier :
     IEventHandler<HybridSessionPeerLeftEvent>,
     IEventHandler<HybridSessionPeerReplacedEvent>,
     IEventHandler<HybridSessionPeerKickedEvent>,
-    IEventHandler<HybridSessionPeerBannedEvent>,
     IEventHandler<HybridSessionPeerStartedVoiceShareEvent>,
     IEventHandler<HybridSessionPeerStoppedVoiceShareEvent>,
     IEventHandler<HybridSessionPeerStartedScreenShareEvent>,
@@ -32,6 +31,8 @@ public class HybridSessionNotifier :
     IEventHandler<HybridSessionPeerUnmuteMicrophoneEvent>,
     IEventHandler<HybridSessionPeerMuteSoundEvent>,
     IEventHandler<HybridSessionPeerUnmuteSoundEvent>,
+    IEventHandler<HybridSessionPeerStartedWatchingScreenShareEvent>,
+    IEventHandler<HybridSessionPeerStoppedWatchingScreenShareEvent>,
     IEventHandler<HybridSessionPeerAfkEvent>,
     IEventHandler<HybridSessionPeerNotAfkEvent>,
     IEventHandler<HybridSessionPeerPokedEvent>
@@ -79,13 +80,13 @@ public class HybridSessionNotifier :
 
     public Task HandleAsync(HybridSessionSFUNodeConnectedEvent evt, CancellationToken ct = default)
     {
-        _visibility.Send(evt.SessionId, new HybridSessionSFUNodeConnectedNotification(evt.SessionId));
+        _visibility.Send(evt.SessionId, new HybridSessionSFUNodeConnectionChangedNotification(evt.SessionId, IsConnected: true));
         return Task.CompletedTask;
     }
 
     public Task HandleAsync(HybridSessionSFUNodeDisconnectedEvent evt, CancellationToken ct = default)
     {
-        _visibility.Send(evt.SessionId, new HybridSessionSFUNodeDisconnectedNotification(evt.SessionId));
+        _visibility.Send(evt.SessionId, new HybridSessionSFUNodeConnectionChangedNotification(evt.SessionId, IsConnected: false));
         return Task.CompletedTask;
     }
 
@@ -133,12 +134,6 @@ public class HybridSessionNotifier :
         return Task.CompletedTask;
     }
 
-    public Task HandleAsync(HybridSessionPeerBannedEvent evt, CancellationToken ct = default)
-    {
-        _visibility.Send(evt.SessionId, new HybridSessionPeerBannedNotification(evt.SessionId, evt.UserId, evt.InitiatorUserId, evt.Reason));
-        return Task.CompletedTask;
-    }
-
     public Task HandleAsync(HybridSessionPeerStartedVoiceShareEvent evt, CancellationToken ct = default)
     {
         SendToPeer(evt.ListenerUserId, evt.ListenerConnectionId,
@@ -173,37 +168,57 @@ public class HybridSessionNotifier :
 
     public Task HandleAsync(HybridSessionPeerMuteMicrophoneEvent evt, CancellationToken ct = default)
     {
-        _visibility.Send(evt.SessionId, new HybridSessionPeerMuteMicrophoneNotification(evt.SessionId, evt.UserId, evt.InitiatorUserId));
+        _visibility.Send(evt.SessionId, new HybridSessionPeerMicrophoneMuteChangedNotification(evt.SessionId, evt.UserId,
+            IsMuted: true, evt.InitiatorUserId));
         return Task.CompletedTask;
     }
 
     public Task HandleAsync(HybridSessionPeerUnmuteMicrophoneEvent evt, CancellationToken ct = default)
     {
-        _visibility.Send(evt.SessionId, new HybridSessionPeerUnmuteMicrophoneNotification(evt.SessionId, evt.UserId, evt.InitiatorUserId));
+        _visibility.Send(evt.SessionId, new HybridSessionPeerMicrophoneMuteChangedNotification(evt.SessionId, evt.UserId,
+            IsMuted: false, evt.InitiatorUserId));
         return Task.CompletedTask;
     }
 
     public Task HandleAsync(HybridSessionPeerMuteSoundEvent evt, CancellationToken ct = default)
     {
-        _visibility.Send(evt.SessionId, new HybridSessionPeerMuteSoundNotification(evt.SessionId, evt.UserId, evt.InitiatorUserId));
+        _visibility.Send(evt.SessionId, new HybridSessionPeerSoundMuteChangedNotification(evt.SessionId, evt.UserId,
+            IsMuted: true, evt.InitiatorUserId));
         return Task.CompletedTask;
     }
 
     public Task HandleAsync(HybridSessionPeerUnmuteSoundEvent evt, CancellationToken ct = default)
     {
-        _visibility.Send(evt.SessionId, new HybridSessionPeerUnmuteSoundNotification(evt.SessionId, evt.UserId, evt.InitiatorUserId));
+        _visibility.Send(evt.SessionId, new HybridSessionPeerSoundMuteChangedNotification(evt.SessionId, evt.UserId,
+            IsMuted: false, evt.InitiatorUserId));
+        return Task.CompletedTask;
+    }
+
+    public Task HandleAsync(HybridSessionPeerStartedWatchingScreenShareEvent evt, CancellationToken ct = default)
+    {
+        _visibility.Send(evt.SessionId,
+            new HybridSessionPeerScreenShareWatchChangedNotification(evt.SessionId, evt.UserId, evt.SharerUserId,
+                IsWatching: true));
+        return Task.CompletedTask;
+    }
+
+    public Task HandleAsync(HybridSessionPeerStoppedWatchingScreenShareEvent evt, CancellationToken ct = default)
+    {
+        _visibility.Send(evt.SessionId,
+            new HybridSessionPeerScreenShareWatchChangedNotification(evt.SessionId, evt.UserId, evt.SharerUserId,
+                IsWatching: false));
         return Task.CompletedTask;
     }
 
     public Task HandleAsync(HybridSessionPeerAfkEvent evt, CancellationToken ct = default)
     {
-        _visibility.Send(evt.SessionId, new HybridSessionPeerAfkNotification(evt.SessionId, evt.UserId, evt.Reason));
+        _visibility.Send(evt.SessionId, new HybridSessionPeerAfkChangedNotification(evt.SessionId, evt.UserId, IsAfk: true, evt.Reason));
         return Task.CompletedTask;
     }
 
     public Task HandleAsync(HybridSessionPeerNotAfkEvent evt, CancellationToken ct = default)
     {
-        _visibility.Send(evt.SessionId, new HybridSessionPeerNotAfkNotification(evt.SessionId, evt.UserId));
+        _visibility.Send(evt.SessionId, new HybridSessionPeerAfkChangedNotification(evt.SessionId, evt.UserId, IsAfk: false));
         return Task.CompletedTask;
     }
 

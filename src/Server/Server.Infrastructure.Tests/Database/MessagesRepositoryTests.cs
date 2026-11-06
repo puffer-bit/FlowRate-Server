@@ -63,6 +63,74 @@ public sealed class MessagesRepositoryTests : IDisposable
     }
 
     [Fact]
+    public async Task Pins_SurviveReloadAndEdits_AndAreRemovedOnDelete()
+    {
+        var id = await Add("pin");
+        var message = (await _repository.GetByIdAsync(id))!;
+        var now = DateTime.UtcNow;
+        message.SetPinned(true, 42, now);
+        var revision = await _repository.UpdateAsync(message);
+        var stored = Assert.Single(await _repository.GetPinnedAsync(_chatId));
+        Assert.Equal(now, stored.PinnedAt);
+        Assert.Equal(42, stored.PinnedByUserId);
+        Assert.Null(stored.EditTime);
+        await Edit(id, "new preview");
+        stored = Assert.Single(await _repository.GetPinnedAsync(_chatId));
+        Assert.Equal("new preview", stored.TextContent!.Text);
+        Assert.True(Assert.Single(await _repository.GetChangesAsync(_chatId, revision, 30)).IsPinned);
+        await _repository.DeleteAsync(id);
+        Assert.Empty(await _repository.GetPinnedAsync(_chatId));
+        Assert.False((await _repository.GetByIdAsync(id))!.IsPinned);
+    }
+
+    [Fact]
+    public async Task After_UsesExclusiveCursorAndSkipsDeletedMessages()
+    {
+        var ids = new List<int>();
+        for (int i = 0; i < 12; i++) ids.Add(await Add(i.ToString()));
+        await _repository.DeleteAsync(ids[5]);
+        var page = await _repository.GetAfterAsync(_chatId, ids[3], 4);
+        Assert.Equal(new[] { ids[4], ids[6], ids[7], ids[8] }, page.Select(x => x.Id));
+        var next = await _repository.GetAfterAsync(_chatId, ids[8], 4);
+        Assert.Equal(ids.Skip(9), next.Select(x => x.Id));
+        Assert.Empty(await _repository.GetAfterAsync(_chatId, ids[^1], 4));
+        Assert.Empty(await _repository.GetAfterAsync(_chatId + 1, ids[3], 4));
+        var before = await _repository.GetBeforeAsync(_chatId, ids[6], 3);
+        Assert.Equal(new[] { ids[2], ids[3], ids[4] }, before.Select(x => x.Id));
+    }
+
+    [Fact]
+    public async Task Reactions_InsertAndDeleteOwnedRows_AndSurviveTextEditsAndHistorySync()
+    {
+        var id = await Add("hello");
+        var message = (await _repository.GetByIdAsync(id))!;
+        message.AddReaction(2, "👍");
+        message.AddReaction(3, "👍");
+        var reactionRevision = await _repository.UpdateAsync(message);
+
+        var stored = (await _repository.GetByIdAsync(id))!;
+        Assert.Equal(2, stored.Reactions.Count);
+        Assert.Null(stored.EditTime);
+        stored.RemoveReaction(2, "👍");
+        stored.AddReaction(2, "❤️");
+        await _repository.UpdateAsync(stored);
+        await Edit(id, "changed");
+
+        stored = (await _repository.GetByIdAsync(id))!;
+        Assert.Equal("changed", stored.TextContent!.Text);
+        Assert.Equal(2, stored.Reactions.Count);
+        Assert.Contains(stored.Reactions, r => r.UserId == 3 && r.Emoji == "👍");
+        Assert.Contains(stored.Reactions, r => r.UserId == 2 && r.Emoji == "❤️");
+        var changes = await _repository.GetChangesAsync(_chatId, reactionRevision, 50);
+        Assert.Equal(2, Assert.Single(changes).Reactions.Count);
+
+        stored.RemoveReaction(3, "👍");
+        stored.RemoveReaction(2, "❤️");
+        await _repository.UpdateAsync(stored);
+        Assert.Empty((await _repository.GetByIdAsync(id))!.Reactions);
+    }
+
+    [Fact]
     public async Task EveryChange_TakesTheNextRevisionOfTheChat()
     {
         var first = await _repository.AddAsync(NewMessage("one"));
@@ -185,6 +253,31 @@ public sealed class MessagesRepositoryTests : IDisposable
         Assert.True(afterDelete.ReplyContent!.IsDeleted);
         Assert.Null(afterDelete.ReplyContent.TextContent);
         Assert.Equal(2, afterDelete.Revision);
+    }
+
+    [Fact]
+    public async Task ReplyPreview_PreservesAttachmentsWhenLoadedAndHidesThemAfterDeletion()
+    {
+        var targetId = await Add("with file");
+        await using (var context = _factory.CreateDbContext())
+        {
+            var target = await context.ChatMessagesEntities.SingleAsync(m => m.Id == targetId);
+            target.Files.Add(new ChatFileContentEntity
+            {
+                Id = 0, MessageId = targetId, FileName = "report.txt", Size = 12,
+                MimeType = "text/plain", UploadId = "uploaded-file"
+            });
+            await context.SaveChangesAsync();
+        }
+        var reply = await Add("answer", replyTo: targetId);
+
+        Assert.True((await _repository.GetByIdAsync(reply))!.ReplyContent!.HasAttachments);
+        Assert.True((await _repository.GetBeforeAsync(_chatId, null, 10))
+            .Single(m => m.Id == reply).ReplyContent!.HasAttachments);
+
+        await _repository.DeleteAsync(targetId);
+
+        Assert.False((await _repository.GetByIdAsync(reply))!.ReplyContent!.HasAttachments);
     }
 
     private sealed class TestContextFactory(DbContextOptions<ServerDbContext> options) : IDbContextFactory<ServerDbContext>

@@ -95,7 +95,7 @@ public static class SessionEntityMapper
             entity.IsVideoMessagesAllowed,
             entity.IsDelayedMessagesAllowed);
 
-        return new ChatSessionModel(entity.Id, entity.CoordinatorInstanceId, entity.Name, ToCapacity(entity.Capacity),
+        return new ChatSessionModel(entity.Id, entity.CoordinatorInstanceId, entity.Name, SessionModel.NoCapacityLimit,
             entity.CreatorUserId, entity.AdminUserId, options, entity.Description, entity.IconPath, entity.IsArchived);
     }
 

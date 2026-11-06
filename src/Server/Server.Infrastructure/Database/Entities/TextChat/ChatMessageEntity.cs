@@ -19,6 +19,8 @@ public class ChatMessageEntity
     public DateTime? DelayedSentTime { get; set; }
     public DateTime? DisposeTime { get; set; }
     public DateTime? EditTime { get; set; }
+    public DateTime? PinnedAt { get; set; }
+    public int? PinnedByUserId { get; set; }
 
     public ChatTextContentEntity? TextContent { get; set; }
     public int? ReplyToMessageId { get; set; }

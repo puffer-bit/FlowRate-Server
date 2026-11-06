@@ -43,6 +43,20 @@ public sealed class ChatMessageModel
 
     public IReadOnlyList<string> UsersIds { get; init; } = [];
 
+    private DateTime? _pinnedAt;
+    private int? _pinnedByUserId;
+    public DateTime? PinnedAt { get => _pinnedAt; init => _pinnedAt = value; }
+    public int? PinnedByUserId { get => _pinnedByUserId; init => _pinnedByUserId = value; }
+    public bool IsPinned => PinnedAt.HasValue;
+
+    public bool SetPinned(bool pinned, int userId, DateTime now)
+    {
+        if (IsPinned == pinned) return false;
+        _pinnedAt = pinned ? now : null;
+        _pinnedByUserId = pinned ? userId : null;
+        return true;
+    }
+
     public bool IsDelivered { get => _isDelivered; init => _isDelivered = value; }
     public bool IsReposted { get; init; }
     public bool IsDeleted { get; init; }
@@ -92,14 +106,14 @@ public sealed class ChatMessageModel
         _replyContent = target.ToReplyContent();
     }
 
-    public EditMessageResult Edit(int userId, string text, DateTime now)
+    public ErrorCode? Edit(int userId, string text, DateTime now)
     {
         if (!IsSentBy(userId) || IsDeleted || IsReadOnly || IsSystem)
-            return EditMessageResult.InsufficientPermissions;
+            return ErrorCode.InsufficientPermissions;
 
         _textContent = new ChatTextContentModel { Text = text };
         _editTime = now;
-        return EditMessageResult.NoError;
+        return null;
     }
 
     public void MarkDelivered() => _isDelivered = true;
@@ -122,6 +136,7 @@ public sealed class ChatMessageModel
     public ChatReplyContentModel ToReplyContent() => new()
     {
         MessageId = Id,
+        HasAttachments = !IsDeleted && (Images.Count > 0 || Videos.Count > 0 || Files.Count > 0),
         SenderUserId = SenderUserId,
         SentTime = SentTime,
         TextContent = TextContent,

@@ -28,19 +28,16 @@ public class SetUserStatusHandler : IMessageHandler<CoordinatorSetUserStatusRequ
             return HandleMessageResult.ForbiddenRequest;
 
         var result = await _userManager.SetStatus(request.SenderId, request.Status);
-        var user = result == SetUserStatusResult.NoError && _userManager.TryGetConnectedUser(request.SenderId, out var updated)
+        var user = result == null && _userManager.TryGetConnectedUser(request.SenderId, out var updated)
             ? updated!.ToDto(request.SenderId)
             : null;
 
-        _messageSender.SendMessageById(connectionId, request.ToResponse(result, user));
+        _messageSender.SendMessageById(connectionId, request.Answer(result, () => request.ToResponse(user!)));
 
-        if (result != SetUserStatusResult.NoError)
+        if (result != null)
             _logger.LogTrace("User {SenderId} failed to set the status {Status}: {Result}", request.SenderId,
                 request.Status, result);
 
         return HandleMessageResult.NoError;
     }
-
-    public BaseMessage? CreateFailureResponse(CoordinatorSetUserStatusRequest request) =>
-        request.ToResponse(SetUserStatusResult.InternalError);
 }

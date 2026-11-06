@@ -23,7 +23,7 @@ internal sealed class FakeSfuGateway : ISFUGateway
 
     public SfuNodeStatus Status => SfuNodeStatus.Initial() with
     {
-        State = IsConnected ? SfuNodeConnectionState.Connected : SfuNodeConnectionState.Disconnected
+        State = IsConnected ? SFUNodeConnectionState.Connected : SFUNodeConnectionState.Disconnected
     };
 
     public SFUTransportCreateResult TransportResult { get; set; } = SFUTransportCreateResult.NoError;
@@ -60,6 +60,9 @@ internal sealed class FakeSfuGateway : ISFUGateway
         IsConnected = true;
         return Connected?.Invoke() ?? Task.CompletedTask;
     }
+
+    public Func<Task>? CaptureConnectionLostHandlers() => ConnectionLost;
+    public Func<Task>? CaptureConnectedHandlers() => Connected;
 
     public Task Connect() => Task.CompletedTask;
     public Task Disconnect() => Task.CompletedTask;
@@ -194,8 +197,8 @@ internal sealed class FakeSfuGateway : ISFUGateway
     private static TransportData Transport() => new(
         Host: "127.0.0.1",
         Port: 40000,
-        DTLSData: Dtls(),
-        ICEData: new ICEParameters { UsernameFragment = "ufrag", Password = "pwd", ICECandidates = [] });
+        DTLSParameters: Dtls(),
+        ICEParameters: new ICEParameters { UsernameFragment = "ufrag", Password = "pwd", Candidates = [] });
 
     public static DTLSParameters Dtls() => new() { Role = "auto", Fingerprints = [] };
 }

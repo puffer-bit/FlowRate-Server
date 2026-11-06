@@ -18,8 +18,8 @@ public static class CoordinatorSettingsMapper
         IsPasswordProtected = !string.IsNullOrEmpty(model.PasswordHash),
         MaxOnlineUsers = model.MaxOnlineUsers,
         MaxUsers = model.MaxUsers,
-        IsMotdEnabled = model.Motd.IsEnabled,
-        MotdText = model.Motd.Text,
+        IsMOTDEnabled = model.Motd.IsEnabled,
+        MOTDText = model.Motd.Text,
         AllowedIps = model.AccessList.AllowedIps.ToList(),
         BannedIps = model.AccessList.BannedIps.ToList(),
         HeartbeatIntervalSeconds = model.Heartbeat.IntervalSeconds,
@@ -30,7 +30,7 @@ public static class CoordinatorSettingsMapper
         UnattachedUploadLifetimeHours = model.Uploads.UnattachedLifetimeHours,
         MediaTokenLifetimeMinutes = model.Uploads.TokenLifetimeMinutes,
         RateLimits = model.RateLimits.ToDto(),
-        SfuNodeIds = model.SfuNodeIds.ToList()
+        SFUNodeIds = model.SfuNodeIds.ToList()
     };
 
     public static CoordinatorRateLimitsDTO ToDto(this CoordinatorRateLimitSettings limits) => new()
@@ -57,7 +57,7 @@ public static class CoordinatorSettingsMapper
     private static RequestRateDTO ToDto(this RequestRateSetting rate) =>
         new() { Count = rate.Count, PeriodSeconds = rate.PeriodSeconds };
 
-    public static SfuNodeDTO ToDto(this SfuNodeSettingsModel node, SfuNodeStatus? status) => new()
+    public static SFUNodeDTO ToDto(this SfuNodeSettingsModel node, SfuNodeStatus? status) => new()
     {
         Id = node.Id, Name = node.Name, Host = node.Host, Port = node.Port, IsEnabled = node.IsEnabled,
         ConnectionState = status?.State,
@@ -75,8 +75,8 @@ public static class CoordinatorSettingsMapper
         RemovePassword = dto.RemovePassword,
         MaxOnlineUsers = dto.MaxOnlineUsers,
         MaxUsers = dto.MaxUsers,
-        IsMotdEnabled = dto.IsMotdEnabled,
-        MotdText = dto.MotdText,
+        IsMotdEnabled = dto.IsMOTDEnabled,
+        MotdText = dto.MOTDText,
         AllowedIps = dto.AllowedIps,
         BannedIps = dto.BannedIps,
         HeartbeatIntervalSeconds = dto.HeartbeatIntervalSeconds,
@@ -87,7 +87,7 @@ public static class CoordinatorSettingsMapper
         UnattachedUploadLifetimeHours = dto.UnattachedUploadLifetimeHours,
         MediaTokenLifetimeMinutes = dto.MediaTokenLifetimeMinutes,
         RateLimits = dto.RateLimits.ToChange(),
-        SfuNodeIds = dto.SfuNodeIds
+        SfuNodeIds = dto.SFUNodeIds
     };
 
     public static RateLimitsChange ToChange(this CoordinatorRateLimitsDTO dto) => new()

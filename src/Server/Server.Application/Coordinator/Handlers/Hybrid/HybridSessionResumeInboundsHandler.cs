@@ -18,11 +18,5 @@ public class HybridSessionResumeInboundsHandler : HybridSessionRequestHandler<Hy
     protected override bool DrivesOwnPeer => true;
 
     protected override async Task<BaseMessage> HandleAsync(HybridSessionResumeInboundsRequest request, IHybridSession session) =>
-        request.ToResponse(await session.PeerManager.ResumeInboundsAsync(request.SenderId, request.InboundIds));
-
-    protected override BaseMessage SessionNotFound(HybridSessionResumeInboundsRequest request) =>
-        request.ToResponse(ResumeInboundsResult.SessionNotExists);
-
-    public override BaseMessage CreateFailureResponse(HybridSessionResumeInboundsRequest request) =>
-        request.ToResponse(ResumeInboundsResult.InternalError);
+        request.Answer(await session.PeerManager.ResumeInboundsAsync(request.SenderId, request.InboundIds), request.ToResponse);
 }

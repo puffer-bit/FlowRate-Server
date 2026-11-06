@@ -11,8 +11,6 @@ public interface IMessageHandler
     Type PayloadType { get; }
     
     Task<HandleMessageResult> HandleMessage(object? data, string connectionId);
-
-    BaseMessage? CreateFailureResponse(object data);
 }
 
 public interface IMessageHandler<TData> : IMessageHandler where TData : class
@@ -24,10 +22,5 @@ public interface IMessageHandler<TData> : IMessageHandler where TData : class
         return await HandleMessage(data as TData, connectionId);
     }
 
-    BaseMessage? IMessageHandler.CreateFailureResponse(object data) =>
-        data is TData typed ? CreateFailureResponse(typed) : null;
-
     Task<HandleMessageResult> HandleMessage(TData? data, string connectionId);
-
-    BaseMessage? CreateFailureResponse(TData request) => null;
 }

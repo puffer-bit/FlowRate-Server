@@ -35,6 +35,108 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/panel/coordinators/{id}/bans": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: {
+                    history?: boolean;
+                };
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["BanDTO"][];
+                        "application/json": components["schemas"]["BanDTO"][];
+                        "text/json": components["schemas"]["BanDTO"][];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["CreateBan"];
+                    "text/json": components["schemas"]["CreateBan"];
+                    "application/*+json": components["schemas"]["CreateBan"];
+                };
+            };
+            responses: {
+                /** @description No Content */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/panel/coordinators/{id}/bans/{banId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                    banId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description No Content */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/panel/coordinators/{id}/settings": {
         parameters: {
             query?: never;
@@ -181,6 +283,74 @@ export interface paths {
         };
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/panel/coordinators": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["CreateCoordinatorDto"];
+                    "text/json": components["schemas"]["CreateCoordinatorDto"];
+                    "application/*+json": components["schemas"]["CreateCoordinatorDto"];
+                };
+            };
+            responses: {
+                /** @description Created */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["CoordinatorCreatedDto"];
+                    };
+                };
+                /** @description Bad Request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ValidationProblemDetails"];
+                    };
+                };
+                /** @description Conflict */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Service Unavailable */
+                503: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
         delete?: never;
         options?: never;
         head?: never;
@@ -928,6 +1098,27 @@ export interface components {
             allowedIps?: string[];
             bannedIps?: string[];
         };
+        BanDTO: {
+            /** Format: uuid */
+            id: string;
+            kind: components["schemas"]["BanKind"];
+            /** Format: int32 */
+            userId: null | number;
+            address: null | string;
+            reason: string;
+            /** Format: int32 */
+            createdBy: number;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            expiresAt: null | string;
+            /** Format: int32 */
+            revokedBy: null | number;
+            /** Format: date-time */
+            revokedAt: null | string;
+        };
+        /** @enum {unknown} */
+        BanKind: "Account" | "Ip" | "Hardware";
         ConnectedUserDto: {
             /** Format: int32 */
             id: number;
@@ -936,6 +1127,10 @@ export interface components {
             status: components["schemas"]["UserStatus"];
             /** Format: date-time */
             connectedAtUtc: string;
+        };
+        CoordinatorCreatedDto: {
+            id: string;
+            state: components["schemas"]["CoordinatorState"];
         };
         CoordinatorDetailsDto: {
             summary: components["schemas"]["CoordinatorSummaryDto"];
@@ -992,6 +1187,26 @@ export interface components {
             lastConnectionAtUtc: string;
             roleIds: number[];
         };
+        CreateBan: {
+            /** Format: int32 */
+            userId: number;
+            kind: components["schemas"]["BanKind"];
+            reason?: null | string;
+            /** Format: date-time */
+            expiresAt?: null | string;
+            address?: null | string;
+        };
+        CreateCoordinatorDto: {
+            name: string;
+            ip: string;
+            /** Format: int32 */
+            port?: number;
+            /** Format: int32 */
+            maxOnlineUsers?: number;
+            /** Format: int32 */
+            maxUsers?: number;
+            sfuNodeIds: number[];
+        };
         HeartbeatSettingsDto: {
             /** Format: int32 */
             intervalSeconds?: number;
@@ -1012,7 +1227,7 @@ export interface components {
             peers: components["schemas"]["PeerDto"][];
         };
         /** @enum {unknown} */
-        HybridSessionNodeState: "Active" | "WaitingForSfuNode";
+        HybridSessionNodeState: "Active" | "WaitingForSFUNode";
         /** @enum {unknown} */
         HybridSessionPeerState: "New" | "WaitingForApprove" | "Connecting" | "WaitingForServer" | "Connected" | "Closed";
         JsonElement: unknown;
@@ -1126,7 +1341,7 @@ export interface components {
             password?: null | string;
         };
         /** @enum {unknown} */
-        SfuNodeConnectionState: "Connecting" | "Connected" | "Unresponsive" | "Disconnected";
+        SFUNodeConnectionState: "Connecting" | "Connected" | "Unresponsive" | "Disconnected";
         SfuNodeDto: {
             /** Format: int32 */
             id: number;
@@ -1139,7 +1354,7 @@ export interface components {
             status: null | components["schemas"]["SfuNodeStatusDto"];
         };
         SfuNodeStatusDto: {
-            state: components["schemas"]["SfuNodeConnectionState"];
+            state: components["schemas"]["SFUNodeConnectionState"];
             /** Format: double */
             pingMs: null | number;
             /** Format: date-time */

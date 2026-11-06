@@ -2,7 +2,6 @@ using Server.Application.Coordinator.Messaging;
 using Server.Application.Mappers;
 using Server.Application.Orchestrator.Roles;
 using Shared.Enums;
-using Shared.Enums.Coordinator;
 using Shared.Models;
 using Shared.Models.Requests.Coordinator;
 
@@ -26,13 +25,11 @@ public class UnassignRoleHandler : IMessageHandler<CoordinatorUnassignRoleReques
         if (request == null)
             return HandleMessageResult.ForbiddenRequest;
 
-        var result = await _roleService.UnassignAsync(_coordinatorInstanceId, request.SenderId, request.UserTargetId,
+        var result = await _roleService.UnassignAsync(_coordinatorInstanceId, request.SenderId, request.TargetUserId,
             request.RoleId);
-        _messageSender.SendMessageById(connectionId, request.ToResponse(result.Status.ToResult(), result.Value?.ToList()));
+        _messageSender.SendMessageById(connectionId, request.Answer(result.Status.ToResult(),
+            () => request.ToResponse(result.Value!.ToList())));
 
         return HandleMessageResult.NoError;
     }
-
-    public BaseMessage? CreateFailureResponse(CoordinatorUnassignRoleRequest request) =>
-        request.ToResponse(CoordinatorRoleResult.InternalError);
 }

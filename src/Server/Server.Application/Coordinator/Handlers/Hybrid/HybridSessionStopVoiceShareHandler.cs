@@ -20,11 +20,5 @@ public class HybridSessionStopVoiceShareHandler : HybridSessionRequestHandler<Hy
     protected override int GetSessionId(HybridSessionStopVoiceRequest request) => request.SessionId;
 
     protected override async Task<BaseMessage> HandleAsync(HybridSessionStopVoiceRequest request, IHybridSession session) =>
-        request.ToResponse(await session.PeerManager.StopVoiceShareAsync(request.SenderId, request.SenderId));
-
-    protected override BaseMessage SessionNotFound(HybridSessionStopVoiceRequest request) =>
-        request.ToResponse(StopVoiceShareResult.PeerNotExists);
-
-    public override BaseMessage CreateFailureResponse(HybridSessionStopVoiceRequest request) =>
-        request.ToResponse(StopVoiceShareResult.InternalError);
+        request.Answer(await session.PeerManager.StopVoiceShareAsync(request.SenderId, request.SenderId), request.ToResponse);
 }

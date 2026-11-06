@@ -18,32 +18,34 @@ export function CoordinatorPage() {
   return (
     <QueryState query={coordinator}>
       {({ summary, sessions, users }) => (
-        <Stack>
+        <Stack gap="xl">
           <Group justify="space-between" align="baseline">
             <div>
-              <Anchor component={Link} to="/" size="sm">← Overview</Anchor>
+              <Anchor component={Link} to="/coordinators" size="sm">← Coordinators</Anchor>
               <Title order={2}>{summary.name}</Title>
               <Text size="sm" c="dimmed">{summary.id} · {summary.ip}:{summary.port}</Text>
             </div>
             <Group gap="sm">
               <StateBadge state={summary.state} />
+              <Button component={Link} to="bans" variant="default" size="xs">Bans</Button>
               <Button component={Link} to="roles" variant="default" size="xs">Roles</Button>
               <Button component={Link} to="settings" variant="default" size="xs">Settings</Button>
             </Group>
           </Group>
 
+          {summary.state === 'Failed' && <Alert color="red" title="Coordinator could not start">
+            Its settings are saved. Check the server logs for the cause, then open <Anchor component={Link} to="settings">Settings</Anchor> and save corrected settings to retry. Other coordinators continue running.
+          </Alert>}
           <SimpleGrid cols={{ base: 2, sm: 4 }}>
-            <StatCard label="Sessions" value={summary.sessionsCount} />
-            <StatCard label="Active sessions" value={summary.activeSessionsCount} />
-            <StatCard label="Connected users" value={summary.connectedUsersCount} />
-            <StatCard label="Uptime" value={formatSince(summary.startedAtUtc, now)} />
+            <StatCard label="Sessions" value={summary.sessionsCount} icon="server" hint="Available on this coordinator" />
+            <StatCard label="Active sessions" value={summary.activeSessionsCount} icon="activity" hint="Currently in progress" />
+            <StatCard label="Connected users" value={summary.connectedUsersCount} icon="users" hint="Currently connected" />
+            <StatCard label="Uptime" value={summary.state === 'Online' ? formatSince(summary.startedAtUtc, now) : '—'} icon="clock" hint="Since the coordinator started" />
           </SimpleGrid>
 
-          <Title order={3}>Sessions</Title>
-          <SessionsTable sessions={sessions} />
+          <section className="data-section"><div className="section-heading"><div><Title order={3}>Sessions</Title><Text size="sm" c="dimmed" mt={6}>Live rooms, media engines and participating peers.</Text></div><Badge color="gray" variant="light">{sessions.length}</Badge></div><SessionsTable sessions={sessions} /></section>
 
-          <Title order={3}>Connected users</Title>
-          <UsersTable users={users} />
+          <section className="data-section"><div className="section-heading"><div><Title order={3}>Connected users</Title><Text size="sm" c="dimmed" mt={6}>People connected to this coordinator right now.</Text></div><Badge color="gray" variant="light">{users.length}</Badge></div><UsersTable users={users} /></section>
         </Stack>
       )}
     </QueryState>
@@ -52,11 +54,11 @@ export function CoordinatorPage() {
 
 function SessionsTable({ sessions }: { sessions: HybridSession[] }) {
   if (sessions.length === 0)
-    return <Text c="dimmed">No sessions.</Text>
+    return <div className="empty-state"><Text fw={600}>No active sessions</Text><Text c="dimmed" size="sm">Sessions will appear here when they are created.</Text></div>
 
   return (
     <Table.ScrollContainer minWidth={640}>
-      <Table striped>
+      <Table>
         <Table.Thead>
           <Table.Tr>
             <Table.Th>ID</Table.Th>
@@ -74,7 +76,7 @@ function SessionsTable({ sessions }: { sessions: HybridSession[] }) {
               <Table.Td>
                 {session.name}
                 {session.isHostMustApprove && <Badge ml="xs" size="xs" variant="outline">approval</Badge>}
-                {session.state === 'WaitingForSfuNode' && <Badge ml="xs" size="xs" color="orange">waiting for SFU node</Badge>}
+                {session.state === 'WaitingForSFUNode' && <Badge ml="xs" size="xs" color="orange">waiting for SFU node</Badge>}
               </Table.Td>
               <Table.Td>#{session.hostId}</Table.Td>
               <Table.Td>{session.engineType}</Table.Td>
@@ -107,11 +109,11 @@ function PeerBadge({ peer }: { peer: Peer }) {
 
 function UsersTable({ users }: { users: ConnectedUser[] }) {
   if (users.length === 0)
-    return <Text c="dimmed">Nobody is connected.</Text>
+    return <div className="empty-state"><Text fw={600}>No users connected</Text><Text c="dimmed" size="sm">Connected users will appear here automatically.</Text></div>
 
   return (
     <Table.ScrollContainer minWidth={520}>
-      <Table striped>
+      <Table>
         <Table.Thead>
           <Table.Tr>
             <Table.Th>ID</Table.Th>

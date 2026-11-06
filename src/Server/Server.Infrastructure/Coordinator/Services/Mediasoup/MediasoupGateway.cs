@@ -65,8 +65,8 @@ public partial class MediasoupGateway : ISFUGateway
         var transportData = new TransportData(
             Host: response.ServerHostAddress,
             Port: (ushort)response.ServerPort,
-            DTLSData: MapProtoDtlsParametersToShared(response.DtlsParameters),
-            ICEData: MapProtoIceParametersToShared(response.IceParameters)
+            DTLSParameters: MapProtoDtlsParametersToShared(response.DtlsParameters),
+            ICEParameters: MapProtoIceParametersToShared(response.IceParameters)
         );
 
         return (SFUTransportCreateResult.NoError, transportData);

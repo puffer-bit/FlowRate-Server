@@ -2,7 +2,6 @@ using Server.Application.Coordinator.Messaging;
 using Server.Application.Mappers;
 using Server.Application.Orchestrator.Roles;
 using Shared.Enums;
-using Shared.Enums.Coordinator;
 using Shared.Models;
 using Shared.Models.Requests.Coordinator;
 
@@ -27,11 +26,9 @@ public class CreateRoleHandler : IMessageHandler<CoordinatorCreateRoleRequest>
             return HandleMessageResult.ForbiddenRequest;
 
         var result = await _roleService.CreateAsync(_coordinatorInstanceId, request.SenderId, request.Role.ToChange());
-        _messageSender.SendMessageById(connectionId, request.ToResponse(result.Status.ToResult(), result.Value?.ToDto()));
+        _messageSender.SendMessageById(connectionId, request.Answer(result.Status.ToResult(),
+            () => request.ToResponse(result.Value!.ToDto())));
 
         return HandleMessageResult.NoError;
     }
-
-    public BaseMessage? CreateFailureResponse(CoordinatorCreateRoleRequest request) =>
-        request.ToResponse(CoordinatorRoleResult.InternalError);
 }

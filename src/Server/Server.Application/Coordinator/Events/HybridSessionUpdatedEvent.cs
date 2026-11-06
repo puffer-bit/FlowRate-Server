@@ -30,9 +30,6 @@ public record HybridSessionPeerReplacedEvent(int SessionId, int UserId, string R
 public record HybridSessionPeerKickedEvent(int SessionId, int UserId, int? InitiatorUserId = null, string? Reason = null)
     : HybridSessionUpdatedEvent(SessionId);
 
-public record HybridSessionPeerBannedEvent(int SessionId, int UserId, int? InitiatorUserId = null, string? Reason = null)
-    : HybridSessionUpdatedEvent(SessionId);
-
 public record HybridSessionPeerApprovedEvent(int SessionId, int UserId, int InitiatorUserId)
     : HybridSessionUpdatedEvent(SessionId);
 
@@ -66,6 +63,12 @@ public record HybridSessionPeerMuteSoundEvent(int SessionId, int UserId, int? In
     : HybridSessionUpdatedEvent(SessionId);
 
 public record HybridSessionPeerUnmuteSoundEvent(int SessionId, int UserId, int? InitiatorUserId = null)
+    : HybridSessionUpdatedEvent(SessionId);
+
+public record HybridSessionPeerStartedWatchingScreenShareEvent(int SessionId, int UserId, int SharerUserId)
+    : HybridSessionUpdatedEvent(SessionId);
+
+public record HybridSessionPeerStoppedWatchingScreenShareEvent(int SessionId, int UserId, int SharerUserId)
     : HybridSessionUpdatedEvent(SessionId);
 
 public record HybridSessionPeerAfkEvent(int SessionId, int UserId, string? Reason)

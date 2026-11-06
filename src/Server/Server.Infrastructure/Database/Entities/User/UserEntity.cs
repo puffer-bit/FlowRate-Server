@@ -8,8 +8,9 @@ namespace Server.Infrastructure.Database.Entities
         [MaxLength(36)]
         public required int Id { get; set; }
         
-        [MaxLength(37)]
-        public required string UserIdentity { get; set; }
+        /// <summary>SHA-256 of the identity the user logs in with; the identity itself is not kept.</summary>
+        [MaxLength(32)]
+        public required byte[] IdentityHash { get; set; }
         
         [MaxLength(32)]
         public required string Username { get; set; }

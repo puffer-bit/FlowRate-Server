@@ -1,3 +1,4 @@
+using Shared.Enums;
 using Microsoft.Extensions.Logging;
 using Server.Core.Models.User;
 using Server.Application.Coordinator.Connections;
@@ -51,6 +52,9 @@ public class UserManager : IUserManager
         _nameProvider = new NameProvider();
     }
 
+    /// <summary>A new identity: what a user logs in with until it is reset.</summary>
+    public static string NewIdentity() => "#" + Guid.NewGuid();
+
     public async Task<UserAttachment> AttachUser(string? userIdentity, IClientConnection clientConnection)
     {
         // Checked before anything is created, so a full server does not register users it then turns away
@@ -61,37 +65,44 @@ public class UserManager : IUserManager
         // If client provided null identity -> create new user with generated identity
         if (userIdentity == null)
         {
-            userIdentity = "#" + Guid.NewGuid().ToString();
+            userIdentity = NewIdentity();
             user = await CreateUserAsync(userIdentity, clientConnection);
         }
         else if (userIdentity == "system")
         {
             user = UserModel.CreateSystem(_coordinatorInstanceId, clientConnection.IpEndpoint, DateTime.UtcNow);
         }
+        else if (await _userRepository.GetByIdentityAsync(_coordinatorInstanceId, userIdentity) is { } foundUser)
+        {
+            user = foundUser;
+            user.MarkConnected(clientConnection.IpEndpoint, DateTime.UtcNow);
+        }
         else
         {
-            // If client provided something that might be an existing user id (GUID-like), try to resolve by id first
-            if (IsProbableId(userIdentity) && await _userRepository.GetByIdentityAsync(_coordinatorInstanceId, userIdentity) is { } userById)
-            {
-                user = userById;
-                user.MarkConnected(clientConnection.IpEndpoint, DateTime.UtcNow);
-                // we have an id, but need the stored identity value from DB
-                var storedIdentity = await _userRepository.GetIdentityByIdAsync(user.Id);
-                if (!string.IsNullOrEmpty(storedIdentity))
-                    userIdentity = storedIdentity;
-            }
-            else if (await _userRepository.GetByIdentityAsync(_coordinatorInstanceId, userIdentity) is { } foundedUser)
-            {
-                user = foundedUser;
-                user.MarkConnected(clientConnection.IpEndpoint, DateTime.UtcNow);
-            }
-            else
-            {
-                _logger.LogInformation("Unknown user identity received, login rejected");
-                return UserAttachment.Rejected(AttachUserResult.UnknownIdentity);
-            }
+            _logger.LogInformation("Unknown user identity received, login rejected");
+            return UserAttachment.Rejected(AttachUserResult.UnknownIdentity);
         }
 
+        var attachment = Attach(user, userIdentity, clientConnection);
+        if (attachment.Result == AttachUserResult.Attached && !attachment.User!.IsSystem)
+            await _userRepository.UpdateAsync(attachment.User);
+        return attachment;
+    }
+
+    public async Task<UserAttachment> AttachUser(int userId, IClientConnection clientConnection)
+    {
+        var user = await _userRepository.GetByIdAsync(userId);
+        if (user == null || user.CoordinatorInstanceId != _coordinatorInstanceId || user.IsSystem)
+            return UserAttachment.Rejected(AttachUserResult.UnknownIdentity);
+
+        user.MarkConnected(clientConnection.IpEndpoint, DateTime.UtcNow);
+        var attachment = Attach(user, null, clientConnection);
+        if (attachment.Result == AttachUserResult.Attached) await _userRepository.UpdateAsync(attachment.User!);
+        return attachment;
+    }
+
+    private UserAttachment Attach(UserModel? user, string? userIdentity, IClientConnection clientConnection)
+    {
         if (user == null)
             return UserAttachment.Rejected(AttachUserResult.UserLimitReached);
         if (user.IsBanned)
@@ -140,16 +151,16 @@ public class UserManager : IUserManager
         return new UserAttachment(AttachUserResult.Attached, user, userIdentity);
     }
 
-    public async Task<ChangeUsernameResult> ChangeUsername(int userId, string newUsername)
+    public async Task<ErrorCode?> ChangeUsername(int userId, string newUsername)
     {
         // A user who is not connected is renamed in the database
         var user = await GetUserAsync(userId);
         if (user == null || user.IsSystem || user.CoordinatorInstanceId != _coordinatorInstanceId)
-            return ChangeUsernameResult.UserNotFound;
+            return ErrorCode.UserNotFound;
 
         newUsername = newUsername.Trim();
         if (user.Username == newUsername)
-            return ChangeUsernameResult.NoError;
+            return null;
 
         // Check and rename under one lock, so two users cannot take the same free name at once
         await _renameLock.WaitAsync();
@@ -158,7 +169,7 @@ public class UserManager : IUserManager
             var takenByConnected = _context.AttachedUsers.Values
                 .Any(other => other.Id != userId && other.Username == newUsername);
             if (takenByConnected || await _userRepository.IsUsernameTakenAsync(newUsername, userId))
-                return ChangeUsernameResult.UsernameAlreadyUsed;
+                return ErrorCode.NameTaken;
 
             user.Rename(newUsername);
             await _userRepository.UpdateAsync(user);
@@ -177,55 +188,55 @@ public class UserManager : IUserManager
 
         _logger.LogInformation("User {Id} renamed to {Name}.", userId, newUsername);
         UserUpdated?.Invoke(user);
-        return ChangeUsernameResult.NoError;
+        return null;
     }
         
-    public async Task<SetAvatarResult> SetAvatar(int userId, string? avatarUrl)
+    public async Task<ErrorCode?> SetAvatar(int userId, string? avatarUrl)
     {
         if (!_context.AttachedUsers.TryGetValue(userId, out var user) || user.IsSystem)
-            return SetAvatarResult.UserNotFound;
+            return ErrorCode.UserNotFound;
 
         if (user.AvatarUrl == avatarUrl)
-            return SetAvatarResult.NoError;
+            return null;
 
         user.SetAvatar(avatarUrl);
         await _userRepository.UpdateAsync(user);
 
         _logger.LogInformation("User {Id} changed the avatar.", userId);
         UserUpdated?.Invoke(user);
-        return SetAvatarResult.NoError;
+        return null;
     }
 
-    public async Task<SetUserStatusResult> SetStatus(int userId, UserStatus status)
+    public async Task<ErrorCode?> SetStatus(int userId, UserStatus status)
     {
         if (status == UserStatus.Offline || !Enum.IsDefined(status))
-            return SetUserStatusResult.InvalidStatus;
+            return ErrorCode.InvalidValue;
 
         if (!_context.AttachedUsers.TryGetValue(userId, out var user) || user.IsSystem)
-            return SetUserStatusResult.UserNotFound;
+            return ErrorCode.UserNotFound;
 
         if (user.Status == status)
-            return SetUserStatusResult.NoError;
+            return null;
 
         user.SetStatus(status);
         await _userRepository.UpdateAsync(user);
 
         _logger.LogTrace("User {Id} is now {Status}.", userId, status);
         UserUpdated?.Invoke(user);
-        return SetUserStatusResult.NoError;
+        return null;
     }
 
-    public async Task<ModerateUserResult> SetState(int userId, UserState state)
+    public async Task<ErrorCode?> SetState(int userId, UserState state)
     {
         if (state is not (UserState.Normal or UserState.Suspended or UserState.Banned))
-            return ModerateUserResult.InvalidState;
+            return ErrorCode.InvalidValue;
 
         var user = await GetUserAsync(userId);
         if (user == null || user.IsSystem || user.CoordinatorInstanceId != _coordinatorInstanceId)
-            return ModerateUserResult.UserNotFound;
+            return ErrorCode.UserNotFound;
 
         if (user.State == state)
-            return ModerateUserResult.NoError;
+            return null;
 
         ApplyState(user, state);
         await _userRepository.UpdateAsync(user);
@@ -239,21 +250,21 @@ public class UserManager : IUserManager
 
         _logger.LogInformation("User {Id} is now {State}.", userId, state);
         UserUpdated?.Invoke(user);
-        return ModerateUserResult.NoError;
+        return null;
     }
 
-    public async Task<ModerateUserResult> DeleteUser(int userId)
+    public async Task<ErrorCode?> DeleteUser(int userId)
     {
         var user = await GetUserAsync(userId);
         if (user == null || user.IsSystem || user.CoordinatorInstanceId != _coordinatorInstanceId)
-            return ModerateUserResult.UserNotFound;
+            return ErrorCode.UserNotFound;
 
         await _userRepository.RemoveAsync(userId);
         DetachUser(userId, "User is deleted");
 
         _logger.LogInformation("User {Id} ({Name}) deleted.", userId, user.Username);
         UserDeleted?.Invoke(userId);
-        return ModerateUserResult.NoError;
+        return null;
     }
 
     private static void ApplyState(UserModel user, UserState state)
@@ -416,11 +427,5 @@ public class UserManager : IUserManager
 
         var online = _context.AttachedUsers.Values.Count(user => !user.IsSystem && user.Id != exceptUserId);
         return online >= maxOnlineUsers;
-    }
-
-    private static bool IsProbableId(string value)
-    {
-        // crude check: GUIDs in this project are 36 chars with hyphens, db ids may be 36
-        return !string.IsNullOrEmpty(value) && value.Length == 36 && value.Contains('-');
     }
 }
