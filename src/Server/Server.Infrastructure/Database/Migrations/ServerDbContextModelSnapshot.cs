@@ -626,6 +626,12 @@ namespace Server.Infrastructure.Database.Migrations
                     b.Property<bool>("IsSystem")
                         .HasColumnType("INTEGER");
 
+                    b.Property<DateTime?>("PinnedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int?>("PinnedByUserId")
+                        .HasColumnType("INTEGER");
+
                     b.Property<int?>("ReplyToMessageId")
                         .HasColumnType("INTEGER");
 
@@ -643,6 +649,10 @@ namespace Server.Infrastructure.Database.Migrations
                         .HasColumnType("TEXT");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("ChatId", "Id");
+
+                    b.HasIndex("ChatId", "PinnedAt");
 
                     b.HasIndex("ChatId", "Revision");
 
