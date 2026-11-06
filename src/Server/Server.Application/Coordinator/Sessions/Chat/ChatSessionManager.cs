@@ -15,6 +15,7 @@ using Shared.Models.Requests.SessionActions.Generic.Models.SessionData;
 using Server.Application.Abstractions.Persistence;
 using Server.Application.Coordinator.Users;
 using Server.Application.Coordinator.Authentication;
+using Shared.Models.Requests.SessionActions.ChatSession;
 
 namespace Server.Application.Coordinator.Sessions.Chat;
 
@@ -260,6 +261,96 @@ public class ChatSessionManager : IChatSessionManager
             _logger.LogError(e, "Error while adding chat message.");
             return ErrorCode.Internal;
         }
+    }
+
+    public async Task<ErrorCode?> SetPinnedAsync(int sessionId, int messageId, bool pinned, int userId)
+    {
+        if (!_sessions.TryGetValue(sessionId, out var chat)) return ErrorCode.ChatNotFound;
+        if (chat.IsArchived) return ErrorCode.ChatReadOnly;
+        var gate = MessageWriteLockOf(sessionId);
+        await gate.WaitAsync();
+        try
+        {
+            var message = await GetMessageAsync(sessionId, messageId);
+            if (message == null || message.IsDeleted) return ErrorCode.MessageNotFound;
+            if (message.IsSystem) return ErrorCode.InsufficientPermissions;
+            if (message.IsPinned == pinned) return null;
+            // Bound the independently loaded list of pins.
+            if (pinned && (await _messagesRepository.GetPinnedAsync(sessionId)).Count >= 100)
+                return ErrorCode.InvalidRequest;
+            message.SetPinned(pinned, userId, DateTime.UtcNow);
+            message.MarkChanged(await _messagesRepository.UpdateAsync(message));
+            await _coordinatorEventBus.PublishAsync(new ChatSessionMessageEditedEvent(sessionId, message));
+            return null;
+        }
+        catch (Exception exception)
+        {
+            _logger.LogError(exception, "Error while pinning a chat message.");
+            return ErrorCode.Internal;
+        }
+        finally { gate.Release(); }
+    }
+
+    public async Task<(ErrorCode? result, ChatHistoryPage? page)> FetchPinnedAsync(int sessionId)
+    {
+        if (!_sessions.ContainsKey(sessionId)) return (ErrorCode.ChatNotFound, null);
+        var gate = MessageWriteLockOf(sessionId);
+        await gate.WaitAsync();
+        try
+        {
+            var revision = await _messagesRepository.GetRevisionAsync(sessionId);
+            return (null, new ChatHistoryPage(await _messagesRepository.GetPinnedAsync(sessionId), revision));
+        }
+        catch (Exception exception)
+        {
+            _logger.LogError(exception, "Error while fetching pinned messages.");
+            return (ErrorCode.Internal, null);
+        }
+        finally { gate.Release(); }
+    }
+
+    public async Task<(ErrorCode? result, ChatHistoryWindow? window)> FetchWindowAsync(int sessionId,
+        int messageId, ChatHistoryDirection direction, int take)
+    {
+        if (!_sessions.ContainsKey(sessionId)) return (ErrorCode.ChatNotFound, null);
+        if (take < 1 || take > Shared.Validation.Limits.ChatHistoryMaxTake || !Enum.IsDefined(direction))
+            return (ErrorCode.InvalidRequest, null);
+        var gate = MessageWriteLockOf(sessionId);
+        await gate.WaitAsync();
+        try
+        {
+            // A soft-deleted boundary still allows before/after pagination, but cannot be opened.
+            var anchor = await GetMessageAsync(sessionId, messageId);
+            if (anchor == null || (anchor.IsDeleted && direction == ChatHistoryDirection.Around))
+                return (ErrorCode.MessageNotFound, null);
+            var revision = await _messagesRepository.GetRevisionAsync(sessionId);
+            List<ChatMessageModel> messages;
+            switch (direction)
+            {
+                case ChatHistoryDirection.Before:
+                    messages = await _messagesRepository.GetBeforeAsync(sessionId, messageId, take);
+                    break;
+                case ChatHistoryDirection.After:
+                    messages = await _messagesRepository.GetAfterAsync(sessionId, messageId, take);
+                    break;
+                default:
+                    messages = await _messagesRepository.GetBeforeAsync(sessionId, messageId, take / 2);
+                    messages.Add(anchor!);
+                    messages.AddRange(await _messagesRepository.GetAfterAsync(sessionId, messageId, take - take / 2 - 1));
+                    break;
+            }
+            var first = messages.Count > 0 ? messages[0].Id : messageId;
+            var last = messages.Count > 0 ? messages[^1].Id : messageId;
+            var older = (await _messagesRepository.GetBeforeAsync(sessionId, first, 1)).Count > 0;
+            var newer = (await _messagesRepository.GetAfterAsync(sessionId, last, 1)).Count > 0;
+            return (null, new ChatHistoryWindow(messages, revision, older, newer));
+        }
+        catch (Exception exception)
+        {
+            _logger.LogError(exception, "Error while fetching a chat history window.");
+            return (ErrorCode.Internal, null);
+        }
+        finally { gate.Release(); }
     }
 
     public async Task<ErrorCode?> SetReactionAsync(int sessionId, int messageId, string emoji, bool isAdded, int userId)

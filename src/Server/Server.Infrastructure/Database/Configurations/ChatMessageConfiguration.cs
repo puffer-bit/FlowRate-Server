@@ -11,6 +11,8 @@ public class ChatMessageConfiguration : IEntityTypeConfiguration<ChatMessageEnti
         builder.ToTable("ChatMessages");
         builder.HasQueryFilter(p => !p.IsDeleted);
         builder.HasIndex(x => new { x.ChatId, x.Revision });
+        builder.HasIndex(x => new { x.ChatId, x.Id });
+        builder.HasIndex(x => new { x.ChatId, x.PinnedAt });
         
         builder.HasOne(x => x.ChatSession)
                .WithMany(x => x.Messages)

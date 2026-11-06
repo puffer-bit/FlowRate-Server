@@ -15,6 +15,10 @@ namespace Server.Application.Coordinator.Sessions.Chat;
 public interface IChatSessionManager
 {
     Task LoadAsync();
+    Task<ErrorCode?> SetPinnedAsync(int sessionId, int messageId, bool pinned, int userId);
+    Task<(ErrorCode? result, ChatHistoryPage? page)> FetchPinnedAsync(int sessionId);
+    Task<(ErrorCode? result, ChatHistoryWindow? window)> FetchWindowAsync(int sessionId, int messageId,
+        Shared.Models.Requests.SessionActions.ChatSession.ChatHistoryDirection direction, int take);
 
     Task<(ErrorCode? result, ChatSessionModel? session)> CreateAsync(CreateSessionModel request, int userId);
     Task<ErrorCode?> DeleteAsync(int sessionId, int userId);
