@@ -160,6 +160,7 @@ public partial class MediasoupGateway : ISFUGateway
     {
         WebRTCVideoCodecs.VP8 => "video/VP8",
         WebRTCVideoCodecs.H264 => "video/H264",
+        WebRTCVideoCodecs.AV1 => "video/AV1",
         WebRTCVideoCodecs.Undefined => string.Empty,
         _ => throw new NotSupportedException($"The SFU has no {codec} codec.")
     };
