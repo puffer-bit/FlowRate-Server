@@ -1,12 +1,15 @@
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/AppIcons/RoundedCube/svg/wordmark-on-dark.svg">
+    <source media="(prefers-color-scheme: light)" srcset="assets/AppIcons/RoundedCube/svg/wordmark-on-light.svg">
+    <img src="assets/AppIcons/RoundedCube/svg/wordmark-on-light.svg" alt="FlowRate Server" width="720">
+  </picture>
+</p>
+
 # FlowRate Server
 
 The server side of FlowRate: text chats, voice and video sessions, push notifications and a browser control panel.
-It runs as two containers:
-
-- **server** (`src/Server/Server.Asp`, .NET 10): clients connect to it over WebSocket, it keeps the data in SQLite
-  and serves the control panel.
-- **mediasoup** (`src/Sfu/mediasoup`, Node.js): the SFU that carries voice and video over WebRTC; the server
-  drives it through gRPC.
+Deploy it on your own Linux server, then share the server address with your community. The installation includes the server, the media service for voice and screen sharing, and a browser control panel.
 
 ## Running it
 
@@ -33,7 +36,7 @@ From the sources, with Docker:
 
 ```sh
 git clone --recurse-submodules https://github.com/puffer-bit/FlowRate-Server.git
-cd FlowRateServer
+cd FlowRate-Server
 cp .env.example .env        # set PUBLIC_IP to the address clients reach this machine at
 docker compose up -d --build
 ```
@@ -65,35 +68,13 @@ still join and leave: they appear as `WaitingForServer`, and a successful join r
 SFU becomes available. The client shows its existing waiting-for-SFU status and connects media automatically
 when a node is ready. Host admission remains required for sessions that use it.
 
-## Development
-
-Requirements: .NET SDK 10, Node.js 24 or newer, Docker for the full stack.
-
-```sh
-src/Scripts/bash/build.sh     # the solution
-src/Scripts/bash/test.sh      # every test project
-src/Scripts/bash/run.sh       # the server; --panel builds the control panel first
-cd src/Sfu/mediasoup && npm ci && npm run dev   # the SFU, configured by .env (see .env.example)
-```
-
-PowerShell versions of the scripts live in `src/Scripts/powershell`. The control panel has its own
-[README](src/Web/admin-panel/README.md).
-
-Layout:
-
-- `src/Server` — the server, layered as Core → Application → Infrastructure → Asp, with a test project for each;
-  `Server.PushRelay` is an optional relay that forwards pushes to FCM for servers without a Firebase key.
-- `src/Sfu/mediasoup` — the SFU.
-- `src/Web/admin-panel` — the control panel (React, TypeScript, Vite).
-- `src/Shared` — the protocol shared with the client, a git submodule
-  ([FlowRate-Shared](https://github.com/puffer-bit/FlowRate-Shared)).
-- `docs` — [authentication](docs/authentication.md) and [roles](docs/roles.md).
-
 ## Secrets
 
 Nothing secret belongs in the repository. `.env` and `secrets/` (the Firebase service account key) sit next to
 `docker-compose.yml` and are git-ignored; the TLS certificate of the panel is generated on the first start and kept
 in the data volume.
+
+For source builds, tests, and repository layout, see the [development guide](DEVELOPMENT.md).
 
 ## License
 
