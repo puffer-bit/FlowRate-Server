@@ -240,11 +240,6 @@ public partial class HybridSessionPeerManager : IHybridSessionPeerManager
             : LockedAsync(() => RemovePeerLockedAsync(userId,
                 new HybridSessionPeerKickedEvent(Model.Id, userId, initiatorId, reason)), ErrorCode.TimedOut);
 
-    public Task<ErrorCode?> BanPeerAsync(int initiatorId, int userId, string? reason = null)
-    {
-        throw new NotImplementedException();
-    }
-
     public Task<ErrorCode?> RemovePeerAsync(int userId) =>
         LockedAsync(() => RemovePeerLockedAsync(userId, new HybridSessionPeerLeftEvent(Model.Id, userId)),
             ErrorCode.TimedOut);

@@ -72,6 +72,23 @@ public sealed class GatewayServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task AddressBan_RejectsBeforeUpgrade_WithUnicodeReason_AndLiftingItAllowsConnection()
+    {
+        const string reason = "Спам и оскорбления";
+        _service.CheckAddress = _ => Task.FromResult<string?>(reason);
+        using var socket = new ClientWebSocket();
+        socket.Options.RemoteCertificateValidationCallback = (_, _, _, _) => true;
+        socket.Options.CollectHttpResponseDetails = true;
+        socket.Options.SetRequestHeader(ProtocolVersion.Header, ProtocolVersion.Format(ProtocolVersion.Current));
+        await Assert.ThrowsAsync<WebSocketException>(() => socket.ConnectAsync(new Uri($"wss://127.0.0.1:{_port}/"), CancellationToken.None));
+        Assert.Equal(HttpStatusCode.Forbidden, socket.HttpStatusCode);
+        Assert.Equal(reason, System.Text.Encoding.UTF8.GetString(Convert.FromBase64String(socket.HttpResponseHeaders!["FlowRate-Ban-Reason"].Single())));
+        _service.CheckAddress = _ => Task.FromResult<string?>(null);
+        var (client, _) = await ConnectAsync();
+        await client.DisposeAsync();
+    }
+
+    [Fact]
     public async Task Request_GetsResponse()
     {
         _router.OnMessage = (message, gateway) =>

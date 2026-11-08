@@ -23,7 +23,6 @@ public class HybridSessionNotifier :
     IEventHandler<HybridSessionPeerLeftEvent>,
     IEventHandler<HybridSessionPeerReplacedEvent>,
     IEventHandler<HybridSessionPeerKickedEvent>,
-    IEventHandler<HybridSessionPeerBannedEvent>,
     IEventHandler<HybridSessionPeerStartedVoiceShareEvent>,
     IEventHandler<HybridSessionPeerStoppedVoiceShareEvent>,
     IEventHandler<HybridSessionPeerStartedScreenShareEvent>,
@@ -132,12 +131,6 @@ public class HybridSessionNotifier :
     public Task HandleAsync(HybridSessionPeerKickedEvent evt, CancellationToken ct = default)
     {
         _visibility.Send(evt.SessionId, new HybridSessionPeerKickedNotification(evt.SessionId, evt.UserId, evt.InitiatorUserId, evt.Reason));
-        return Task.CompletedTask;
-    }
-
-    public Task HandleAsync(HybridSessionPeerBannedEvent evt, CancellationToken ct = default)
-    {
-        _visibility.Send(evt.SessionId, new HybridSessionPeerBannedNotification(evt.SessionId, evt.UserId, evt.InitiatorUserId, evt.Reason));
         return Task.CompletedTask;
     }
 

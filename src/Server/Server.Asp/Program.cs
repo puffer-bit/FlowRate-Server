@@ -162,6 +162,7 @@ namespace Server.Asp
             
             services.AddSingleton<IOrchestratorInstanceRepository, OrchestratorInstanceRepository>();
             services.AddSingleton<IUserRepository, UserRepository>();
+            services.AddSingleton<IBanRepository, BanRepository>();
             services.AddSingleton<ICoordinatorInstanceRepository, CoordinatorInstanceRepository>();
             services.AddSingleton<IVideoSessionRepository, VideoSessionRepository>();
             services.AddSingleton<IMessagesRepository, MessagesRepository>();

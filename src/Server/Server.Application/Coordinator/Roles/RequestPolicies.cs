@@ -28,6 +28,7 @@ public static class RequestPolicies
         CoordinatorSetUserStatusRequest => Open,
         // Acting on oneself is refused by the handlers
         CoordinatorSetUserStateRequest request => Require(Permission.BanMembers).Against(request.TargetUserId),
+        CoordinatorBansRequest or CoordinatorRevokeBanRequest => Require(Permission.BanMembers),
         CoordinatorDeleteUserRequest request => Require(Permission.BanMembers).Against(request.TargetUserId),
         CoordinatorSettingsRequest or CoordinatorUserListRequest => Require(Permission.ViewCoordinatorSettings),
         CoordinatorUpdateSettingsRequest => Require(Permission.ManageCoordinatorSettings),
@@ -52,8 +53,6 @@ public static class RequestPolicies
 
         KickFromSessionRequest request =>
             InSession(request.SessionId, Permission.KickMembers).Against(request.TargetUserId),
-        BanInSessionRequest request =>
-            InSession(request.SessionId, Permission.BanMembers).Against(request.TargetUserId),
         ApproveUserRequest request => InSession(request.SessionId, Permission.ApproveMembers),
         RejectUserRequest request => InSession(request.SessionId, Permission.ApproveMembers),
 
@@ -105,7 +104,7 @@ public static class RequestPolicies
         AuthRequest or HeartbeatRequest => true,
 
         CoordinatorInfoRequest or CoordinatorUserInfoRequest or CoordinatorUserSearchRequest
-            or CoordinatorSettingsRequest or CoordinatorUserListRequest or CoordinatorRolesRequest
+            or CoordinatorSettingsRequest or CoordinatorUserListRequest or CoordinatorRolesRequest or CoordinatorBansRequest
             or RegisterPushTokenRequest or UnregisterPushTokenRequest or MediaTokenRequest => true,
 
         JoinSessionRequest request => request.SessionType == SessionType.Chat,
