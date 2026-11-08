@@ -105,6 +105,29 @@ public sealed class GatewayServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task FragmentedRequest_FollowedByCompleteRequest_PreservesBoundaries()
+    {
+        _router.OnMessage = (message, gateway) =>
+            gateway.Send(new HeartbeatPingResponse(((HeartbeatPingRequest)message).RequestId, 42));
+        var (client, _) = await ConnectAsync();
+        await using var connection = client;
+        var fragmented = new HeartbeatPingRequest();
+        var bytes = JsonSerializer.SerializeToUtf8Bytes<BaseMessage>(fragmented, Json);
+        await client.Socket.SendAsync(Array.Empty<byte>(), WebSocketMessageType.Text, false, CancellationToken.None);
+        await client.Socket.SendAsync(bytes.AsMemory(0, 5), WebSocketMessageType.Text, false, CancellationToken.None);
+        await client.Socket.SendAsync(bytes.AsMemory(5), WebSocketMessageType.Text, false, CancellationToken.None);
+        await client.Socket.SendAsync(Array.Empty<byte>(), WebSocketMessageType.Text, true, CancellationToken.None);
+        var complete = new HeartbeatPingRequest();
+        await client.SendTextAsync(JsonSerializer.Serialize<BaseMessage>(complete, Json));
+
+        foreach (var request in new[] { fragmented, complete })
+        {
+            var response = JsonSerializer.Deserialize<BaseMessage>((await client.ReceiveTextAsync(Timeout))!, Json);
+            Assert.Equal(request.RequestId, Assert.IsType<HeartbeatPingResponse>(response).RequestId);
+        }
+    }
+
+    [Fact]
     public async Task InvalidJson_IsDropped()
     {
         _router.OnMessage = (message, gateway) =>

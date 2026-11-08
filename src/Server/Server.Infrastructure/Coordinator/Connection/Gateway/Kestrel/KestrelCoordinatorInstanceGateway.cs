@@ -178,7 +178,7 @@ public sealed class KestrelCoordinatorInstanceGateway : ICoordinatorInstanceGate
     private async Task ReceiveLoopAsync(CancellationToken token)
     {
         var chunk = ArrayPool<byte>.Shared.Rent(ReceiveChunkSize);
-        var message = new ArrayBufferWriter<byte>(ReceiveChunkSize);
+        ArrayBufferWriter<byte>? message = null;
 
         try
         {
@@ -189,7 +189,7 @@ public sealed class KestrelCoordinatorInstanceGateway : ICoordinatorInstanceGate
                 if (result.MessageType == WebSocketMessageType.Close)
                     return;
 
-                if (message.WrittenCount + result.Count > MaxReceiveMessageSize)
+                if (result.Count > MaxReceiveMessageSize - (message?.WrittenCount ?? 0))
                 {
                     _logger.LogWarning("Connection {ConnectionId} from {Ip} sent a message over {Limit} bytes. Closing the connection.",
                         ConnectionId, IpAddress, MaxReceiveMessageSize);
@@ -198,6 +198,15 @@ public sealed class KestrelCoordinatorInstanceGateway : ICoordinatorInstanceGate
                     return;
                 }
 
+                // Complete small messages can be parsed directly from the receive buffer.
+                if ((message?.WrittenCount ?? 0) == 0 && result.EndOfMessage)
+                {
+                    if (!Dispatch(result.MessageType, chunk.AsSpan(0, result.Count)))
+                        return;
+                    continue;
+                }
+
+                message ??= new ArrayBufferWriter<byte>(ReceiveChunkSize);
                 message.Write(chunk.AsSpan(0, result.Count));
                 if (!result.EndOfMessage)
                     continue;
@@ -206,7 +215,7 @@ public sealed class KestrelCoordinatorInstanceGateway : ICoordinatorInstanceGate
                     return;
 
                 if (message.Capacity > ReceiveChunkSize * 2)
-                    message = new ArrayBufferWriter<byte>(ReceiveChunkSize);
+                    message = null;
                 else
                     message.ResetWrittenCount();
             }
