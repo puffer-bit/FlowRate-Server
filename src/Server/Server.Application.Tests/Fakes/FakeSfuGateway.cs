@@ -46,6 +46,8 @@ internal sealed class FakeSfuGateway : ISFUGateway
     private int _outboundCounter;
 
     public IReadOnlyList<string> Calls => _calls.ToList();
+    public ConcurrentQueue<OutboundMediaSettings> OutboundSettings { get; } = new();
+    public ConcurrentQueue<InboundMediaSettings> InboundSettings { get; } = new();
 
     public int CallCount(string name) => Calls.Count(call => call == name || call.StartsWith(name + ":"));
 
@@ -91,6 +93,7 @@ internal sealed class FakeSfuGateway : ISFUGateway
         MediaSourceType sourceType, MediaType mediaType, OutboundMediaSettings settings)
     {
         Record($"AddOutbound:{userId}");
+        OutboundSettings.Enqueue(settings);
         var id = Interlocked.Increment(ref _outboundCounter);
         return Task.FromResult<(SFUOutboundCreateResult, Outbound?)>((SFUOutboundCreateResult.NoError,
             new Outbound
@@ -122,6 +125,7 @@ internal sealed class FakeSfuGateway : ISFUGateway
         Outbound outbound, InboundMediaSettings settings)
     {
         Record($"AddInbound:{userId}");
+        InboundSettings.Enqueue(settings);
 
         var inFlight = Interlocked.Increment(ref _inboundsInFlight);
         InterlockedMax(ref _maxInboundsInFlight, inFlight);

@@ -15,6 +15,7 @@ public partial class HybridSessionPeerManager
     private readonly Dictionary<int, Outbound> _voiceOutbounds = new();
     private readonly Dictionary<int, Outbound> _screenOutbounds = new();
     private readonly Dictionary<int, Outbound> _screenAudioOutbounds = new();
+    private readonly Dictionary<string, HybridMediaSettings> _screenMediaSettings = new();
     private readonly Dictionary<(int ListenerUserId, string OutboundId), Inbound> _inbounds = new();
     private readonly HashSet<(int ListenerUserId, string OutboundId)> _screenWatchers = new();
     private readonly HashSet<string> _readyInbounds = new();
@@ -278,19 +279,33 @@ public partial class HybridSessionPeerManager
     /// <returns>Null when the SFU failed.</returns>
     private async Task<Outbound?> PublishScreenAsync(int userId, MediaType mediaType, Dictionary<int, Outbound> outbounds)
     {
+        var media = Model.Media;
         if (outbounds.TryGetValue(userId, out var outbound))
         {
-            var resumeResult = await Gateway.ResumeOutbound(Model.Id, outbound.Id);
-            if (resumeResult == SFUOutboundCreateResult.NoError)
-                return outbound;
+            if (_screenMediaSettings.GetValueOrDefault(outbound.Id) == media)
+            {
+                var resumeResult = await Gateway.ResumeOutbound(Model.Id, outbound.Id);
+                if (resumeResult == SFUOutboundCreateResult.NoError)
+                    return outbound;
 
-            _logger.LogError("Peer with ID {userId} failed to resume screen share {mediaType}. SFU service return error: {error}",
-                userId, mediaType, resumeResult);
-            return null;
+                _logger.LogError("Peer with ID {userId} failed to resume screen share {mediaType}. SFU service return error: {error}",
+                    userId, mediaType, resumeResult);
+                return null;
+            }
+
+            // Paused producers and their consumers keep their original codecs and buffering settings.
+            // Replace them inside the existing peer transport when the session settings changed.
+            var removeResult = await Gateway.RemoveOutbound(Model.Id, userId, outbound.Id);
+            if (removeResult != SFUOutboundCreateResult.NoError)
+                return null;
+
+            ForgetInbounds(outbound.Id);
+            outbounds.Remove(userId);
+            _screenMediaSettings.Remove(outbound.Id);
         }
 
         var (result, created) = await Gateway.AddOutbound(Model.Id, userId, MediaSourceType.Screen, mediaType,
-            Model.Media.ForOutbound(MediaSourceType.Screen, mediaType));
+            media.ForOutbound(MediaSourceType.Screen, mediaType));
         if (result != SFUOutboundCreateResult.NoError || created == null)
         {
             _logger.LogError("Peer with ID {userId} failed to start screen share {mediaType}. SFU service return error: {error}",
@@ -299,6 +314,7 @@ public partial class HybridSessionPeerManager
         }
 
         outbounds[userId] = created;
+        _screenMediaSettings[created.Id] = media;
         return created;
     }
 
@@ -618,6 +634,7 @@ public partial class HybridSessionPeerManager
 
             if (_screenOutbounds.Remove(userId, out var screenOutbound))
             {
+                _screenMediaSettings.Remove(screenOutbound.Id);
                 speaker?.SetScreenShareActive(false);
                 ForgetInbounds(screenOutbound.Id);
                 await ForgetWatchersOfScreenShareAsync(userId);
@@ -627,6 +644,7 @@ public partial class HybridSessionPeerManager
 
             if (_screenAudioOutbounds.Remove(userId, out var screenAudioOutbound))
             {
+                _screenMediaSettings.Remove(screenAudioOutbound.Id);
                 ForgetInbounds(screenAudioOutbound.Id);
                 await Gateway.RemoveOutbound(Model.Id, userId, screenAudioOutbound.Id);
             }
@@ -667,6 +685,7 @@ public partial class HybridSessionPeerManager
         _voiceOutbounds.Clear();
         _screenOutbounds.Clear();
         _screenAudioOutbounds.Clear();
+        _screenMediaSettings.Clear();
         _inbounds.Clear();
         _screenWatchers.Clear();
         _readyInbounds.Clear();
