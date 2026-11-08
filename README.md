@@ -1,3 +1,6 @@
+> [!WARNING]
+> FlowRate Server is still under development. Bugs, incomplete features, and breaking changes may occur.
+
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="assets/AppIcons/RoundedCube/svg/wordmark-on-dark.svg">
