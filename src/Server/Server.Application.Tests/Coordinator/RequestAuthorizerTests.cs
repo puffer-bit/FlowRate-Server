@@ -15,6 +15,7 @@ using Shared.Models.Requests;
 using Shared.Models.Requests.Coordinator;
 using Shared.Models.Requests.SessionActions.ChatSession;
 using Shared.Models.Requests.SessionActions.Generic;
+using Shared.Models.Requests.SessionActions.HybridSession;
 
 namespace Server.Application.Tests.Coordinator;
 
@@ -68,6 +69,15 @@ public class RequestAuthorizerTests
     public async Task OpenRequest_IsAllowed()
     {
         Assert.True(await _authorizer.IsAllowedAsync(From(PlainId, new CoordinatorInfoRequest())));
+    }
+
+    [Theory]
+    [InlineData(true, true)]
+    [InlineData(false, false)]
+    public async Task MicrophoneMute_WithoutSpeak_CanMuteButCannotUnmute(bool isMuted, bool allowed)
+    {
+        Assert.Equal(allowed, await _authorizer.IsAllowedAsync(
+            From(PlainId, new HybridSessionSetMicrophoneMuteRequest(SessionId, isMuted))));
     }
 
     [Fact]

@@ -58,6 +58,8 @@ public static class RequestPolicies
 
         HybridSessionJoinRequest request => InSession(request.SessionId, View | Permission.JoinSessions),
         HybridSessionStartVoiceRequest request => InSession(request.SessionId, View | Permission.Speak),
+        HybridSessionSetMicrophoneMuteRequest { IsMuted: false } request =>
+            InSession(request.SessionId, View | Permission.Speak),
         HybridSessionStartVideoRequest request => InSession(request.SessionId, View | Permission.ShareVideo),
         HybridSessionStartScreenShareRequest request => InSession(request.SessionId, View | Permission.ShareVideo),
         HybridSessionConnectTransportRequest request => InSession(request.SessionId, View),

@@ -48,6 +48,7 @@ public partial class HybridSessionPeerManager
 
         _voiceOutbounds[userId] = outbound;
         speaker.SetMicrophoneMuted(false);
+        await _coordinatorEventBus.PublishAsync(new HybridSessionPeerUnmuteMicrophoneEvent(Model.Id, userId));
 
         await ConsumeAllAsync(_peers.Values
             .Where(listener => listener.UserId != userId && listener.CanReceiveMedia)
@@ -74,8 +75,10 @@ public partial class HybridSessionPeerManager
             return null;
         }
 
-        // Without a voice outbound there is nothing to be muted
-        speaker.SetMicrophoneMuted(false);
+        // With no voice outbound the microphone is off.
+        if (speaker.SetMicrophoneMuted(true))
+            await _coordinatorEventBus.PublishAsync(new HybridSessionPeerMuteMicrophoneEvent(Model.Id, userId,
+                InitiatorOrNull(initiatorId, userId)));
         ForgetInbounds(outbound.Id);
 
         var result = await Gateway.RemoveOutbound(Model.Id, userId, outbound.Id);
@@ -601,57 +604,68 @@ public partial class HybridSessionPeerManager
         return null;
     }
 
-    /// <summary>Removes everything the peer consumes and publishes.</summary>
-    private async Task ReleasePeerMediaAsync(int userId)
+    /// <summary>Detaches routing state first, then releases independent SFU resources in parallel.</summary>
+    private async Task ReleasePeerMediaAsync(int userId, bool announceTrackStops = true)
+    {
+        var consumed = _inbounds.Where(pair => pair.Key.ListenerUserId == userId).ToList();
+        foreach (var (key, inbound) in consumed)
+        {
+            _inbounds.Remove(key);
+            _screenWatchers.Remove(key);
+            _readyInbounds.Remove(inbound.Id);
+        }
+
+        if (_peers.TryGetValue(userId, out var peer))
+        {
+            foreach (var sharerId in peer.WatchedScreenShares)
+                await ForgetScreenShareWatchAsync(userId, sharerId);
+            peer.SetMicrophoneMuted(true);
+            peer.SetScreenShareActive(false);
+        }
+
+        var outbounds = new List<Outbound>();
+        var hadVoice = _voiceOutbounds.Remove(userId, out var voice);
+        var hadScreen = _screenOutbounds.Remove(userId, out var screen);
+        if (voice != null)
+            outbounds.Add(voice);
+        if (screen != null)
+            outbounds.Add(screen);
+        if (_screenAudioOutbounds.Remove(userId, out var screenAudio))
+            outbounds.Add(screenAudio);
+
+        foreach (var outbound in outbounds)
+        {
+            _screenMediaSettings.Remove(outbound.Id);
+            ForgetInbounds(outbound.Id);
+        }
+        if (hadScreen)
+            await ForgetWatchersOfScreenShareAsync(userId);
+
+        // A timeout of one resource must neither serialize nor skip the remaining cleanup.
+        await Task.WhenAll(consumed.Select(pair => ReleaseSfuResourceAsync(userId, pair.Value.Id,
+                () => Gateway.RemoveInbound(Model.Id, userId, pair.Value.Id)))
+            .Concat(outbounds.Select(outbound => ReleaseSfuResourceAsync(userId, outbound.Id,
+                () => Gateway.RemoveOutbound(Model.Id, userId, outbound.Id)))));
+
+        // Leave/kick already release all tracks on the clients; only a rejoin needs individual stops.
+        if (announceTrackStops)
+        {
+            if (hadVoice)
+                await _coordinatorEventBus.PublishAsync(new HybridSessionPeerStoppedVoiceShareEvent(Model.Id, userId));
+            if (hadScreen)
+                await _coordinatorEventBus.PublishAsync(new HybridSessionPeerStoppedScreenShareEvent(Model.Id, userId));
+        }
+    }
+
+    private async Task ReleaseSfuResourceAsync(int userId, string resourceId, Func<Task> release)
     {
         try
         {
-            var consumed = _inbounds.Where(pair => pair.Key.ListenerUserId == userId).ToList();
-            foreach (var (key, inbound) in consumed)
-            {
-                _inbounds.Remove(key);
-                _screenWatchers.Remove(key);
-                _readyInbounds.Remove(inbound.Id);
-            }
-
-            await Task.WhenAll(consumed.Select(pair => Gateway.RemoveInbound(Model.Id, userId, pair.Value.Id)));
-
-            if (_peers.TryGetValue(userId, out var listener))
-            {
-                foreach (var sharerId in listener.WatchedScreenShares)
-                    await ForgetScreenShareWatchAsync(userId, sharerId);
-            }
-
-            if (_peers.TryGetValue(userId, out var speaker))
-                speaker.SetMicrophoneMuted(false);
-
-            if (_voiceOutbounds.Remove(userId, out var outbound))
-            {
-                ForgetInbounds(outbound.Id);
-                await Gateway.RemoveOutbound(Model.Id, userId, outbound.Id);
-                await _coordinatorEventBus.PublishAsync(new HybridSessionPeerStoppedVoiceShareEvent(Model.Id, userId));
-            }
-
-            if (_screenOutbounds.Remove(userId, out var screenOutbound))
-            {
-                _screenMediaSettings.Remove(screenOutbound.Id);
-                speaker?.SetScreenShareActive(false);
-                ForgetInbounds(screenOutbound.Id);
-                await ForgetWatchersOfScreenShareAsync(userId);
-                await Gateway.RemoveOutbound(Model.Id, userId, screenOutbound.Id);
-                await _coordinatorEventBus.PublishAsync(new HybridSessionPeerStoppedScreenShareEvent(Model.Id, userId));
-            }
-
-            if (_screenAudioOutbounds.Remove(userId, out var screenAudioOutbound))
-            {
-                _screenMediaSettings.Remove(screenAudioOutbound.Id);
-                ForgetInbounds(screenAudioOutbound.Id);
-                await Gateway.RemoveOutbound(Model.Id, userId, screenAudioOutbound.Id);
-            }
+            await release();
         }
-        catch (Exception e)
+        catch (Exception ex)
         {
-            _logger.LogError(e, "Failed to release media of user with ID {userId}", userId);
+            _logger.LogWarning(ex, "Failed to release SFU resource {ResourceId} of user {UserId}", resourceId, userId);
         }
     }
 

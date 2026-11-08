@@ -11,6 +11,8 @@ using Server.Application.Mappers;
 using Server.Application.Abstractions.Factories;
 using Server.Application.Coordinator.Sessions.Hybrid.Peers;
 using Server.Application.Coordinator.Users;
+using Server.Application.Coordinator.Roles;
+using Server.Core.Models.User;
 using Server.Application.Orchestrator;
 using Server.Application.Orchestrator.SFUPool;
 
@@ -26,6 +28,54 @@ public class HybridSessionManager : IHybridSessionManager
     private readonly string _coordinatorInstanceId;
 
     private readonly ConcurrentDictionary<int, IHybridSession> _sessions = new();
+    private ICoordinatorPermissions? _permissions;
+    private SessionVisibility? _visibility;
+
+    public void WatchPermissions(ICoordinatorPermissions permissions, SessionVisibility visibility)
+    {
+        _permissions = permissions;
+        _visibility = visibility;
+        permissions.PermissionsChanged += OnPermissionsChanged;
+        visibility.AudienceChanged += OnSessionPermissionsChanged;
+    }
+
+    private void OnPermissionsChanged(IReadOnlyCollection<int> userIds) =>
+        _ = ApplyVoicePermissionsAsync(userIds);
+
+    private void OnSessionPermissionsChanged() => _ = ApplyVoicePermissionsAsync(null);
+
+    private async Task ApplyVoicePermissionsAsync(IReadOnlyCollection<int>? userIds)
+    {
+        if (_permissions == null)
+            return;
+
+        foreach (var session in _sessions.Values)
+        {
+            foreach (var peer in session.PeerManager.GetAllPeerSnapshots().Values)
+            {
+                try
+                {
+                    if (userIds != null && !userIds.Contains(peer.UserId))
+                        continue;
+                    if (peer.IsMicrophoneMuted || _permissions.HasIn(peer.UserId, session.Model,
+                            Permission.ViewSessions | Permission.Speak))
+                        continue;
+
+                    // Pause the producer on the SFU even if the client keeps sending audio.
+                    var result = await session.PeerManager.SetMicrophoneMutedAsync(UserModel.SystemUserId,
+                        peer.UserId, true);
+                    if (result is not (null or ErrorCode.MediaNotActive))
+                        _logger.LogError("Applying voice permissions for user {UserId} in session {SessionId} failed: {Error}",
+                            peer.UserId, session.Model.Id, result);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Applying voice permissions for user {UserId} in session {SessionId} failed.",
+                        peer.UserId, session.Model.Id);
+                }
+            }
+        }
+    }
 
     // Serializes creation, deletion and changes, so that two sessions cannot take the same name
     private readonly SemaphoreSlim _lifecycleLock = new(1, 1);
@@ -303,6 +353,11 @@ public class HybridSessionManager : IHybridSessionManager
 
     public void Dispose()
     {
+        if (_permissions != null)
+            _permissions.PermissionsChanged -= OnPermissionsChanged;
+        if (_visibility != null)
+            _visibility.AudienceChanged -= OnSessionPermissionsChanged;
+
         _sfuNodeSelector.NodesChanged -= HandleSfuNodesChangedAsync;
 
         foreach (var session in _sessions.Values)

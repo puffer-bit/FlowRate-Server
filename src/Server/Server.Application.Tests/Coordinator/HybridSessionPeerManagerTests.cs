@@ -46,6 +46,92 @@ public class HybridSessionPeerManagerTests
     // Joining
 
     [Fact]
+    public async Task RemovePeer_AnnouncesLeaveBeforeSfuCleanup_AndReleasesResourcesInParallel()
+    {
+        var manager = await CreateManager();
+        await JoinAndConnect(manager, HostId, GuestId);
+        await manager.StartVoiceShareAsync(GuestId);
+        await manager.StartVoiceShareAsync(HostId);
+        await manager.StartScreenShareAsync(HostId, withAudio: true);
+        _gateway.MediaRemovalGate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        var removal = manager.RemovePeerAsync(HostId);
+        try
+        {
+            Assert.False(removal.IsCompleted);
+            Assert.False(manager.HasPeer(HostId));
+            Assert.Equal(HostId, Assert.Single(_events.Of<HybridSessionPeerLeftEvent>()).UserId);
+            Assert.Equal(3, _gateway.Calls.Count(c => c.StartsWith("RemoveOutbound:")));
+            Assert.Single(_gateway.Calls.Where(c => c.StartsWith($"RemoveInbound:in-{HostId}-")));
+            Assert.Empty(_events.Of<HybridSessionPeerStoppedVoiceShareEvent>());
+            Assert.Empty(_events.Of<HybridSessionPeerStoppedScreenShareEvent>());
+        }
+        finally
+        {
+            _gateway.MediaRemovalGate.TrySetResult();
+            await removal;
+        }
+        Assert.Equal(1, _gateway.CallCount($"ClosePeerTransport:{HostId}"));
+    }
+
+    [Fact]
+    public async Task Rejoin_WhenOneResourceCleanupFails_ReleasesTheOthersAndForgetsOldRoutes()
+    {
+        var manager = await CreateManager();
+        await JoinAndConnect(manager, HostId, GuestId);
+        var (_, guestVoice) = await manager.StartVoiceShareAsync(GuestId);
+        var (_, voice) = await manager.StartVoiceShareAsync(HostId);
+        var (_, screen, audio) = await manager.StartScreenShareAsync(HostId, withAudio: true);
+        var failedInbound = $"RemoveInbound:in-{HostId}-{guestVoice!.Id}";
+        _gateway.FailRemovalFor.Add(failedInbound);
+
+        Assert.Null((await manager.AddPeerAsync(HostId, "new-epoch")).result);
+
+        Assert.Equal(1, _gateway.CallCount(failedInbound));
+        foreach (var outbound in new[] { voice!, screen!, audio! })
+            Assert.Equal(1, _gateway.CallCount($"RemoveOutbound:{outbound.Id}"));
+        Assert.True(manager.GetAllPeerSnapshots()[HostId].IsMicrophoneMuted);
+        Assert.False(manager.GetAllPeerSnapshots()[HostId].IsScreenShareActive);
+        var (_, nextVoice) = await manager.StartVoiceShareAsync(HostId);
+        Assert.NotEqual(voice!.Id, nextVoice!.Id);
+    }
+
+    [Fact]
+    public async Task RemovePeer_ReleasesVoiceWithoutAnnouncingAnIntermediateMute()
+    {
+        var manager = await CreateManager();
+        await JoinAndConnect(manager, HostId, GuestId);
+        var (_, outbound) = await manager.StartVoiceShareAsync(HostId);
+
+        await manager.RemovePeerAsync(HostId);
+
+        Assert.Equal(1, _gateway.CallCount($"RemoveOutbound:{outbound!.Id}"));
+        Assert.Empty(_events.Of<HybridSessionPeerStoppedVoiceShareEvent>());
+        Assert.Empty(_events.Of<HybridSessionPeerMuteMicrophoneEvent>());
+        Assert.Equal(HostId, Assert.Single(_events.Of<HybridSessionPeerLeftEvent>()).UserId);
+    }
+
+    [Fact]
+    public async Task Microphone_StaysMutedUntilVoiceStarts_AndMuteStateIsAnnounced()
+    {
+        var manager = await CreateManager();
+        await JoinAndConnect(manager, HostId);
+
+        Assert.True(manager.GetAllPeerSnapshots()[HostId].IsMicrophoneMuted);
+        Assert.True(Assert.Single(_events.Of<HybridSessionPeerJoinedEvent>()).Peer.IsMicrophoneMuted);
+
+        await manager.StartVoiceShareAsync(HostId);
+
+        Assert.False(manager.GetAllPeerSnapshots()[HostId].IsMicrophoneMuted);
+        Assert.Equal(HostId, Assert.Single(_events.Of<HybridSessionPeerUnmuteMicrophoneEvent>()).UserId);
+
+        await manager.StopVoiceShareAsync(HostId, HostId);
+
+        Assert.True(manager.GetAllPeerSnapshots()[HostId].IsMicrophoneMuted);
+        Assert.Equal(HostId, Assert.Single(_events.Of<HybridSessionPeerMuteMicrophoneEvent>()).UserId);
+    }
+
+    [Fact]
     public async Task AddPeer_WhenSfuIsNotConnected_JoinsWhileWaitingForServer()
     {
         var manager = await CreateManager();

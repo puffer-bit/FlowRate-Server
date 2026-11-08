@@ -98,7 +98,7 @@ public class PeerTests
         Assert.Equal(null, guest.Rejoin());
 
         Assert.False(guest.IsTransportConnected);
-        Assert.False(guest.IsMicrophoneMuted);
+        Assert.True(guest.IsMicrophoneMuted);
         Assert.Equal(HybridSessionPeerState.Connecting, guest.State);
     }
 
@@ -118,6 +118,9 @@ public class PeerTests
     {
         var guest = Peer.Join(GuestId, Session(isHostMustApprove: false));
 
+        Assert.True(guest.IsMicrophoneMuted);
+        Assert.False(guest.SetMicrophoneMuted(true));
+        Assert.True(guest.SetMicrophoneMuted(false));
         Assert.True(guest.SetMicrophoneMuted(true));
         Assert.False(guest.SetMicrophoneMuted(true));
     }

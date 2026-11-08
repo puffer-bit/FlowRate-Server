@@ -17,7 +17,7 @@ public sealed class Peer
     public PeerAdmission Admission { get; private set; }
     public HybridSessionPeerState State { get; private set; }
     public bool IsTransportConnected { get; private set; }
-    public bool IsMicrophoneMuted { get; private set; }
+    public bool IsMicrophoneMuted { get; private set; } = true;
     public bool IsSoundMuted { get; private set; }
     public bool IsScreenShareActive { get; private set; }
     public bool IsScreenAudioActive { get; private set; }
@@ -67,7 +67,7 @@ public sealed class Peer
 
         ConnectionId = connectionId;
         IsTransportConnected = false;
-        IsMicrophoneMuted = false;
+        IsMicrophoneMuted = true;
         IsSoundMuted = false;
         IsScreenShareActive = false;
         IsScreenAudioActive = false;
@@ -126,7 +126,7 @@ public sealed class Peer
             return;
 
         IsTransportConnected = false;
-        IsMicrophoneMuted = false;
+        IsMicrophoneMuted = true;
         IsSoundMuted = false;
         IsScreenShareActive = false;
         IsScreenAudioActive = false;
@@ -139,7 +139,7 @@ public sealed class Peer
     public void Close()
     {
         IsTransportConnected = false;
-        IsMicrophoneMuted = false;
+        IsMicrophoneMuted = true;
         IsSoundMuted = false;
         IsScreenShareActive = false;
         IsScreenAudioActive = false;
