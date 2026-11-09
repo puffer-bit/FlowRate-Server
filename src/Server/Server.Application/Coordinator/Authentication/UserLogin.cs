@@ -55,6 +55,7 @@ public sealed class UserLogin(IUserManager userManager, UserSessions sessions,
             {
                 AttachUserResult.OnlineLimitReached => ErrorCode.OnlineLimitReached,
                 AttachUserResult.UserLimitReached => ErrorCode.UserLimitReached,
+                AttachUserResult.ConnectionLimitReached => ErrorCode.RateLimited,
                 AttachUserResult.Banned => ErrorCode.Banned,
                 _ => ErrorCode.AuthFailed
             }, null, null, attachment.Result, null);

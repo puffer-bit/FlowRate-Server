@@ -325,6 +325,19 @@ public class TwoStageLoginTests
     }
 
     [Fact]
+    public async Task Login_AtDeviceLimit_IsRateLimitedAndClosesOnlyTheRejectedConnection()
+    {
+        _users.Setup(u => u.AttachUser(It.IsAny<string?>(), It.IsAny<IClientConnection>()))
+            .ReturnsAsync(UserAttachment.Rejected(AttachUserResult.ConnectionLimitReached));
+
+        await Login();
+
+        Assert.Equal(ErrorCode.RateLimited, Assert.IsType<ErrorResponse>(_sent[^1]).Code);
+        _connection.Verify(c => c.Close(It.IsAny<ConnectionCloseReason>()), Times.Once);
+        Assert.Empty(_sessions.All);
+    }
+
+    [Fact]
     public async Task SecondStage_OnALoggedInConnection_DoesNotCloseIt()
     {
         await Login();

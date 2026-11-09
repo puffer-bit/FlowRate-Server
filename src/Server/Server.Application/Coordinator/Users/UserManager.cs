@@ -13,6 +13,8 @@ namespace Server.Application.Coordinator.Users;
 
 public class UserManager : IUserManager
 {
+    public const int MaxConnectionsPerUser = 5;
+
     public event Action<UserModel>? UserConnected;
     public event Action<UserModel>? UserUpdated;
     public event Action<UserModel, string>? UserDisconnected;
@@ -25,6 +27,7 @@ public class UserManager : IUserManager
     private readonly IUserRepository _userRepository;
     private readonly ILogger _logger;
     private readonly NameProvider _nameProvider;
+    private readonly SemaphoreSlim _admissionLock = new(1, 1);
     private readonly SemaphoreSlim _createUserLock = new(1, 1);
     private readonly SemaphoreSlim _renameLock = new(1, 1);
     // The online limit, the user and the connection they use change under one lock, so two logins cannot take the
@@ -55,10 +58,24 @@ public class UserManager : IUserManager
     /// <summary>A new identity: what a user logs in with until it is reset.</summary>
     public static string NewIdentity() => "#" + Guid.NewGuid();
 
-    public async Task<UserAttachment> AttachUser(string? userIdentity, IClientConnection clientConnection)
+    public Task<UserAttachment> AttachUser(string? userIdentity, IClientConnection clientConnection) =>
+        AdmitAsync(() => AttachUserCore(userIdentity, clientConnection));
+
+    public Task<UserAttachment> AttachUser(int userId, IClientConnection clientConnection) =>
+        AdmitAsync(() => AttachUserCore(userId, clientConnection));
+
+    private async Task<UserAttachment> AdmitAsync(Func<Task<UserAttachment>> attach)
+    {
+        // Keep registration and attachment together so concurrent logins cannot register users for one online slot.
+        await _admissionLock.WaitAsync();
+        try { return await attach(); }
+        finally { _admissionLock.Release(); }
+    }
+
+    private async Task<UserAttachment> AttachUserCore(string? userIdentity, IClientConnection clientConnection)
     {
         // Checked before anything is created, so a full server does not register users it then turns away
-        if (userIdentity != "system" && IsOnlineLimitReached(exceptUserId: null))
+        if (userIdentity == null && IsOnlineLimitReached(exceptUserId: null))
             return UserAttachment.Rejected(AttachUserResult.OnlineLimitReached);
 
         UserModel? user;
@@ -89,7 +106,7 @@ public class UserManager : IUserManager
         return attachment;
     }
 
-    public async Task<UserAttachment> AttachUser(int userId, IClientConnection clientConnection)
+    private async Task<UserAttachment> AttachUserCore(int userId, IClientConnection clientConnection)
     {
         var user = await _userRepository.GetByIdAsync(userId);
         if (user == null || user.CoordinatorInstanceId != _coordinatorInstanceId || user.IsSystem)
@@ -124,7 +141,12 @@ public class UserManager : IUserManager
             {
                 var connections = _connections.UserConnections.GetValueOrDefault(user.Id) ?? [];
                 if (!connections.Contains(clientConnection.ConnectionId))
+                {
+                    if (connections.Length >= MaxConnectionsPerUser)
+                        return UserAttachment.Rejected(AttachUserResult.ConnectionLimitReached);
+
                     _connections.UserConnections[user.Id] = [..connections, clientConnection.ConnectionId];
+                }
                 clientConnection.UserId = user.Id;
             }
 
@@ -421,6 +443,9 @@ public class UserManager : IUserManager
 
     private bool IsOnlineLimitReached(int? exceptUserId)
     {
+        if (exceptUserId is { } userId && _context.AttachedUsers.ContainsKey(userId))
+            return false;
+
         var maxOnlineUsers = _coordinatorContext?.Model.MaxOnlineUsers ?? CoordinatorInstanceModel.NoUserLimit;
         if (maxOnlineUsers == CoordinatorInstanceModel.NoUserLimit)
             return false;
