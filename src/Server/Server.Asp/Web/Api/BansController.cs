@@ -22,12 +22,12 @@ public class BansController(IOrchestratorInstance orchestrator, IBanRepository r
         [property: StringLength(45)] string? Address = null);
 
     [HttpGet]
-    public async Task<ActionResult<List<BanDTO>>> Get(string id, bool history = false)
+    public async Task<ActionResult<List<BanDTO>>> Get(string id)
     {
         if (await settings.GetAsync(id) == null) return NotFound();
         var moderation = orchestrator.GetCoordinator(id)?.Moderation;
-        return moderation != null ? await moderation.ListAsync(history) :
-            (await repository.GetAsync(id)).Where(b => history || b.IsActive(DateTime.UtcNow)).Select(b => b.ToDto()).ToList();
+        return moderation != null ? await moderation.ListAsync() :
+            (await repository.GetAsync(id)).Where(b => b.IsActive(DateTime.UtcNow)).Select(b => b.ToDto()).ToList();
     }
 
     [HttpPost]

@@ -14,6 +14,4 @@ public class BanEntity
     public DateTime CreatedAt { get; set; }
     public DateTime? ExpiresAt { get; set; }
     public UserState PreviousState { get; set; }
-    public int? RevokedBy { get; set; }
-    public DateTime? RevokedAt { get; set; }
 }

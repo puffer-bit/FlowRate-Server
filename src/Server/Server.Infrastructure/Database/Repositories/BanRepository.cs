@@ -12,8 +12,7 @@ public class BanRepository(IDbContextFactory<ServerDbContext> factory) : IBanRep
         await using var db = await factory.CreateDbContextAsync(ct);
         return (await db.GlobalBans.AsNoTracking().Where(x => x.CoordinatorId == coordinatorId)
             .OrderByDescending(x => x.CreatedAt).ToListAsync(ct)).Select(x => new GlobalBan(x.Id, x.CoordinatorId,
-            x.Kind, x.UserId, x.Address, x.Reason, x.CreatedBy, x.CreatedAt, x.ExpiresAt, x.PreviousState,
-            x.RevokedBy, x.RevokedAt)).ToList();
+            x.Kind, x.UserId, x.Address, x.Reason, x.CreatedBy, x.CreatedAt, x.ExpiresAt, x.PreviousState)).ToList();
     }
 
     public async Task AddAsync(GlobalBan ban, CancellationToken ct = default)
@@ -25,10 +24,10 @@ public class BanRepository(IDbContextFactory<ServerDbContext> factory) : IBanRep
         await db.SaveChangesAsync(ct);
     }
 
-    public async Task RevokeAsync(string coordinatorId, Guid id, int actorId, DateTime now, CancellationToken ct = default)
+    public async Task DeleteAsync(string coordinatorId, Guid id, CancellationToken ct = default)
     {
         await using var db = await factory.CreateDbContextAsync(ct);
-        await db.GlobalBans.Where(x => x.CoordinatorId == coordinatorId && x.Id == id && x.RevokedAt == null)
-            .ExecuteUpdateAsync(s => s.SetProperty(x => x.RevokedAt, now).SetProperty(x => x.RevokedBy, actorId), ct);
+        await db.GlobalBans.Where(x => x.CoordinatorId == coordinatorId && x.Id == id)
+            .ExecuteDeleteAsync(ct);
     }
 }

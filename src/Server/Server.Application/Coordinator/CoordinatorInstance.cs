@@ -95,7 +95,7 @@ public partial class CoordinatorInstance : ICoordinatorInstance
             // Requests are checked against the roles, so they are there before the first connection
             if (_roles != null)
                 await _roles.LoadAsync();
-            if (Moderation != null) { await Moderation.ListAsync(true); Moderation.Start(); }
+            if (Moderation != null) { await Moderation.ListAsync(); Moderation.Start(); }
             await _sessionManager.LoadSessionsAsync();
             await _gatewayService.StartAsync(_messageRouter);
             _mediaService?.Start();

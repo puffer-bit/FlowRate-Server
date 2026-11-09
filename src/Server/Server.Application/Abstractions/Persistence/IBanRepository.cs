@@ -6,5 +6,5 @@ public interface IBanRepository
 {
     Task<List<GlobalBan>> GetAsync(string coordinatorId, CancellationToken ct = default);
     Task AddAsync(GlobalBan ban, CancellationToken ct = default);
-    Task RevokeAsync(string coordinatorId, Guid id, int actorId, DateTime now, CancellationToken ct = default);
+    Task DeleteAsync(string coordinatorId, Guid id, CancellationToken ct = default);
 }

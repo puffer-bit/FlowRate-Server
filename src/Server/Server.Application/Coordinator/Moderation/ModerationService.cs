@@ -16,7 +16,7 @@ using Shared.Models.Requests.Coordinator;
 
 namespace Server.Application.Coordinator.Moderation;
 
-/// <summary>All global bans, their audit trail, admission checks and connection effects for one coordinator.</summary>
+/// <summary>Active global bans, admission checks and connection effects for one coordinator.</summary>
 public sealed class ModerationService(
     string coordinatorId, IBanRepository repository, IUserRepository users, IUserManager userManager,
     IConnectionManager connections, IHybridSessionManager hybridSessions, ICoordinatorPermissions permissions,
@@ -56,6 +56,8 @@ public sealed class ModerationService(
         try
         {
             var bans = await SnapshotAsync();
+            if (bans.Any(b => !b.IsActive(Now)))
+                bans = (await LoadAndRestoreAsync()).ToArray();
             if (userId == null && identity != null)
                 userId = (await users.GetByIdentityAsync(coordinatorId, identity))?.Id;
             var ip = GlobalBan.NormalizeAddress(connection.IpEndpoint);
@@ -63,16 +65,16 @@ public sealed class ModerationService(
                 (b.Kind == BanKind.Account && b.UserId == userId || b.Kind == BanKind.Ip && b.Address == ip));
             if (ban != null)
                 return new LoginOutcome(ErrorCode.Banned, null, null, AttachUserResult.Banned, null, ban.Reason);
-            if (userId is { } id) await RestoreAccountAsync(id, bans.Where(b => b.Kind == BanKind.Account && b.UserId == id));
+            if (userId is { } id) await RestoreAccountAsync(id, bans.Where(b => b.Kind == BanKind.Account && b.UserId == id), Now);
             return await attach();
         }
         finally { _gate.Release(); }
     }
 
-    public async Task<List<BanDTO>> ListAsync(bool history)
+    public async Task<List<BanDTO>> ListAsync()
     {
         await _gate.WaitAsync();
-        try { return (await LoadAndRestoreAsync()).Where(b => history || b.IsActive(Now)).Select(b => b.ToDto()).ToList(); }
+        try { return (await LoadAndRestoreAsync()).Select(b => b.ToDto()).ToList(); }
         finally { _gate.Release(); }
     }
 
@@ -93,7 +95,7 @@ public sealed class ModerationService(
                 var active = bans.Where(b => b.Kind == BanKind.Account && b.UserId == user.Id && b.IsActive(Now)).ToList();
                 // Freezing is separate from banning; it must not silently lift an account ban.
                 if (active.Count > 0 && request.State != UserState.Normal) return ErrorCode.InvalidValue;
-                foreach (var ban in active) await repository.RevokeAsync(coordinatorId, ban.Id, actorId, Now);
+                foreach (var ban in active) await RemoveAsync(ban, bans);
                 if (active.Count > 0)
                 {
                     await LoadAndRestoreAsync();
@@ -150,7 +152,7 @@ public sealed class ModerationService(
             var ban = bans.FirstOrDefault(b => b.Id == id);
             if (ban == null) return ErrorCode.UserNotFound;
             if (ban.UserId is { } userId && !await MayTargetAsync(actorId, userId)) return ErrorCode.InsufficientPermissions;
-            if (ban.RevokedAt == null) await repository.RevokeAsync(coordinatorId, id, actorId, Now);
+            await RemoveAsync(ban, bans);
             await LoadAndRestoreAsync();
             logger.LogInformation("Global ban {BanId} revoked by {ActorId}.", id, actorId);
             return null;
@@ -178,27 +180,49 @@ public sealed class ModerationService(
     private async Task<List<GlobalBan>> LoadAndRestoreAsync()
     {
         var bans = await repository.GetAsync(coordinatorId);
+        var now = Now;
         foreach (var group in bans.Where(b => b.Kind == BanKind.Account && b.UserId != null).GroupBy(b => b.UserId!.Value))
-            await RestoreAccountAsync(group.Key, group);
+            await RestoreAccountAsync(group.Key, group, now);
+        foreach (var ban in bans.Where(b => !b.IsActive(now)).ToList())
+        {
+            await repository.DeleteAsync(coordinatorId, ban.Id);
+            bans.Remove(ban);
+        }
         Volatile.Write(ref _snapshot, bans.ToArray());
         return bans;
     }
 
-    private async Task RestoreAccountAsync(int userId, IEnumerable<GlobalBan> entries)
+    private async Task RemoveAsync(GlobalBan ban, List<GlobalBan> bans)
+    {
+        // Restore before deleting so a failed state update can be retried after a restart.
+        var now = Now;
+        if (ban.Kind == BanKind.Account && ban.UserId is { } userId)
+            await RestoreAccountAsync(userId, bans.Select(b => b.Id == ban.Id ? b with { ExpiresAt = now } : b), now);
+        await repository.DeleteAsync(coordinatorId, ban.Id);
+        bans.Remove(ban);
+    }
+
+    private async Task RestoreAccountAsync(int userId, IEnumerable<GlobalBan> entries, DateTime now)
     {
         var bans = entries.ToList();
         if (bans.Count == 0) return;
         var user = await userManager.GetUserAsync(userId);
         if (user == null) return;
-        if (bans.Any(b => b.IsActive(Now)))
+        if (bans.Any(b => b.IsActive(now)))
         {
-            if (!user.IsBanned) await userManager.SetState(user.Id, UserState.Banned);
+            if (!user.IsBanned) await RestoreStateAsync(user.Id, UserState.Banned);
         }
         else if (user.IsBanned)
         {
             var previous = bans.OrderByDescending(b => b.CreatedAt).First().PreviousState;
-            await userManager.SetState(user.Id, previous == UserState.Suspended ? previous : UserState.Normal);
+            await RestoreStateAsync(user.Id, previous == UserState.Suspended ? previous : UserState.Normal);
         }
+    }
+
+    private async Task RestoreStateAsync(int userId, UserState state)
+    {
+        if (await userManager.SetState(userId, state) is { } error)
+            throw new InvalidOperationException($"Restoring ban state for user {userId} failed: {error}.");
     }
 
     private async Task SweepAsync()

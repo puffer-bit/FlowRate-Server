@@ -77,13 +77,13 @@ public class ModerationServiceTests
             new LoginOutcome(null, _models[id ?? 1], null, AttachUserResult.Attached, "token")));
 
     [Fact]
-    public async Task AccountBan_IsAudited_ClosesEveryDevice_AndDoesNotBanOtherAccountsOnTheAddress()
+    public async Task AccountBan_StoresDetails_ClosesEveryDevice_AndDoesNotBanOtherAccountsOnTheAddress()
     {
         var first = Device(1, "192.0.2.1");
         var second = Device(1, "192.0.2.8");
         var other = Device(2, "192.0.2.1");
         Assert.Null(await _service.SetStateAsync(10, Ban()));
-        var entry = Assert.Single(await _service.ListAsync(false));
+        var entry = Assert.Single(await _service.ListAsync());
         Assert.Equal("Abuse in chat", entry.Reason);
         Assert.Equal(10, entry.CreatedBy);
         foreach (var device in new[] { first, second })
@@ -154,28 +154,27 @@ public class ModerationServiceTests
     }
 
     [Fact]
-    public async Task Expiration_RestoresFrozenState_AndKeepsTheReasonInHistory()
+    public async Task Expiration_RestoresFrozenState_AndDeletesTheBan()
     {
         _models[1].Suspend();
         Assert.Null(await _service.SetStateAsync(10, Ban(expires: _time.GetUtcNow().UtcDateTime.AddHours(1))));
         _time.Advance(TimeSpan.FromHours(1));
         Assert.Null((await Admit(Device(1, "192.0.2.1").Object)).Error);
         Assert.Equal(UserState.Suspended, _models[1].State);
-        Assert.Empty(await _service.ListAsync(false));
-        Assert.Equal("Abuse in chat", Assert.Single(await _service.ListAsync(true)).Reason);
+        Assert.Empty(await _service.ListAsync());
+        Assert.Empty(_bans.Items);
     }
 
     [Fact]
-    public async Task Revoke_IsIdempotent_AndRecordsActorAndTime()
+    public async Task Revoke_DeletesTheBan_AndRestoresState()
     {
         Assert.Null(await _service.SetStateAsync(10, Ban()));
-        var ban = Assert.Single(await _service.ListAsync(false));
+        var ban = Assert.Single(await _service.ListAsync());
         Assert.Null(await _service.RevokeAsync(10, ban.Id));
         _time.Advance(TimeSpan.FromMinutes(1));
-        Assert.Null(await _service.RevokeAsync(10, ban.Id));
-        var history = Assert.Single(await _service.ListAsync(true));
-        Assert.Equal(10, history.RevokedBy);
-        Assert.Equal(_time.GetUtcNow().UtcDateTime.AddMinutes(-1), history.RevokedAt);
+        Assert.Equal(ErrorCode.UserNotFound, await _service.RevokeAsync(10, ban.Id));
+        Assert.Empty(await _service.ListAsync());
+        Assert.Empty(_bans.Items);
         Assert.False(_models[1].IsBanned);
     }
 
@@ -188,7 +187,7 @@ public class ModerationServiceTests
         Assert.Equal(UserState.Suspended, _models[1].State);
         Assert.Null(await _service.SetStateAsync(10, Ban(BanKind.Ip)));
         Assert.NotNull(await _service.CheckAddressAsync("192.0.2.1"));
-        var entry = Assert.Single(await _service.ListAsync(false));
+        var entry = Assert.Single(await _service.ListAsync());
         Assert.Null(await _service.RevokeAsync(10, entry.Id));
         Assert.Null(await _service.CheckAddressAsync("192.0.2.1"));
     }
@@ -249,10 +248,9 @@ public class ModerationServiceTests
         public Task<List<GlobalBan>> GetAsync(string coordinatorId, CancellationToken ct = default) =>
             Task.FromResult(Items.Where(x => x.CoordinatorId == coordinatorId).ToList());
         public Task AddAsync(GlobalBan ban, CancellationToken ct = default) { Items.Add(ban); return Task.CompletedTask; }
-        public Task RevokeAsync(string coordinatorId, Guid id, int actor, DateTime now, CancellationToken ct = default)
+        public Task DeleteAsync(string coordinatorId, Guid id, CancellationToken ct = default)
         {
-            var index = Items.FindIndex(x => x.CoordinatorId == coordinatorId && x.Id == id && x.RevokedAt == null);
-            if (index >= 0) Items[index] = Items[index] with { RevokedBy = actor, RevokedAt = now };
+            Items.RemoveAll(x => x.CoordinatorId == coordinatorId && x.Id == id);
             return Task.CompletedTask;
         }
     }

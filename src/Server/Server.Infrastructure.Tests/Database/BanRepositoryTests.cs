@@ -50,7 +50,7 @@ public sealed class BanRepositoryTests : IDisposable
     }
 
     [Fact]
-    public async Task Audit_SurvivesReload_AndRevokeIsScopedAndIdempotent()
+    public async Task Ban_SurvivesReload_AndDeletionIsScopedAndIdempotent()
     {
         await using (var db = _factory.CreateDbContext()) await db.Database.MigrateAsync();
         var repository = new BanRepository(_factory);
@@ -59,15 +59,49 @@ public sealed class BanRepositoryTests : IDisposable
             now.AddDays(1), UserState.Suspended);
         await repository.AddAsync(ban);
         Assert.Equal(ban, Assert.Single(await new BanRepository(_factory).GetAsync("one")));
-        await repository.RevokeAsync("other", ban.Id, 8, now);
-        Assert.Null(Assert.Single(await repository.GetAsync("one")).RevokedAt);
-        await repository.RevokeAsync("one", ban.Id, 8, now);
-        await repository.RevokeAsync("one", ban.Id, 9, now.AddHours(1));
-        var revoked = Assert.Single(await repository.GetAsync("one"));
-        Assert.Equal(8, revoked.RevokedBy);
-        Assert.Equal(now, revoked.RevokedAt);
-        Assert.Equal("Abuse", revoked.Reason);
+        await repository.DeleteAsync("other", ban.Id);
+        Assert.Equal(ban, Assert.Single(await repository.GetAsync("one")));
+        await repository.DeleteAsync("one", ban.Id);
+        await repository.DeleteAsync("one", ban.Id);
+        Assert.Empty(await repository.GetAsync("one"));
         Assert.Empty(await repository.GetAsync("other"));
+    }
+
+    [Fact]
+    public async Task HistoryRemovalMigration_DeletesCompletedBans_AndRestoresOnlyUnbannedAccounts()
+    {
+        await using var db = _factory.CreateDbContext();
+        var migrator = db.GetService<IMigrator>();
+        await migrator.MigrateAsync("GlobalBans");
+        var coordinator = CoordinatorInstanceModel.Create("history", "0.0.0.0", 1234, DateTime.UtcNow);
+        db.CoordinatorInstances.Add(coordinator.ToEntity());
+        await db.SaveChangesAsync();
+        foreach (var id in new[] { 101, 102, 103 })
+            await db.Database.ExecuteSqlRawAsync("""
+                INSERT INTO UserEntities (Id, IdentityHash, Username, CoordinatorInstanceId, State, LastStatus,
+                    FirstConnectionTime, LastConnectionTime)
+                VALUES ({0}, randomblob(32), {1}, {2}, 1, 0, '2026-01-01', '2026-01-01');
+                """, id, $"user{id}", coordinator.Id);
+        var repository = new BanRepository(_factory);
+        var now = DateTime.UtcNow;
+        var expired = new GlobalBan(Guid.NewGuid(), coordinator.Id, BanKind.Account, 101, null, "expired", 5,
+            now.AddDays(-2), now.AddDays(-1), UserState.Suspended);
+        var revoked = expired with { Id = Guid.NewGuid(), UserId = 102, ExpiresAt = null, PreviousState = UserState.Normal };
+        var active = expired with { Id = Guid.NewGuid(), UserId = 103, ExpiresAt = null };
+        var old = active with { Id = Guid.NewGuid(), CreatedAt = now.AddDays(-3), ExpiresAt = now.AddDays(-1) };
+        var ip = expired with { Id = Guid.NewGuid(), Kind = BanKind.Ip, Address = "192.0.2.1" };
+        foreach (var ban in new[] { expired, revoked, active, old, ip }) await repository.AddAsync(ban);
+        await db.Database.ExecuteSqlRawAsync("UPDATE GlobalBans SET RevokedAt = {0}, RevokedBy = 5 WHERE Id = {1}", now, revoked.Id);
+
+        await migrator.MigrateAsync();
+
+        Assert.Equal(active.Id, Assert.Single(await repository.GetAsync(coordinator.Id)).Id);
+        db.ChangeTracker.Clear();
+        var states = await db.UserEntities.Where(u => u.CoordinatorInstanceId == coordinator.Id)
+            .ToDictionaryAsync(u => u.Id, u => u.State);
+        Assert.Equal(UserState.Suspended, states[101]);
+        Assert.Equal(UserState.Normal, states[102]);
+        Assert.Equal(UserState.Banned, states[103]);
     }
 
     private sealed class Factory(DbContextOptions<ServerDbContext> options) : IDbContextFactory<ServerDbContext>

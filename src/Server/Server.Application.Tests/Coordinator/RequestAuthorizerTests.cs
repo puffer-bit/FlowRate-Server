@@ -156,11 +156,11 @@ public class RequestAuthorizerTests
     }
 
     [Fact]
-    public async Task GlobalBanHistoryAndRevocation_AreNotGrantedToSessionHosts()
+    public async Task GlobalBanListingAndRevocation_AreNotGrantedToSessionHosts()
     {
         Assert.False(await _authorizer.IsAllowedAsync(From(HostId, new CoordinatorBansRequest())));
         Assert.False(await _authorizer.IsAllowedAsync(From(HostId, new CoordinatorRevokeBanRequest(Guid.NewGuid()))));
-        Assert.True(await _authorizer.IsAllowedAsync(From(AdminId, new CoordinatorBansRequest(true))));
+        Assert.True(await _authorizer.IsAllowedAsync(From(AdminId, new CoordinatorBansRequest())));
         Assert.True(await _authorizer.IsAllowedAsync(From(AdminId, new CoordinatorRevokeBanRequest(Guid.NewGuid()))));
     }
 

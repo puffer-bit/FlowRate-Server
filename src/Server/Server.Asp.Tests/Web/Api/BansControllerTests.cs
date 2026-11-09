@@ -33,17 +33,14 @@ public class BansControllerTests
     }
 
     [Fact]
-    public async Task OfflineHistory_IsScoped_AndKeepsExpiredAndRevokedReasonsOnlyWhenRequested()
+    public async Task OfflineBans_AreScoped_AndOnlyReturnActiveEntries()
     {
         var now = DateTime.UtcNow;
         var active = new GlobalBan(Guid.NewGuid(), _coordinator.Id, BanKind.Account, 1, null, "Active reason", 2, now, null);
         var expired = active with { Id = Guid.NewGuid(), Reason = "Expired reason", ExpiresAt = now.AddHours(-1) };
-        var revoked = active with { Id = Guid.NewGuid(), Reason = "Revoked reason", RevokedBy = 3, RevokedAt = now };
-        _repository.Setup(x => x.GetAsync(_coordinator.Id, default)).ReturnsAsync([active, expired, revoked]);
+        _repository.Setup(x => x.GetAsync(_coordinator.Id, default)).ReturnsAsync([active, expired]);
         var current = await _controller.Get(_coordinator.Id);
         Assert.Equal(active.Id, Assert.Single(current.Value!).Id);
-        var history = await _controller.Get(_coordinator.Id, true);
-        Assert.Equal(new[] { "Active reason", "Expired reason", "Revoked reason" }, history.Value!.Select(x => x.Reason));
         Assert.IsType<NotFoundResult>((await _controller.Get("other")).Result);
     }
 
