@@ -1,6 +1,5 @@
 using System.Net;
 using Shared.Enums.User;
-using Shared.Models.DataTransferObjects;
 
 namespace Server.Core.Models.Moderation;
 
@@ -9,7 +8,6 @@ public record GlobalBan(Guid Id, string CoordinatorId, BanKind Kind, int? UserId
     UserState PreviousState = UserState.Normal, int? RevokedBy = null, DateTime? RevokedAt = null)
 {
     public bool IsActive(DateTime now) => RevokedAt == null && (ExpiresAt == null || ExpiresAt > now);
-    public BanDTO ToDto() => new(Id, Kind, UserId, Address, Reason, CreatedBy, CreatedAt, ExpiresAt, RevokedBy, RevokedAt);
 
     public static string? NormalizeAddress(string? value)
     {

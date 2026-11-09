@@ -78,8 +78,8 @@ public partial class HybridSessionPeerManager : IHybridSessionPeerManager
         // Capture the source: callbacks already queued by a previous node must not reset its replacement.
         _connectionLostHandler = () => HandleGatewayConnectionLost(gateway);
         _connectedHandler = () => HandleGatewayConnected(gateway);
-        _gateway.ConnectionLost += _connectionLostHandler;
-        _gateway.Connected += _connectedHandler;
+        gateway.ConnectionLost += _connectionLostHandler;
+        gateway.Connected += _connectedHandler;
 
         await SetStateAsync(gateway.IsConnected ? HybridSessionNodeState.Active : HybridSessionNodeState.WaitingForSFUNode);
         await DropSfuStateAsync(new HybridSessionSFUNodeChangedEvent(Model.Id));

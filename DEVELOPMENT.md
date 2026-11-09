@@ -2,6 +2,8 @@
 
 Requirements: .NET SDK 10, Node.js 24 or newer, Docker for the full stack.
 
+For validation, publishing and rollback, see the [release guide](docs/releasing.md).
+
 ```sh
 src/Scripts/bash/build.sh     # the solution
 src/Scripts/bash/test.sh      # every test project
