@@ -66,14 +66,7 @@ public sealed class Peer
             return ErrorCode.NotAdmitted;
 
         ConnectionId = connectionId;
-        IsTransportConnected = false;
-        IsMicrophoneMuted = true;
-        IsSoundMuted = false;
-        IsScreenShareActive = false;
-        IsScreenAudioActive = false;
-        IsAfk = false;
-        AfkReason = null;
-        WatchedScreenShares = ImmutableHashSet<int>.Empty;
+        ResetSessionState();
         State = IsAdmitted ? HybridSessionPeerState.Connecting : HybridSessionPeerState.WaitingForApprove;
         return null;
     }
@@ -125,18 +118,17 @@ public sealed class Peer
         if (State == HybridSessionPeerState.Closed)
             return;
 
-        IsTransportConnected = false;
-        IsMicrophoneMuted = true;
-        IsSoundMuted = false;
-        IsScreenShareActive = false;
-        IsScreenAudioActive = false;
-        IsAfk = false;
-        AfkReason = null;
-        WatchedScreenShares = ImmutableHashSet<int>.Empty;
+        ResetSessionState();
         State = HybridSessionPeerState.WaitingForServer;
     }
 
     public void Close()
+    {
+        ResetSessionState();
+        State = HybridSessionPeerState.Closed;
+    }
+
+    private void ResetSessionState()
     {
         IsTransportConnected = false;
         IsMicrophoneMuted = true;
@@ -146,7 +138,6 @@ public sealed class Peer
         IsAfk = false;
         AfkReason = null;
         WatchedScreenShares = ImmutableHashSet<int>.Empty;
-        State = HybridSessionPeerState.Closed;
     }
 
     /// <returns>False if the microphone already was in the requested state.</returns>

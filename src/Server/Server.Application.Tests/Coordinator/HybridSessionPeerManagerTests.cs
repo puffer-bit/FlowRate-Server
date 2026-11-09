@@ -62,7 +62,7 @@ public class HybridSessionPeerManagerTests
             Assert.False(manager.HasPeer(HostId));
             Assert.Equal(HostId, Assert.Single(_events.Of<HybridSessionPeerLeftEvent>()).UserId);
             Assert.Equal(3, _gateway.Calls.Count(c => c.StartsWith("RemoveOutbound:")));
-            Assert.Single(_gateway.Calls.Where(c => c.StartsWith($"RemoveInbound:in-{HostId}-")));
+            Assert.Single(_gateway.Calls, c => c.StartsWith($"RemoveInbound:in-{HostId}-"));
             Assert.Empty(_events.Of<HybridSessionPeerStoppedVoiceShareEvent>());
             Assert.Empty(_events.Of<HybridSessionPeerStoppedScreenShareEvent>());
         }

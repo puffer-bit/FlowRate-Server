@@ -624,8 +624,8 @@ public partial class HybridSessionPeerManager
         }
 
         var outbounds = new List<Outbound>();
-        var hadVoice = _voiceOutbounds.Remove(userId, out var voice);
-        var hadScreen = _screenOutbounds.Remove(userId, out var screen);
+        _voiceOutbounds.Remove(userId, out var voice);
+        _screenOutbounds.Remove(userId, out var screen);
         if (voice != null)
             outbounds.Add(voice);
         if (screen != null)
@@ -638,7 +638,7 @@ public partial class HybridSessionPeerManager
             _screenMediaSettings.Remove(outbound.Id);
             ForgetInbounds(outbound.Id);
         }
-        if (hadScreen)
+        if (screen != null)
             await ForgetWatchersOfScreenShareAsync(userId);
 
         // A timeout of one resource must neither serialize nor skip the remaining cleanup.
@@ -650,9 +650,9 @@ public partial class HybridSessionPeerManager
         // Leave/kick already release all tracks on the clients; only a rejoin needs individual stops.
         if (announceTrackStops)
         {
-            if (hadVoice)
+            if (voice != null)
                 await _coordinatorEventBus.PublishAsync(new HybridSessionPeerStoppedVoiceShareEvent(Model.Id, userId));
-            if (hadScreen)
+            if (screen != null)
                 await _coordinatorEventBus.PublishAsync(new HybridSessionPeerStoppedScreenShareEvent(Model.Id, userId));
         }
     }
