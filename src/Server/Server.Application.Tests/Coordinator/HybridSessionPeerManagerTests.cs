@@ -45,6 +45,62 @@ public class HybridSessionPeerManagerTests
 
     // Joining
 
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task AddPeer_AtCapacity_RejectsNewPeersButAllowsRejoiningAndReusesFreedSlots(bool ready)
+    {
+        var model = HybridSessionModel.Create("coordinator", "room", 2, HostId, WebRTCEngine.Mediasoup, true);
+        var manager = await CreateManager(model: model);
+        _gateway.IsConnected = ready;
+        Assert.Null((await manager.AddPeerAsync(HostId, "epoch", "host")).result);
+        Assert.Null((await manager.AddPeerAsync(GuestId, "epoch", "guest")).result);
+        var transports = _gateway.CallCount("CreatePeerTransport");
+        var joined = _events.Of<HybridSessionPeerJoinedEvent>().Count;
+
+        var (error, transport) = await manager.AddPeerAsync(OtherGuestId, "epoch");
+
+        Assert.Equal(ErrorCode.SessionFull, error);
+        Assert.Null(transport);
+        Assert.False(manager.HasPeer(OtherGuestId));
+        Assert.Equal(transports, _gateway.CallCount("CreatePeerTransport"));
+        Assert.Equal(joined, _events.Of<HybridSessionPeerJoinedEvent>().Count);
+        Assert.Null((await manager.AddPeerAsync(GuestId, "next", "other-device")).result);
+        Assert.Equal(2, manager.GetAllPeerSnapshots().Count);
+
+        Assert.Null(await manager.RemovePeerAsync(GuestId));
+        Assert.Null((await manager.AddPeerAsync(OtherGuestId, "epoch")).result);
+        Assert.Equal(2, manager.GetAllPeerSnapshots().Count);
+    }
+
+    [Fact]
+    public async Task AddPeer_ConcurrentJoins_CannotExceedCapacity()
+    {
+        var model = HybridSessionModel.Create("coordinator", "room", 2, HostId, WebRTCEngine.Mediasoup);
+        var manager = await CreateManager(model: model);
+        await manager.AddPeerAsync(HostId, "epoch");
+
+        var results = await Task.WhenAll(Enumerable.Range(10, 20)
+            .Select(id => manager.AddPeerAsync(id, "epoch")));
+
+        Assert.Single(results, result => result.result == null);
+        Assert.Equal(19, results.Count(result => result.result == ErrorCode.SessionFull));
+        Assert.Equal(2, manager.GetAllPeerSnapshots().Count);
+    }
+
+    [Fact]
+    public async Task AddPeer_UsesUpdatedCapacity()
+    {
+        var model = HybridSessionModel.Create("coordinator", "room", 2, HostId, WebRTCEngine.Mediasoup);
+        var manager = await CreateManager(model: model);
+        await JoinAndConnect(manager, HostId, GuestId);
+        model.ChangeCapacity(1);
+        Assert.Equal(ErrorCode.SessionFull, (await manager.AddPeerAsync(OtherGuestId, "epoch")).result);
+        Assert.Null((await manager.AddPeerAsync(HostId, "epoch")).result);
+        model.ChangeCapacity(3);
+        Assert.Null((await manager.AddPeerAsync(OtherGuestId, "epoch")).result);
+    }
+
     [Fact]
     public async Task RemovePeer_AnnouncesLeaveBeforeSfuCleanup_AndReleasesResourcesInParallel()
     {

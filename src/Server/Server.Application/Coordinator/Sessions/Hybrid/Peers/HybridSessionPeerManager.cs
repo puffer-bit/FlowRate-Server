@@ -91,6 +91,9 @@ public partial class HybridSessionPeerManager : IHybridSessionPeerManager
         var isNew = !_peers.TryGetValue(userId, out var peer);
         if (isNew)
         {
+            if (Model.IsFull(_peers.Count))
+                return (ErrorCode.SessionFull, null);
+
             peer = Peer.Join(userId, Model, connectionId);
         }
         else
