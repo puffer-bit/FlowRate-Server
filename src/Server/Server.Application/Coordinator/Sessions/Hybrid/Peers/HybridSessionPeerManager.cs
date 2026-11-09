@@ -78,8 +78,8 @@ public partial class HybridSessionPeerManager : IHybridSessionPeerManager
         // Capture the source: callbacks already queued by a previous node must not reset its replacement.
         _connectionLostHandler = () => HandleGatewayConnectionLost(gateway);
         _connectedHandler = () => HandleGatewayConnected(gateway);
-        _gateway.ConnectionLost += _connectionLostHandler;
-        _gateway.Connected += _connectedHandler;
+        gateway.ConnectionLost += _connectionLostHandler;
+        gateway.Connected += _connectedHandler;
 
         await SetStateAsync(gateway.IsConnected ? HybridSessionNodeState.Active : HybridSessionNodeState.WaitingForSFUNode);
         await DropSfuStateAsync(new HybridSessionSFUNodeChangedEvent(Model.Id));
@@ -291,17 +291,19 @@ public partial class HybridSessionPeerManager : IHybridSessionPeerManager
             return ErrorCode.PeerNotFound;
         }
 
+        peer.Close();
+        // Membership is already removed. Clients can release tracks and animate the row immediately,
+        // without waiting for SFU round trips. Preserve the concrete event type for dispatch.
+        await _coordinatorEventBus.PublishAsync(removedEvent);
+
         // Without a reachable node the SFU state is already dropped, so leaving must not depend on it
         var canReachSfu = IsReady;
         if (canReachSfu)
         {
-            await ReleasePeerMediaAsync(userId);
+            await ReleasePeerMediaAsync(userId, announceTrackStops: false);
             await ClosePeerTransportAsync(userId);
         }
 
-        peer.Close();
-        // The concrete event type matters: the event bus dispatches on it
-        await _coordinatorEventBus.PublishAsync(removedEvent);
 
         if (_peers.IsEmpty)
         {

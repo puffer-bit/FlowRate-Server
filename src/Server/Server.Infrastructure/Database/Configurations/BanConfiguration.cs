@@ -15,6 +15,5 @@ public class BanConfiguration : IEntityTypeConfiguration<BanEntity>
         builder.Property(x => x.Reason).HasMaxLength(1000);
         builder.HasIndex(x => new { x.CoordinatorId, x.Kind, x.UserId });
         builder.HasIndex(x => new { x.CoordinatorId, x.Kind, x.Address });
-        // Keep the audit trail when a user is deleted; there is intentionally no user foreign key.
     }
 }

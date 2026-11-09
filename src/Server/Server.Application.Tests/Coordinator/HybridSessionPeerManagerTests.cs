@@ -19,9 +19,10 @@ public class HybridSessionPeerManagerTests
     private readonly FakeSfuGateway _gateway = new();
     private readonly RecordingEventBus _events = new();
 
-    private async Task<HybridSessionPeerManager> CreateManager(bool isHostMustApprove = false)
+    private async Task<HybridSessionPeerManager> CreateManager(bool isHostMustApprove = false,
+        HybridSessionModel? model = null)
     {
-        var model = HybridSessionModel.Create("coordinator", "room", 10, HostId, WebRTCEngine.Mediasoup, isHostMustApprove);
+        model ??= HybridSessionModel.Create("coordinator", "room", 10, HostId, WebRTCEngine.Mediasoup, isHostMustApprove);
         model.Id = 7;
 
         var manager = new HybridSessionPeerManager(NullLogger.Instance, _events, model);
@@ -43,6 +44,92 @@ public class HybridSessionPeerManagerTests
         manager.GetAllPeerSnapshots()[userId].State;
 
     // Joining
+
+    [Fact]
+    public async Task RemovePeer_AnnouncesLeaveBeforeSfuCleanup_AndReleasesResourcesInParallel()
+    {
+        var manager = await CreateManager();
+        await JoinAndConnect(manager, HostId, GuestId);
+        await manager.StartVoiceShareAsync(GuestId);
+        await manager.StartVoiceShareAsync(HostId);
+        await manager.StartScreenShareAsync(HostId, withAudio: true);
+        _gateway.MediaRemovalGate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        var removal = manager.RemovePeerAsync(HostId);
+        try
+        {
+            Assert.False(removal.IsCompleted);
+            Assert.False(manager.HasPeer(HostId));
+            Assert.Equal(HostId, Assert.Single(_events.Of<HybridSessionPeerLeftEvent>()).UserId);
+            Assert.Equal(3, _gateway.Calls.Count(c => c.StartsWith("RemoveOutbound:")));
+            Assert.Single(_gateway.Calls, c => c.StartsWith($"RemoveInbound:in-{HostId}-"));
+            Assert.Empty(_events.Of<HybridSessionPeerStoppedVoiceShareEvent>());
+            Assert.Empty(_events.Of<HybridSessionPeerStoppedScreenShareEvent>());
+        }
+        finally
+        {
+            _gateway.MediaRemovalGate.TrySetResult();
+            await removal;
+        }
+        Assert.Equal(1, _gateway.CallCount($"ClosePeerTransport:{HostId}"));
+    }
+
+    [Fact]
+    public async Task Rejoin_WhenOneResourceCleanupFails_ReleasesTheOthersAndForgetsOldRoutes()
+    {
+        var manager = await CreateManager();
+        await JoinAndConnect(manager, HostId, GuestId);
+        var (_, guestVoice) = await manager.StartVoiceShareAsync(GuestId);
+        var (_, voice) = await manager.StartVoiceShareAsync(HostId);
+        var (_, screen, audio) = await manager.StartScreenShareAsync(HostId, withAudio: true);
+        var failedInbound = $"RemoveInbound:in-{HostId}-{guestVoice!.Id}";
+        _gateway.FailRemovalFor.Add(failedInbound);
+
+        Assert.Null((await manager.AddPeerAsync(HostId, "new-epoch")).result);
+
+        Assert.Equal(1, _gateway.CallCount(failedInbound));
+        foreach (var outbound in new[] { voice!, screen!, audio! })
+            Assert.Equal(1, _gateway.CallCount($"RemoveOutbound:{outbound.Id}"));
+        Assert.True(manager.GetAllPeerSnapshots()[HostId].IsMicrophoneMuted);
+        Assert.False(manager.GetAllPeerSnapshots()[HostId].IsScreenShareActive);
+        var (_, nextVoice) = await manager.StartVoiceShareAsync(HostId);
+        Assert.NotEqual(voice!.Id, nextVoice!.Id);
+    }
+
+    [Fact]
+    public async Task RemovePeer_ReleasesVoiceWithoutAnnouncingAnIntermediateMute()
+    {
+        var manager = await CreateManager();
+        await JoinAndConnect(manager, HostId, GuestId);
+        var (_, outbound) = await manager.StartVoiceShareAsync(HostId);
+
+        await manager.RemovePeerAsync(HostId);
+
+        Assert.Equal(1, _gateway.CallCount($"RemoveOutbound:{outbound!.Id}"));
+        Assert.Empty(_events.Of<HybridSessionPeerStoppedVoiceShareEvent>());
+        Assert.Empty(_events.Of<HybridSessionPeerMuteMicrophoneEvent>());
+        Assert.Equal(HostId, Assert.Single(_events.Of<HybridSessionPeerLeftEvent>()).UserId);
+    }
+
+    [Fact]
+    public async Task Microphone_StaysMutedUntilVoiceStarts_AndMuteStateIsAnnounced()
+    {
+        var manager = await CreateManager();
+        await JoinAndConnect(manager, HostId);
+
+        Assert.True(manager.GetAllPeerSnapshots()[HostId].IsMicrophoneMuted);
+        Assert.True(Assert.Single(_events.Of<HybridSessionPeerJoinedEvent>()).Peer.IsMicrophoneMuted);
+
+        await manager.StartVoiceShareAsync(HostId);
+
+        Assert.False(manager.GetAllPeerSnapshots()[HostId].IsMicrophoneMuted);
+        Assert.Equal(HostId, Assert.Single(_events.Of<HybridSessionPeerUnmuteMicrophoneEvent>()).UserId);
+
+        await manager.StopVoiceShareAsync(HostId, HostId);
+
+        Assert.True(manager.GetAllPeerSnapshots()[HostId].IsMicrophoneMuted);
+        Assert.Equal(HostId, Assert.Single(_events.Of<HybridSessionPeerMuteMicrophoneEvent>()).UserId);
+    }
 
     [Fact]
     public async Task AddPeer_WhenSfuIsNotConnected_JoinsWhileWaitingForServer()
@@ -932,6 +1019,62 @@ public class HybridSessionPeerManagerTests
         Assert.Equal(inbound, resumed);
         Assert.Equal(2, _gateway.CallCount($"ResumeInbound:{inbound.Id}"));
         Assert.Equal(1, _gateway.CallCount($"AddInbound:{GuestId}"));
+    }
+
+    [Fact]
+    public async Task RestartScreenShare_AfterMediaSettingsChange_ReplacesTracksInsideTheSameTransport()
+    {
+        var model = HybridSessionModel.Create("coordinator", "room", 10, HostId, WebRTCEngine.Mediasoup);
+        var manager = await CreateManager(model: model);
+        await JoinAndConnect(manager, HostId, GuestId);
+        var (_, firstVideo, firstAudio) = await manager.StartScreenShareAsync(HostId, withAudio: true);
+        var (_, firstInbound, _) = await manager.SetScreenShareWatchAsync(GuestId, HostId, true);
+        await manager.StopScreenShareAsync(HostId, HostId);
+
+        var media = model.Media with
+        {
+            ScreenCodec = WebRTCVideoCodecs.AV1, IsVideoNackEnabled = false, IsVideoRtxEnabled = false,
+            IsAudioNackEnabled = true, IsOpusFecEnabled = false, OpusPacketLossPercent = 0,
+            VoiceJitterBufferMs = 40, VideoJitterBufferMs = 80, KeyFrameRequestDelayMs = 500
+        };
+        model.SetMedia(media);
+        var (result, video, audio) = await manager.StartScreenShareAsync(HostId, withAudio: true);
+        var (watchResult, inbound, _) = await manager.SetScreenShareWatchAsync(GuestId, HostId, true);
+
+        Assert.Null(result);
+        Assert.Null(watchResult);
+        Assert.NotEqual(firstVideo!.Id, video!.Id);
+        Assert.NotEqual(firstAudio!.Id, audio!.Id);
+        Assert.NotEqual(firstInbound!.Id, inbound!.Id);
+        Assert.Equal(1, _gateway.CallCount($"RemoveOutbound:{firstVideo.Id}"));
+        Assert.Equal(1, _gateway.CallCount($"RemoveOutbound:{firstAudio.Id}"));
+        Assert.Equal(0, _gateway.CallCount($"ResumeOutbound:{firstVideo.Id}"));
+        Assert.Equal(2, _gateway.CallCount("CreatePeerTransport"));
+        Assert.Equal(0, _gateway.CallCount("ClosePeerTransport"));
+        Assert.Equal(HybridSessionPeerState.Connected, StateOf(manager, HostId));
+        Assert.Equal(media.ForOutbound(MediaSourceType.Screen, MediaType.Video), _gateway.OutboundSettings.ToArray()[2]);
+        Assert.Equal(media.ForOutbound(MediaSourceType.Screen, MediaType.Audio), _gateway.OutboundSettings.Last());
+        Assert.Equal(media.ForInbound(MediaType.Video), _gateway.InboundSettings.ToArray()[2]);
+        Assert.Equal(media.ForInbound(MediaType.Audio), _gateway.InboundSettings.Last());
+    }
+
+    [Fact]
+    public async Task RestartScreenShare_AfterOnlyBufferingChanges_ReplacesPausedConsumers()
+    {
+        var model = HybridSessionModel.Create("coordinator", "room", 10, HostId, WebRTCEngine.Mediasoup);
+        var manager = await CreateManager(model: model);
+        await JoinAndConnect(manager, HostId, GuestId);
+        await manager.StartScreenShareAsync(HostId, withAudio: false);
+        var (_, first, _) = await manager.SetScreenShareWatchAsync(GuestId, HostId, true);
+        await manager.StopScreenShareAsync(HostId, HostId);
+
+        model.SetMedia(model.Media with { VideoJitterBufferMs = 80 });
+        await manager.StartScreenShareAsync(HostId, withAudio: false);
+        var (_, replacement, _) = await manager.SetScreenShareWatchAsync(GuestId, HostId, true);
+
+        Assert.NotEqual(first!.Id, replacement!.Id);
+        Assert.Equal(80, _gateway.InboundSettings.Last().JitterBufferMs);
+        Assert.Equal(0, _gateway.CallCount("ClosePeerTransport"));
     }
 
     [Fact]

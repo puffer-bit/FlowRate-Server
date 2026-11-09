@@ -48,7 +48,7 @@ export function App() {
       <button className={`nav-backdrop ${menuOpen ? 'is-open' : ''}`} aria-label="Close navigation" aria-hidden={!menuOpen} tabIndex={menuOpen ? 0 : -1} onClick={() => setMenuOpen(false)} />
       <aside id="panel-navigation" className={`panel-sidebar ${menuOpen ? 'is-open' : ''}`}>
         <Link to="/" className="brand" aria-label="FlowRate home" title="FlowRate home" onClick={() => setMenuOpen(false)}>
-          <span className="brand-mark"><PanelIcon name="activity" size={25} /></span>
+          <img className="brand-mark" src={`${import.meta.env.BASE_URL}app-icon.svg`} alt="" />
           <span className="brand-text">FlowRate<span className="brand-subtitle">SERVER CONSOLE</span></span>
         </Link>
         <div className="nav-label">WORKSPACE</div>

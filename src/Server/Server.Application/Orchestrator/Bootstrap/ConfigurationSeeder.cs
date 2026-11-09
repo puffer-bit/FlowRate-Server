@@ -59,9 +59,8 @@ public class ConfigurationSeeder
             Name = LocalSfuName,
             Host = _orchestratorOptions.LocalSfuHost,
             Port = LocalSfuPort,
-            // The SFU next to the server takes no credentials
-            Username = string.Empty,
-            Key = string.Empty
+            Username = _orchestratorOptions.LocalSfuUsername,
+            Key = _orchestratorOptions.LocalSfuPassword
         };
 
         await _sfuNodeStore.AddAsync(node, ct);

@@ -30,16 +30,16 @@ export function BansPage() {
     {kind === 'Ip' && <TextInput label="IP address" description="Blocks everyone on this address. Leave empty to use the account’s last connection IP." value={address} onChange={event => setAddress(event.currentTarget.value)} />}
     <Textarea label="Reason (optional)" maxLength={1000} value={reason} onChange={event => setReason(event.currentTarget.value)} />
     <Button loading={create.isPending} disabled={!userId || revoke.isPending} onClick={() => create.mutate({ userId: Number(userId), kind, reason: reason.trim(), address: kind === 'Ip' && address.trim() ? address.trim() : undefined, expiresAt: duration === '0' ? undefined : new Date(Date.now() + Number(duration) * 3_600_000).toISOString() })}>Ban</Button>
-    <Title order={3}>Bans and history</Title>
+    <Title order={3}>Active bans</Title>
     <Table.ScrollContainer minWidth={700}><Table><Table.Thead><Table.Tr><Table.Th>Target</Table.Th><Table.Th>Reason</Table.Th><Table.Th>Created</Table.Th><Table.Th>Status</Table.Th><Table.Th /></Table.Tr></Table.Thead><Table.Tbody>
       {bans.data?.map(ban => {
         const expired = ban.expiresAt != null && Date.parse(ban.expiresAt) <= Date.now()
-        const active = !ban.revokedAt && !expired
+        const active = !expired
         return <Table.Tr key={ban.id}>
           <Table.Td>{ban.kind === 'Ip' ? `IP: ${ban.address}` : `Account #${ban.userId}`}</Table.Td>
           <Table.Td><Text style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{ban.reason}</Text></Table.Td>
           <Table.Td>{new Date(ban.createdAt).toLocaleString()} · #{ban.createdBy}</Table.Td>
-          <Table.Td><Badge color={active ? 'red' : 'gray'}>{ban.revokedAt ? 'Revoked' : expired ? 'Expired' : 'Active'}</Badge><Text size="xs">{ban.revokedAt ? `${new Date(ban.revokedAt).toLocaleString()} · #${ban.revokedBy}` : ban.expiresAt ? `Until ${new Date(ban.expiresAt).toLocaleString()}` : 'Permanent'}</Text></Table.Td>
+          <Table.Td><Badge color={active ? 'red' : 'gray'}>{expired ? 'Expired' : 'Active'}</Badge><Text size="xs">{ban.expiresAt ? `Until ${new Date(ban.expiresAt).toLocaleString()}` : 'Permanent'}</Text></Table.Td>
           <Table.Td>{active && <Button size="xs" variant="default" disabled={create.isPending} loading={revoke.isPending} onClick={() => revoke.mutate(ban.id)}>Revoke</Button>}</Table.Td>
         </Table.Tr>
       })}

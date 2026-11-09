@@ -37,6 +37,9 @@ internal sealed class FakeSfuGateway : ISFUGateway
     /// <summary>When set, inbound creation waits for it, so that a test can see how many run at once.</summary>
     public TaskCompletionSource? InboundGate { get; set; }
 
+    public TaskCompletionSource? MediaRemovalGate { get; set; }
+    public HashSet<string> FailRemovalFor { get; } = [];
+
     public int InboundsInFlight => _inboundsInFlight;
     public int MaxInboundsInFlight => _maxInboundsInFlight;
 
@@ -46,6 +49,8 @@ internal sealed class FakeSfuGateway : ISFUGateway
     private int _outboundCounter;
 
     public IReadOnlyList<string> Calls => _calls.ToList();
+    public ConcurrentQueue<OutboundMediaSettings> OutboundSettings { get; } = new();
+    public ConcurrentQueue<InboundMediaSettings> InboundSettings { get; } = new();
 
     public int CallCount(string name) => Calls.Count(call => call == name || call.StartsWith(name + ":"));
 
@@ -91,6 +96,7 @@ internal sealed class FakeSfuGateway : ISFUGateway
         MediaSourceType sourceType, MediaType mediaType, OutboundMediaSettings settings)
     {
         Record($"AddOutbound:{userId}");
+        OutboundSettings.Enqueue(settings);
         var id = Interlocked.Increment(ref _outboundCounter);
         return Task.FromResult<(SFUOutboundCreateResult, Outbound?)>((SFUOutboundCreateResult.NoError,
             new Outbound
@@ -110,7 +116,7 @@ internal sealed class FakeSfuGateway : ISFUGateway
         throw new NotSupportedException();
 
     public Task<SFUOutboundCreateResult> RemoveOutbound(int sessionId, int userId, string outboundId) =>
-        Result($"RemoveOutbound:{outboundId}", SFUOutboundCreateResult.NoError);
+        RemoveMediaAsync($"RemoveOutbound:{outboundId}", SFUOutboundCreateResult.NoError);
 
     public Task<SFUOutboundDowngradeResult> DowngradeOutbound(int sessionId, int userId, MediaSourceType sourceType,
         MediaType? type = null) => throw new NotSupportedException();
@@ -122,6 +128,7 @@ internal sealed class FakeSfuGateway : ISFUGateway
         Outbound outbound, InboundMediaSettings settings)
     {
         Record($"AddInbound:{userId}");
+        InboundSettings.Enqueue(settings);
 
         var inFlight = Interlocked.Increment(ref _inboundsInFlight);
         InterlockedMax(ref _maxInboundsInFlight, inFlight);
@@ -147,7 +154,17 @@ internal sealed class FakeSfuGateway : ISFUGateway
     }
 
     public Task<SFUInboundCreateResult> RemoveInbound(int sessionId, int userId, string inboundId) =>
-        Result($"RemoveInbound:{inboundId}", SFUInboundCreateResult.NoError);
+        RemoveMediaAsync($"RemoveInbound:{inboundId}", SFUInboundCreateResult.NoError);
+
+    private async Task<T> RemoveMediaAsync<T>(string call, T result)
+    {
+        Record(call);
+        if (MediaRemovalGate != null)
+            await MediaRemovalGate.Task;
+        if (FailRemovalFor.Contains(call))
+            throw new TimeoutException(call);
+        return result;
+    }
 
     public Task<SFUInboundCreateResult> PauseInbound(int sessionId, string inboundId) =>
         Result($"PauseInbound:{inboundId}", SFUInboundCreateResult.NoError);

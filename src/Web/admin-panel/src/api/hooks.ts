@@ -3,6 +3,7 @@ import { hashKey, useMutation, useQuery, useQueryClient, type QueryKey } from '@
 import {
   assignRole,
   createCoordinator,
+  createSfuNode,
   confirmTwoFactor,
   createRole,
   deletePasskey,
@@ -24,8 +25,10 @@ import {
   setUserPassword,
   unassignRole,
   updateCoordinatorSettings,
+  updateSfuCredentials,
   updateRole,
   type RoleChange,
+  type SfuCredentials,
   type UpdateCoordinatorSettings,
   type UpdateRole,
   type UserSecurity,
@@ -58,6 +61,22 @@ const sfuNodesPollMs = 5_000
 
 export const useSfuNodes = () =>
   useQuery({ queryKey: queryKeys.sfuNodes, queryFn: getSfuNodes, refetchInterval: sfuNodesPollMs })
+
+export function useCreateSfuNode() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: createSfuNode,
+    onSuccess: () => { void queryClient.invalidateQueries({ queryKey: queryKeys.sfuNodes }) },
+  })
+}
+
+export function useUpdateSfuCredentials(id: number) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (credentials: SfuCredentials) => updateSfuCredentials(id, credentials),
+    onSuccess: () => { void queryClient.invalidateQueries({ queryKey: queryKeys.sfuNodes }) },
+  })
+}
 
 export function useUpdateCoordinatorSettings(id: string) {
   const queryClient = useQueryClient()

@@ -58,6 +58,25 @@ The control panel has no authentication and listens on 127.0.0.1 only. Reach it 
 
 Push notifications and passkeys are off until `.env` turns them on; the comments there say how.
 
+## SFU gRPC authentication
+
+The SFU can require HTTP Basic credentials on every gRPC call. For the Compose-managed local SFU, set both
+`SFU_GRPC_USERNAME` and `SFU_GRPC_PASSWORD` in `.env`, then recreate the SFU and server containers. Choose a
+strong password; the username cannot contain `:` or surrounding whitespace. Leaving both empty keeps authentication
+disabled for compatibility. Setting just one prevents the SFU from starting.
+
+On a **new database**, Compose also seeds the local node with these credentials. Existing node settings are stored
+in the database and are not overwritten by environment changes: set matching credentials under **SFU nodes →
+Credentials → Edit** in the panel, or enter them when adding a node. Empty both fields using **Connect without
+credentials** to remove stored credentials. Changing credentials reconnects the node and can interrupt media.
+Each additional SFU can have its own environment variables and panel credentials.
+
+Basic authentication does **not** encrypt credentials. The SFU itself serves plaintext gRPC, so use loopback or a
+trusted private network; for untrusted networks put a TLS-terminating HTTP/2 gRPC proxy in front of the SFU and
+select **Use TLS** in the panel. Keep the panel private too: it has no authentication. SFU credentials are stored
+in the server database and supplied to the SFU as environment variables; protect the data volume, `.env` and
+container configuration accordingly.
+
 ## SFU node selection and recovery
 
 Each coordinator uses its assigned subset of the global SFU pool. New sessions are distributed by session ID

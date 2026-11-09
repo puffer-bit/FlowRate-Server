@@ -1,18 +1,19 @@
-# Runs the tests of the server on every push and pull request, and type-checks the SFU and the control panel.
+# Tests the server and SFU and builds the control panel, including before a release.
 #
-# The tests need neither Docker nor the SFU: the SFU is faked behind its gateway.
+# The .NET tests need neither Docker nor the SFU: it is faked behind its gateway.
 name: Tests
 
 on:
   push:
   pull_request:
   workflow_dispatch:
+  workflow_call:
 
 permissions:
   contents: read
 
 concurrency:
-  group: tests-${{ github.ref }}
+  group: tests-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -50,13 +51,17 @@ jobs:
           name: test-results
           path: TestResults
 
-  typecheck:
-    name: Type check (${{ matrix.project }})
+  web:
+    name: Validate (${{ matrix.project }})
     runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
       matrix:
-        project: [src/Sfu/mediasoup, src/Web/admin-panel]
+        include:
+          - project: src/Sfu/mediasoup
+            command: npm test
+          - project: src/Web/admin-panel
+            command: npm run build
     steps:
       - uses: actions/checkout@v7
 
@@ -66,9 +71,8 @@ jobs:
           cache: npm
           cache-dependency-path: ${{ matrix.project }}/package-lock.json
 
-      # No install scripts: the mediasoup worker is not needed to type-check
-      - name: Type check
+      - name: Validate
         working-directory: ${{ matrix.project }}
         run: |
-          npm ci --ignore-scripts
-          npx tsc -b --noEmit
+          npm ci
+          ${{ matrix.command }}

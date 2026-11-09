@@ -16,6 +16,8 @@ export type CoordinatorSettings = Schemas['CoordinatorSettingsDto']
 export type UpdateCoordinatorSettings = Schemas['UpdateCoordinatorSettingsDto']
 export type RateLimitSettings = Schemas['RateLimitSettingsDto']
 export type SfuNode = Schemas['SfuNodeDto']
+export type SfuCredentials = { username: string, password: string }
+export type CreateSfuNode = SfuCredentials & { name: string, host: string, port: number, isSecured: boolean }
 export type SfuNodeStatus = Schemas['SfuNodeStatusDto']
 export type SfuNodeConnectionState = Schemas['SFUNodeConnectionState']
 export type Role = Schemas['RoleDto']
@@ -82,6 +84,9 @@ export const createCoordinator = (settings: CreateCoordinator) => send<Coordinat
 export const getOverview = () => get<PanelOverview>('/overview')
 
 export const getSfuNodes = () => get<SfuNode[]>('/sfu-nodes')
+export const createSfuNode = (node: CreateSfuNode) => send<SfuNode>('POST', '/sfu-nodes', node)
+export const updateSfuCredentials = (id: number, credentials: SfuCredentials) =>
+  send<SfuNode>('PUT', `/sfu-nodes/${id}/credentials`, credentials)
 
 export const getCoordinator = (id: string) => get<CoordinatorDetails>(coordinatorPath(id))
 
@@ -159,6 +164,6 @@ export const queryKeys = {
 
 export type GlobalBan = Schemas['BanDTO']
 export type CreateGlobalBan = Schemas['CreateBan']
-export const getBans = (id: string) => get<GlobalBan[]>(`${coordinatorPath(id)}/bans?history=true`)
+export const getBans = (id: string) => get<GlobalBan[]>(`${coordinatorPath(id)}/bans`)
 export const createBan = (id: string, ban: CreateGlobalBan) => send<void>('POST', `${coordinatorPath(id)}/bans`, ban)
 export const revokeBan = (id: string, banId: string) => send<void>('DELETE', `${coordinatorPath(id)}/bans/${encodeURIComponent(banId)}`)

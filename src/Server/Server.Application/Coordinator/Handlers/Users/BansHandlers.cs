@@ -10,7 +10,7 @@ public class BansHandler(IMessageSender sender, ModerationService moderation) : 
     public async Task<HandleMessageResult> HandleMessage(CoordinatorBansRequest? request, string connectionId)
     {
         if (request == null) return HandleMessageResult.ForbiddenRequest;
-        sender.SendMessageById(connectionId, request.ToResponse(await moderation.ListAsync(request.IncludeHistory)));
+        sender.SendMessageById(connectionId, request.ToResponse(await moderation.ListAsync()));
         return HandleMessageResult.NoError;
     }
 }

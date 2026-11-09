@@ -37,7 +37,7 @@ be renamed, given a color, moved, deleted, assigned or unassigned. Only its perm
 | `CreateSessions`            | Creating sessions. The creator of a hybrid session becomes its host.            |
 | `ManageSessions`            | Changing and deleting any session, and arranging sessions and categories.       |
 | `KickMembers`               | Kicking from any hybrid session.                                                |
-| `BanMembers`                | Global account/IP bans, freezing, reinstatement and history.                    |
+| `BanMembers`                | Global account/IP bans, freezing and reinstatement.                    |
 | `ApproveMembers`            | Approving or rejecting users who wait to enter a hybrid session.                |
 | `ManageMessages`            | Deleting other users' chat messages.                                            |
 | `ManageUsers`               | Changing other users' names and avatars.                                        |

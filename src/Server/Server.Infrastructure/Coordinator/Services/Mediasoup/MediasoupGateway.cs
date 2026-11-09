@@ -1,4 +1,5 @@
 using Grpc.Core;
+using System.Text;
 using Grpc.Net.Client;
 using Microsoft.Extensions.Logging;
 using Server.Api.Grpc;
@@ -32,6 +33,7 @@ public partial class MediasoupGateway : ISFUGateway
     
     private readonly ILogger _logger;
     private readonly SfuConnectionSettings _connectionOptions;
+    private readonly Metadata? _authHeaders;
 
     public MediasoupGateway(
         ILogger logger,
@@ -42,6 +44,11 @@ public partial class MediasoupGateway : ISFUGateway
         _logger = logger;
         _endpoint = model.Endpoint;
         _connectionOptions = orchestrator.SfuConnection;
+        if (!string.IsNullOrEmpty(model.Credentials.Username) || !string.IsNullOrEmpty(model.Credentials.Key))
+        {
+            var token = Convert.ToBase64String(Encoding.UTF8.GetBytes($"{model.Credentials.Username}:{model.Credentials.Key}"));
+            _authHeaders = new Metadata { { "authorization", $"Basic {token}" } };
+        }
     }
     
     public async Task<(SFUTransportCreateResult result, TransportData? transportData)> CreatePeerTransport(int sessionId, int userId,
@@ -363,7 +370,7 @@ public partial class MediasoupGateway : ISFUGateway
         CheckSFUServer();
 
         var timeout = TimeSpan.FromSeconds(_connectionOptions.CallTimeoutSeconds);
-        var options = new CallOptions(deadline: DateTime.UtcNow.Add(timeout),
+        var options = new CallOptions(headers: _authHeaders, deadline: DateTime.UtcNow.Add(timeout),
             cancellationToken: _cts?.Token ?? CancellationToken.None);
         try
         {

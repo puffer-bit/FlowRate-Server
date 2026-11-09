@@ -11,6 +11,8 @@ services:
     environment:
       # Only the server on this machine talks to the SFU
       GRPC_BIND: 127.0.0.1:50051
+      SFU_GRPC_USERNAME: ${SFU_GRPC_USERNAME:-}
+      SFU_GRPC_PASSWORD: ${SFU_GRPC_PASSWORD:-}
       # The address the SFU binds; see RTC_LISTEN_IP in .env
       RTC_LISTEN_IP: ${RTC_LISTEN_IP:-0.0.0.0}
       # Public IP clients reach the SFU at; set it in .env on the server
@@ -42,6 +44,9 @@ services:
     environment:
       # The control panel has no authentication: localhost only unless .env says otherwise
       Orchestrator__ListenIp: ${PANEL_LISTEN_IP:-127.0.0.1}
+      # These seed the local node only when the database is empty
+      Orchestrator__LocalSfuUsername: ${SFU_GRPC_USERNAME:-}
+      Orchestrator__LocalSfuPassword: ${SFU_GRPC_PASSWORD:-}
       # Push is off unless a Firebase key in secrets/ is named in .env
       Push__ServiceAccountPath: ${PUSH_SERVICE_ACCOUNT_FILE:+/run/secrets/flowrate/${PUSH_SERVICE_ACCOUNT_FILE}}
       # Or through a push relay, when there is no key of your own

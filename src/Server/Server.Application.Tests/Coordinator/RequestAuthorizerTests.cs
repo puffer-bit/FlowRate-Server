@@ -15,6 +15,7 @@ using Shared.Models.Requests;
 using Shared.Models.Requests.Coordinator;
 using Shared.Models.Requests.SessionActions.ChatSession;
 using Shared.Models.Requests.SessionActions.Generic;
+using Shared.Models.Requests.SessionActions.HybridSession;
 
 namespace Server.Application.Tests.Coordinator;
 
@@ -68,6 +69,15 @@ public class RequestAuthorizerTests
     public async Task OpenRequest_IsAllowed()
     {
         Assert.True(await _authorizer.IsAllowedAsync(From(PlainId, new CoordinatorInfoRequest())));
+    }
+
+    [Theory]
+    [InlineData(true, true)]
+    [InlineData(false, false)]
+    public async Task MicrophoneMute_WithoutSpeak_CanMuteButCannotUnmute(bool isMuted, bool allowed)
+    {
+        Assert.Equal(allowed, await _authorizer.IsAllowedAsync(
+            From(PlainId, new HybridSessionSetMicrophoneMuteRequest(SessionId, isMuted))));
     }
 
     [Fact]
@@ -146,11 +156,11 @@ public class RequestAuthorizerTests
     }
 
     [Fact]
-    public async Task GlobalBanHistoryAndRevocation_AreNotGrantedToSessionHosts()
+    public async Task GlobalBanListingAndRevocation_AreNotGrantedToSessionHosts()
     {
         Assert.False(await _authorizer.IsAllowedAsync(From(HostId, new CoordinatorBansRequest())));
         Assert.False(await _authorizer.IsAllowedAsync(From(HostId, new CoordinatorRevokeBanRequest(Guid.NewGuid()))));
-        Assert.True(await _authorizer.IsAllowedAsync(From(AdminId, new CoordinatorBansRequest(true))));
+        Assert.True(await _authorizer.IsAllowedAsync(From(AdminId, new CoordinatorBansRequest())));
         Assert.True(await _authorizer.IsAllowedAsync(From(AdminId, new CoordinatorRevokeBanRequest(Guid.NewGuid()))));
     }
 

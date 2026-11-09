@@ -1,4 +1,7 @@
 import { Alert, Badge, Button, Group, Stack, Table, Text, Title } from '@mantine/core'
+import { useState } from 'react'
+import { CreateSfuNodeModal } from '../components/CreateSfuNodeModal'
+import { SfuCredentialsModal } from '../components/SfuCredentialsModal'
 import type { SfuNode } from '../api/client'
 import { useNow, useSfuNodes } from '../api/hooks'
 import { formatSince } from '../format'
@@ -10,6 +13,8 @@ import { NodeAddress, NodeDuration, NodeIdentity, TableLabel, TableMetric } from
 export function SfuNodesPage() {
   const sfuNodes = useSfuNodes()
   const now = useNow()
+  const [creating, setCreating] = useState(false)
+  const [credentialsNode, setCredentialsNode] = useState<SfuNode | null>(null)
 
   return (
     <Stack gap="xl">
@@ -19,7 +24,10 @@ export function SfuNodesPage() {
           <Title order={1}>SFU nodes<span className="heading-dot">.</span></Title>
           <Text c="dimmed" mt={8}>Monitor the media nodes powering voice and video sessions.</Text>
         </div>
-        <Button variant="default" leftSection={<PanelIcon name="refresh" size={16} />} loading={sfuNodes.isFetching} onClick={() => { void sfuNodes.refetch() }}>Refresh</Button>
+        <Group>
+          <Button variant="default" leftSection={<PanelIcon name="refresh" size={16} />} loading={sfuNodes.isFetching} onClick={() => { void sfuNodes.refetch() }}>Refresh</Button>
+          <Button onClick={() => setCreating(true)}>Add SFU node</Button>
+        </Group>
       </div>
     <section className="data-section" aria-label="SFU nodes list">
       <div className="section-heading"><div><Group gap="sm"><span className="section-icon"><PanelIcon name="nodes" /></span><Title order={3}>SFU nodes</Title>{sfuNodes.data && <Badge color="gray" variant="light">{sfuNodes.data.length}</Badge>}</Group><Text size="sm" c="dimmed" mt={6}>The media layer behind your voice and video sessions.</Text></div><span className="section-meta">Checked every 5 seconds</span></div>
@@ -39,6 +47,7 @@ export function SfuNodesPage() {
                       <Table.Th><TableLabel icon="clock">In this state</TableLabel></Table.Th>
                       <Table.Th ta="right"><TableLabel icon="sessions">Sessions</TableLabel></Table.Th>
                       <Table.Th ta="right"><TableLabel icon="cpu">Workers</TableLabel></Table.Th>
+                      <Table.Th>Credentials</Table.Th>
                     </Table.Tr>
                   </Table.Thead>
                   <Table.Tbody>
@@ -50,6 +59,7 @@ export function SfuNodesPage() {
                         <Table.Td><NodeDuration value={node.status ? formatSince(node.status.stateChangedAtUtc, now) : '—'} /></Table.Td>
                         <Table.Td ta="right"><TableMetric value={node.status?.sessionCount} /></Table.Td>
                         <Table.Td ta="right"><TableMetric value={node.status?.workerCount} /></Table.Td>
+                        <Table.Td><Button variant="subtle" size="xs" aria-label={`Edit credentials for ${node.name}`} onClick={() => setCredentialsNode(node)}>Edit</Button></Table.Td>
                       </Table.Tr>
                     ))}
                   </Table.Tbody>
@@ -59,6 +69,8 @@ export function SfuNodesPage() {
           )}
       </QueryState>
     </section>
+    {creating && <CreateSfuNodeModal onClose={() => setCreating(false)} />}
+    {credentialsNode && <SfuCredentialsModal node={credentialsNode} onClose={() => setCredentialsNode(null)} />}
     </Stack>
   )
 }

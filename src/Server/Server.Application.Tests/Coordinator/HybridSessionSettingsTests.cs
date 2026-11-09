@@ -10,6 +10,10 @@ using Server.Application.Tests.Fakes;
 using Server.Core.Models.HybridSession;
 using Shared.Enums;
 using Shared.Enums.WebRTC;
+using Server.Application.Coordinator.Roles;
+using Server.Application.Coordinator.Sessions;
+using Server.Application.Coordinator.Messaging;
+using Server.Core.Models.User;
 
 namespace Server.Application.Tests.Coordinator;
 
@@ -18,6 +22,7 @@ public class HybridSessionSettingsTests
     private readonly RecordingEventBus _events = new();
     private readonly Mock<IVideoSessionRepository> _repository = new();
     private readonly Dictionary<int, Dictionary<int, PeerSnapshot>> _peers = new();
+    private readonly Dictionary<int, Mock<IHybridSessionPeerManager>> _peerManagers = new();
     private readonly HybridSessionModel _room = new(7, "coordinator", "room", 10, 1, WebRTCEngine.Mediasoup);
     private readonly HybridSessionModel _hall = new(8, "coordinator", "hall", 10, 1, WebRTCEngine.Mediasoup);
 
@@ -36,6 +41,7 @@ public class HybridSessionSettingsTests
             {
                 var peers = _peers[model.Id] = new Dictionary<int, PeerSnapshot>();
                 var peerManager = new Mock<IHybridSessionPeerManager>();
+                _peerManagers[model.Id] = peerManager;
                 peerManager.Setup(p => p.GetAllPeerSnapshots()).Returns(() => peers);
 
                 var session = new Mock<IHybridSession>();
@@ -54,6 +60,56 @@ public class HybridSessionSettingsTests
     {
         for (var userId = 1; userId <= count; userId++)
             _peers[sessionId][userId] = new PeerSnapshot(userId, HybridSessionPeerState.Connected, true, true, false, false);
+    }
+
+    [Fact]
+    public async Task RoleChanges_MuteAffectedPeersWithoutSpeakPermission()
+    {
+        using var manager = await CreateManager();
+        AddPeers(7, 3);
+        var permissions = new Mock<ICoordinatorPermissions>();
+        permissions.Setup(p => p.HasIn(2, _room, Permission.ViewSessions | Permission.Speak)).Returns(true);
+        using var visibility = new SessionVisibility(Mock.Of<IMessageSender>());
+        manager.WatchPermissions(permissions.Object, visibility);
+
+        permissions.Raise(p => p.PermissionsChanged += null, new[] { 1, 2 });
+
+        _peerManagers[7].Verify(p => p.SetMicrophoneMutedAsync(UserModel.SystemUserId, 1, true), Times.Once);
+        _peerManagers[7].Verify(p => p.SetMicrophoneMutedAsync(It.IsAny<int>(), 2, It.IsAny<bool>()), Times.Never);
+        _peerManagers[7].Verify(p => p.SetMicrophoneMutedAsync(It.IsAny<int>(), 3, It.IsAny<bool>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task SessionPermissionChanges_MuteExistingPeers_AndNeverUnmuteOnRestore()
+    {
+        using var manager = await CreateManager();
+        AddPeers(7, 1);
+        var permissions = new Mock<ICoordinatorPermissions>();
+        using var visibility = new SessionVisibility(Mock.Of<IMessageSender>());
+        manager.WatchPermissions(permissions.Object, visibility);
+
+        visibility.Reconfigured(_room);
+
+        _peerManagers[7].Verify(p => p.SetMicrophoneMutedAsync(UserModel.SystemUserId, 1, true), Times.Once);
+        permissions.Setup(p => p.HasIn(1, _room, Permission.ViewSessions | Permission.Speak)).Returns(true);
+        visibility.Reconfigured(_room);
+        _peerManagers[7].Verify(p => p.SetMicrophoneMutedAsync(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task Dispose_StopsWatchingVoicePermissions()
+    {
+        var manager = await CreateManager();
+        AddPeers(7, 1);
+        var permissions = new Mock<ICoordinatorPermissions>();
+        using var visibility = new SessionVisibility(Mock.Of<IMessageSender>());
+        manager.WatchPermissions(permissions.Object, visibility);
+
+        manager.Dispose();
+        permissions.Raise(p => p.PermissionsChanged += null, new[] { 1 });
+        visibility.Reconfigured(_room);
+
+        _peerManagers[7].Verify(p => p.SetMicrophoneMutedAsync(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>()), Times.Never);
     }
 
     [Fact]

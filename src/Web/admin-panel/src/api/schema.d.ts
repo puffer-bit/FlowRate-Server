@@ -45,7 +45,6 @@ export interface paths {
         get: {
             parameters: {
                 query?: {
-                    history?: boolean;
                 };
                 header?: never;
                 path: {
@@ -1112,10 +1111,6 @@ export interface components {
             createdAt: string;
             /** Format: date-time */
             expiresAt: null | string;
-            /** Format: int32 */
-            revokedBy: null | number;
-            /** Format: date-time */
-            revokedAt: null | string;
         };
         /** @enum {unknown} */
         BanKind: "Account" | "Ip" | "Hardware";

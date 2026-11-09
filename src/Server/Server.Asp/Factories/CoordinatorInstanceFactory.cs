@@ -105,6 +105,7 @@ public class CoordinatorInstanceFactory : ICoordinatorInstanceFactory
         panelEvents.Watch(userManager);
         pushNotifier.Watch(userManager, chatSessionManager, roles);
         visibility.Watch(roles, sessionManager, userManager);
+        hybridSessionManager.WatchPermissions(roles, visibility);
         mediaService.Watch(roles);
         pushReplyService.Watch(roles);
         var authenticator = CreateAuthenticator(logger, coordinatorInstanceContext);
@@ -201,7 +202,7 @@ public class CoordinatorInstanceFactory : ICoordinatorInstanceFactory
         ActivatorUtilities.CreateInstance<ChatSessionManager>(_provider, logger, coordinatorEventBus, mediaStorage,
             coordinatorInstanceId);
 
-    private IHybridSessionManager CreateHybridSessionManager(ILogger logger, string coordinatorInstanceId,
+    private HybridSessionManager CreateHybridSessionManager(ILogger logger, string coordinatorInstanceId,
         ICoordinatorEventBus coordinatorEventBus, ISFUNodeSelector sfuPool) =>
         ActivatorUtilities.CreateInstance<HybridSessionManager>(_provider, logger, coordinatorEventBus, sfuPool,
             coordinatorInstanceId);
