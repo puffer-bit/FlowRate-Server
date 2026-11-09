@@ -21,6 +21,10 @@ concurrency:
   group: release
   cancel-in-progress: false
 
+defaults:
+  run:
+    shell: bash
+
 jobs:
   validate:
     name: Validate
