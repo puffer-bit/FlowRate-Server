@@ -16,6 +16,8 @@ export type CoordinatorSettings = Schemas['CoordinatorSettingsDto']
 export type UpdateCoordinatorSettings = Schemas['UpdateCoordinatorSettingsDto']
 export type RateLimitSettings = Schemas['RateLimitSettingsDto']
 export type SfuNode = Schemas['SfuNodeDto']
+export type SfuCredentials = { username: string, password: string }
+export type CreateSfuNode = SfuCredentials & { name: string, host: string, port: number, isSecured: boolean }
 export type SfuNodeStatus = Schemas['SfuNodeStatusDto']
 export type SfuNodeConnectionState = Schemas['SFUNodeConnectionState']
 export type Role = Schemas['RoleDto']
@@ -82,6 +84,9 @@ export const createCoordinator = (settings: CreateCoordinator) => send<Coordinat
 export const getOverview = () => get<PanelOverview>('/overview')
 
 export const getSfuNodes = () => get<SfuNode[]>('/sfu-nodes')
+export const createSfuNode = (node: CreateSfuNode) => send<SfuNode>('POST', '/sfu-nodes', node)
+export const updateSfuCredentials = (id: number, credentials: SfuCredentials) =>
+  send<SfuNode>('PUT', `/sfu-nodes/${id}/credentials`, credentials)
 
 export const getCoordinator = (id: string) => get<CoordinatorDetails>(coordinatorPath(id))
 

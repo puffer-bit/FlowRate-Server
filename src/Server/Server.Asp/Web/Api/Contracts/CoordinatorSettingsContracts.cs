@@ -23,6 +23,40 @@ public sealed record CoordinatorSettingsDto(
     RateLimitSettingsDto RateLimits,
     IReadOnlyList<int> SfuNodeIds);
 
+/// <summary>Basic credentials; leave both empty to connect without authentication.</summary>
+public class SfuCredentialsDto : IValidatableObject
+{
+    [StringLength(256)] public string? Username { get; init; }
+    [StringLength(4096)] public string? Password { get; init; }
+
+    public virtual IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
+    {
+        var username = Username?.Trim() ?? string.Empty;
+        if (username.Contains(':'))
+            yield return new ValidationResult("The username cannot contain a colon.", [nameof(Username)]);
+        if ((username.Length == 0) != string.IsNullOrEmpty(Password))
+            yield return new ValidationResult("Provide both username and password, or leave both empty.", [nameof(Username), nameof(Password)]);
+    }
+}
+
+/// <summary>Connection settings for a new node in the global SFU pool.</summary>
+public sealed class CreateSfuNodeDto : SfuCredentialsDto
+{
+    [Required, StringLength(100)] public string Name { get; init; } = string.Empty;
+    [Required, StringLength(253)] public string Host { get; init; } = string.Empty;
+    [Range(1, 65535)] public int Port { get; init; }
+    public bool IsSecured { get; init; }
+
+    public override IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
+    {
+        foreach (var error in base.Validate(validationContext))
+            yield return error;
+        var hostType = Uri.CheckHostName(Host.Trim());
+        if (hostType is not (UriHostNameType.Dns or UriHostNameType.IPv4))
+            yield return new ValidationResult("Enter a hostname or IPv4 address without a scheme or port.", [nameof(Host)]);
+    }
+}
+
 /// <summary>A node of the global SFU pool a coordinator can be given. Credentials are left out.</summary>
 /// <param name="Status">How the orchestrator's connection to the node is doing; null for a disabled node.</param>
 public sealed record SfuNodeDto(int Id, string Name, string Host, int Port, bool IsSecured, bool IsEnabled,

@@ -5,7 +5,7 @@
   "main": "dist/main.js",
   "scripts": {
     "build": "tsc -p . && node -e \"require('fs').cpSync('api/gRPC/contracts','dist/api/gRPC/contracts',{recursive:true})\"",
-    "test": "npm run build && node --test dist/infrastructure/session/media-profiles.test.js dist/infrastructure/session/av1-forwarding.test.js",
+    "test": "npm run build && node --test dist/infrastructure/auth.test.js dist/infrastructure/session/media-profiles.test.js dist/infrastructure/session/av1-forwarding.test.js",
     "start": "node dist/main.js",
     "dev": "tsx main.ts"
   },

@@ -59,8 +59,7 @@ public partial class MediasoupGateway
 
             await channel.ConnectAsync(linkedCts.Token);
 
-            MarkReachable();
-            _logger.LogInformation($"Successfully connected to gRPC server: {_endpoint.Address}");
+            _logger.LogInformation($"gRPC channel to server {_endpoint.Address} is ready; checking Ping.");
         }
         catch (OperationCanceledException)
         {
@@ -118,9 +117,6 @@ public partial class MediasoupGateway
                 if (currentState == ConnectivityState.TransientFailure)
                     MarkUnreachable(SFUNodeConnectionState.Disconnected, "Connection with the node lost.");
 
-                if (currentState == ConnectivityState.Ready)
-                    MarkReachable();
-
                 await channel.WaitForStateChangedAsync(currentState, ct);
             }
         }
@@ -154,7 +150,7 @@ public partial class MediasoupGateway
         try
         {
             var response = await client.PingAsync(new PingRequest(),
-                new CallOptions(deadline: DateTime.UtcNow.Add(timeout), cancellationToken: ct));
+                new CallOptions(headers: _authHeaders, deadline: DateTime.UtcNow.Add(timeout), cancellationToken: ct));
             stopwatch.Stop();
 
             MarkReachable(stopwatch.Elapsed, new SfuNodeLoad(response.SessionCount, response.WorkerCount,
@@ -164,6 +160,10 @@ public partial class MediasoupGateway
         {
             // A node built before Ping still answered, so the round trip holds; it just reports no load
             MarkReachable(stopwatch.Elapsed);
+        }
+        catch (RpcException e) when (e.StatusCode is StatusCode.Unauthenticated or StatusCode.PermissionDenied)
+        {
+            MarkUnreachable(SFUNodeConnectionState.Disconnected, "SFU authentication failed. Check the node credentials.");
         }
         catch (RpcException e) when (!ct.IsCancellationRequested)
         {
@@ -202,7 +202,7 @@ public partial class MediasoupGateway
         }
     }
 
-    /// <summary>The channel is up or the node answered a ping.</summary>
+    /// <summary>The node answered an authenticated ping.</summary>
     private void MarkReachable(TimeSpan? roundTripTime = null, SfuNodeLoad? load = null)
     {
         bool isRestored;
