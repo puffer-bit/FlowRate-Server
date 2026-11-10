@@ -335,6 +335,7 @@ public class ChatSessionManager : IChatSessionManager
         await gate.WaitAsync();
         try
         {
+            if (chat.IsPrivate && !chat.MemberIds.Contains(userId)) return ErrorCode.InsufficientPermissions;
             var message = await GetMessageAsync(sessionId, messageId);
             if (message == null || message.IsDeleted) return ErrorCode.MessageNotFound;
             if (message.IsSystem) return ErrorCode.InsufficientPermissions;

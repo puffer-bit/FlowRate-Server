@@ -47,6 +47,9 @@ public sealed class RequestAuthorizer
             if (message is Shared.Models.Requests.SessionActions.Generic.ChangeSessionPermissionsRequest
                 || message is Shared.Models.Requests.SessionActions.Generic.MoveSessionRequest)
                 return false;
+            if (message is Shared.Models.Requests.SessionActions.ChatSession.SetMessagePinnedRequest
+                && privateChat.Kind == ChatKind.Direct)
+                return privateChat.MemberIds.Contains(senderId);
             return privateChat.MemberIds.Contains(senderId) && _permissions.HasIn(senderId, privateChat, policy.Required);
         }
 

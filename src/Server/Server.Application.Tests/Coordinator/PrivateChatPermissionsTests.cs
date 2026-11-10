@@ -65,6 +65,31 @@ public sealed class PrivateChatPermissionsTests
         storage.VerifyNoOtherCalls();
     }
 
+    [Theory]
+    [InlineData(ChatKind.Direct, 1, true)]
+    [InlineData(ChatKind.Direct, 2, true)]
+    [InlineData(ChatKind.Direct, 99, false)]
+    [InlineData(ChatKind.Group, 2, false)]
+    [InlineData(ChatKind.ServerChannel, 2, false)]
+    public async Task DirectChatPinsRequireMembershipInsteadOfModeration(ChatKind kind, int userId, bool expected)
+    {
+        var chat = ChatSessionModel.Create("server", "Chat", 1);
+        chat.Id = 5;
+        chat.SetAudience(kind, kind == ChatKind.ServerChannel ? [] : [1, 2]);
+        var sessions = new Mock<ISessionManager>();
+        SessionModel? found = chat;
+        sessions.Setup(manager => manager.TryGetSessionModel(5, out found)).Returns(true);
+        var roleService = new Mock<IRoleService>();
+        roleService.Setup(service => service.GetLoaded("server")).Returns(new Server.Core.Models.Roles.RoleSet([
+            new Server.Core.Models.Roles.RoleModel(1, "server", "@everyone", null, 0, Permission.ViewSessions, true, 0)]));
+        using var roles = new CoordinatorRoles(NullLogger.Instance, roleService.Object, Mock.Of<IUserManager>(),
+            Mock.Of<IMessageSender>(), "server");
+        var authorizer = new RequestAuthorizer(roles, Mock.Of<IHybridSessionManager>(), sessions.Object);
+        Assert.Equal(expected, await authorizer.IsAllowedAsync(new SetMessagePinnedRequest(5, 10, true) { SenderId = userId }));
+        if (kind == ChatKind.Direct)
+            Assert.False(roles.HasIn(userId, chat, Permission.ManageMessages));
+    }
+
     [Fact]
     public async Task ServerAdministrator_OutsidePrivateChat_IsRefusedEvenWithAllRolePermissions()
     {
