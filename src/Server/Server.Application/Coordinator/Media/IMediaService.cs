@@ -50,9 +50,9 @@ public interface IMediaService : IDisposable
     Task<bool> CanDeleteUploadAsync(string id, int userId, CancellationToken cancellationToken = default);
     Task ForgetUploadAsync(string id, CancellationToken cancellationToken = default);
 
-    Task<MediaFile?> OpenImageAsync(int imageId, bool preview, CancellationToken cancellationToken = default);
+    Task<MediaFile?> OpenImageAsync(int imageId, bool preview, CancellationToken cancellationToken = default, int? requestingUserId = null);
 
-    Task<MediaFile?> OpenFileAsync(int fileId, CancellationToken cancellationToken = default);
+    Task<MediaFile?> OpenFileAsync(int fileId, CancellationToken cancellationToken = default, int? requestingUserId = null);
 
     Task<bool> AttachAvatarAsync(string uploadId, int userId, CancellationToken cancellationToken = default);
     Task RemoveAvatarAsync(string uploadId, CancellationToken cancellationToken = default);

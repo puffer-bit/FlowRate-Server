@@ -39,15 +39,18 @@ public static class RequestPolicies
             or CoordinatorReorderRolesRequest or CoordinatorAssignRoleRequest or CoordinatorUnassignRoleRequest
             => Require(Permission.ManageRoles),
 
+        CreateSessionRequest { CreateSessionModel.SessionData: Shared.Models.Requests.SessionActions.Generic.Models.SessionData.ChatSessionCreateData { Kind: not ChatKind.ServerChannel, SessionType: SessionType.Chat } } => Open,
         CreateSessionRequest => Require(Permission.CreateSessions),
+        ChangeGroupRequest request => InSession(request.SessionId, View),
         DeleteSessionRequest request => InSession(request.SessionId, Permission.ManageSessions),
         ChangeHybridSessionSettingsRequest request => InSession(request.SessionId, Permission.ManageSessions),
         // Which roles and permissions the sender may change, the handler checks
         ChangeSessionPermissionsRequest request =>
             InSession(request.SessionId, Permission.ManageSessions | Permission.ManageRoles),
         CreateSessionCategoryRequest or RenameSessionCategoryRequest or DeleteSessionCategoryRequest
-            or MoveSessionRequest or MoveSessionCategoryRequest => Require(Permission.ManageSessions),
+            or MoveSessionCategoryRequest => Require(Permission.ManageSessions),
         // A session the sender may not see shows only to roles that see it; leaving is never refused
+        MoveSessionRequest request => InSession(request.SessionId, Permission.ManageSessions),
         JoinSessionRequest request => InSession(request.SessionId, Permission.ViewSessions),
         LeaveSessionRequest or SessionInfoRequest => Open,
 

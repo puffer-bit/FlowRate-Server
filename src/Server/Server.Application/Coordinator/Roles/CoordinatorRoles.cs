@@ -64,6 +64,9 @@ public sealed class CoordinatorRoles : ICoordinatorPermissions, IDisposable
         if (userId == UserModel.SystemUserId)
             return Permission.All;
 
+        if (session is Server.Core.Models.TextChat.ChatSessionModel { IsPrivate: true } chat)
+            return PrivatePermissions(chat, userId);
+
         return Resolve(session, _userManager.TryGetConnectedUser(userId, out var user) ? user!.RoleIds : []);
     }
 
@@ -72,10 +75,21 @@ public sealed class CoordinatorRoles : ICoordinatorPermissions, IDisposable
         if (userId == UserModel.SystemUserId)
             return Permission.All;
 
+        if (session is Server.Core.Models.TextChat.ChatSessionModel { IsPrivate: true } chat)
+            return PrivatePermissions(chat, userId);
+
         var user = _userManager.TryGetConnectedUser(userId, out var connected)
             ? connected
             : await _userManager.GetUserAsync(userId);
         return Resolve(session, user?.RoleIds ?? []);
+    }
+
+    private static Permission PrivatePermissions(Server.Core.Models.TextChat.ChatSessionModel chat, int userId)
+    {
+        if (!chat.MemberIds.Contains(userId)) return Permission.None;
+        var granted = Permission.ViewSessions | Permission.SendMessages | Permission.AttachFiles;
+        return chat.Kind == ChatKind.Group && chat.AdminUserId == userId
+            ? granted | Permission.ManageSessions | Permission.ManageMessages : granted;
     }
 
     private Permission Resolve(SessionModel session, IReadOnlyCollection<int> roleIds)

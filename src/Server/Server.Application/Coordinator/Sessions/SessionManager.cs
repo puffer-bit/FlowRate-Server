@@ -39,7 +39,7 @@ public class SessionManager : ISessionManager
         foreach (var session in GetUnorderedSessionModels())
             if (overrides.TryGetValue(session.Id, out var sessionOverrides))
                 session.SetPermissionOverrides(sessionOverrides);
-        await _layout.LoadAsync(GetUnorderedSessionModels().Select(session => session.Id));
+        await _layout.LoadAsync(GetUnorderedSessionModels().Where(IsServerSession).Select(session => session.Id));
     }
 
     public async Task<(ErrorCode? result, SessionModel? session)> CreateSessionAsync(
@@ -58,7 +58,7 @@ public class SessionManager : ISessionManager
                 return (ErrorCode.InvalidValue, null);
         }
 
-        if (created.session != null)
+        if (created.session != null && IsServerSession(created.session))
             await _layout.AddSessionAsync(created.session.Id, request.CategoryId);
 
         return created;
@@ -127,6 +127,9 @@ public class SessionManager : ISessionManager
             .OrderBy(session => positions.GetValueOrDefault(session.Id, int.MaxValue))
             .ToList();
     }
+
+    private static bool IsServerSession(SessionModel session) =>
+        session is not Server.Core.Models.TextChat.ChatSessionModel { IsPrivate: true };
 
     private IEnumerable<SessionModel> GetUnorderedSessionModels() =>
         _chatSessions.GetAllSessions().OrderBy(session => session.Id)

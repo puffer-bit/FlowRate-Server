@@ -61,7 +61,10 @@ public class ChatSessionManager : IChatSessionManager
     public async Task LoadAsync()
     {
         foreach (var chat in await _chatSessionRepository.GetByCoordinatorIdAsync(_coordinatorInstanceId))
+        {
+            chat.SetLastMessage((await _messagesRepository.GetLastMessagesAsync(chat.Id, 1))?.FirstOrDefault());
             _sessions.TryAdd(chat.Id, chat);
+        }
     }
 
     public async Task<(ErrorCode? result, ChatSessionModel? session)> CreateAsync(CreateSessionModel request,
@@ -70,7 +73,16 @@ public class ChatSessionManager : IChatSessionManager
         await _lifecycleLock.WaitAsync();
         try
         {
-            if (_sessions.Values.Any(s => s.Name == request.Name))
+            var data = request.SessionData as ChatSessionCreateData;
+            var kind = data?.Kind ?? ChatKind.ServerChannel;
+            var members = (data?.MemberIds ?? []).Append(userId).Distinct().Order().ToArray();
+            if (!Enum.IsDefined(kind) || (kind == ChatKind.Direct && members.Length != 2)
+                || (kind == ChatKind.Group && members.Length is < 2 or > 100))
+                return (ErrorCode.InvalidValue, null);
+            if (kind == ChatKind.Direct && _sessions.Values.FirstOrDefault(s =>
+                    s.Kind == ChatKind.Direct && s.MemberIds.SetEquals(members)) is { } existing)
+                return (null, existing);
+            if (kind == ChatKind.ServerChannel && _sessions.Values.Any(s => !s.IsPrivate && s.Name == request.Name))
                 return (ErrorCode.NameTaken, null);
 
             var chat = ChatSessionModel.Create(_coordinatorInstanceId, request.Name, userId);
@@ -84,6 +96,7 @@ public class ChatSessionManager : IChatSessionManager
                     IsDelayedMessagesAllowed: chatData.IsDelayedMessagesAllowed));
             }
 
+            chat.SetAudience(kind, kind == ChatKind.ServerChannel ? [] : members);
             chat.Id = await _chatSessionRepository.AddAsync(chat);
             _sessions[chat.Id] = chat;
 
@@ -106,8 +119,10 @@ public class ChatSessionManager : IChatSessionManager
         await _lifecycleLock.WaitAsync();
         try
         {
-            if (!_sessions.ContainsKey(sessionId))
+            if (!_sessions.TryGetValue(sessionId, out var chat))
                 return ErrorCode.SessionNotFound;
+            if (chat.IsPrivate && (chat.Kind != ChatKind.Group || chat.AdminUserId != userId))
+                return ErrorCode.InsufficientPermissions;
 
             await _chatSessionRepository.RemoveAsync(sessionId);
             _sessions.TryRemove(sessionId, out _);
@@ -124,6 +139,46 @@ public class ChatSessionManager : IChatSessionManager
         }
         finally
         {
+            _lifecycleLock.Release();
+        }
+    }
+
+    public async Task<ErrorCode?> ChangeGroupAsync(int sessionId, string name, int[] memberIds, int ownerId,
+        int userId, bool leave)
+    {
+        await _lifecycleLock.WaitAsync();
+        var writeLock = MessageWriteLockOf(sessionId);
+        await writeLock.WaitAsync();
+        try
+        {
+            if (!_sessions.TryGetValue(sessionId, out var chat) || chat.Kind != ChatKind.Group)
+                return ErrorCode.ChatNotFound;
+            if (!chat.MemberIds.Contains(userId)) return ErrorCode.InsufficientPermissions;
+            var members = leave ? chat.MemberIds.Where(id => id != userId).ToArray() : memberIds.Distinct().ToArray();
+            if (leave && chat.AdminUserId == userId) return ErrorCode.Conflict;
+            if (!leave && chat.AdminUserId != userId) return ErrorCode.InsufficientPermissions;
+            if (members.Length is < 1 or > 100 || !members.Contains(leave ? chat.AdminUserId : ownerId))
+                return ErrorCode.InvalidValue;
+            var changed = new ChatSessionModel(chat.Id, chat.CoordinatorInstanceId, leave ? chat.Name : name,
+                chat.Capacity, chat.CreatorUserId, leave ? chat.AdminUserId : ownerId, chat.Options,
+                chat.Description, chat.IconPath, chat.IsArchived);
+            changed.SetAudience(ChatKind.Group, members);
+            changed.SetLastMessage(chat.LastMessage);
+            await _chatSessionRepository.UpdateAsync(changed);
+            chat.SetAudience(ChatKind.Group, members);
+            chat.Rename(changed.Name);
+            chat.ChangeAdmin(changed.AdminUserId);
+            await _coordinatorEventBus.PublishAsync(new ChatSessionReconfiguredEvent(chat, userId));
+            return null;
+        }
+        catch (Exception exception)
+        {
+            _logger.LogError(exception, "Error while changing group settings.");
+            return ErrorCode.Internal;
+        }
+        finally
+        {
+            writeLock.Release();
             _lifecycleLock.Release();
         }
     }
@@ -247,7 +302,11 @@ public class ChatSessionManager : IChatSessionManager
             await writeLock.WaitAsync();
             try
             {
+                if (chat.IsPrivate && !chat.MemberIds.Contains(senderUserId))
+                    return ErrorCode.InsufficientPermissions;
                 var stored = await _messagesRepository.AddAsync(messageModel);
+                chat.SetLastMessage(stored);
+                await _coordinatorEventBus.PublishAsync(new ChatSessionReconfiguredEvent(chat, senderUserId));
                 await _coordinatorEventBus.PublishAsync(new ChatSessionMessageAddedEvent(sessionId, stored));
             }
             finally
@@ -285,6 +344,11 @@ public class ChatSessionManager : IChatSessionManager
                 return ErrorCode.InvalidRequest;
             message.SetPinned(pinned, userId, DateTime.UtcNow);
             message.MarkChanged(await _messagesRepository.UpdateAsync(message));
+            if (_sessions.TryGetValue(sessionId, out var changedChat) && changedChat.LastMessage?.Id == message.Id)
+            {
+                changedChat.SetLastMessage(message);
+                await _coordinatorEventBus.PublishAsync(new ChatSessionReconfiguredEvent(changedChat, userId));
+            }
             await _coordinatorEventBus.PublishAsync(new ChatSessionMessageEditedEvent(sessionId, message));
             return null;
         }
@@ -385,6 +449,11 @@ public class ChatSessionManager : IChatSessionManager
                     return null;
 
                 message.MarkChanged(await _messagesRepository.UpdateAsync(message));
+                if (_sessions.TryGetValue(sessionId, out var changedChat) && changedChat.LastMessage?.Id == message.Id)
+                {
+                    changedChat.SetLastMessage(message);
+                    await _coordinatorEventBus.PublishAsync(new ChatSessionReconfiguredEvent(changedChat, userId));
+                }
                 await _coordinatorEventBus.PublishAsync(new ChatSessionMessageEditedEvent(sessionId, message));
                 return null;
             }
@@ -420,6 +489,11 @@ public class ChatSessionManager : IChatSessionManager
                     return result;
 
                 message.MarkChanged(await _messagesRepository.UpdateAsync(message));
+                if (_sessions.TryGetValue(sessionId, out var changedChat) && changedChat.LastMessage?.Id == message.Id)
+                {
+                    changedChat.SetLastMessage(message);
+                    await _coordinatorEventBus.PublishAsync(new ChatSessionReconfiguredEvent(changedChat, userId));
+                }
                 await _coordinatorEventBus.PublishAsync(new ChatSessionMessageEditedEvent(sessionId, message));
                 return null;
             }
@@ -458,6 +532,11 @@ public class ChatSessionManager : IChatSessionManager
                 if (revision == null)
                     return ErrorCode.MessageNotFound;
 
+                if (chat.LastMessage?.Id == messageId)
+                {
+                    chat.SetLastMessage((await _messagesRepository.GetLastMessagesAsync(sessionId, 1))?.FirstOrDefault());
+                    await _coordinatorEventBus.PublishAsync(new ChatSessionReconfiguredEvent(chat, userId));
+                }
                 await _coordinatorEventBus.PublishAsync(
                     new ChatSessionMessageDeletedEvent(sessionId, messageId, revision.Value));
                 await DeleteMediaAsync(() => _mediaUploads.RemoveByMessageAsync(messageId));

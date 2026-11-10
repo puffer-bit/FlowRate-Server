@@ -175,7 +175,7 @@ public class MessagesRepository : IMessagesRepository
 
         var entities = await WithContent(context.ChatMessagesEntities)
             .Where(x => x.ChatId == chatId)
-            .OrderByDescending(x => x.SentTime)
+            .OrderByDescending(x => x.Id)
             .Take(count)
             .ToListAsync(cancellationToken);
 

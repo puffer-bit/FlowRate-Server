@@ -275,9 +275,10 @@ public class CoordinatorInstanceFactory : ICoordinatorInstanceFactory
         yield return new UserIdentityResetHandler(messageSender, connectionManager, securityReplies,
             _provider.GetRequiredService<IUserRepository>(), userSessions);
         
-        yield return ActivatorUtilities.CreateInstance<CreateSessionHandler>(_provider, sessionManager, messageSender);
+        yield return ActivatorUtilities.CreateInstance<CreateSessionHandler>(_provider, sessionManager, messageSender, userManager);
         yield return ActivatorUtilities.CreateInstance<LeaveSessionHandler>(_provider, hybridSessionManager, messageSender);
         yield return ActivatorUtilities.CreateInstance<DeleteSessionHandler>(_provider, sessionManager, messageSender);
+        yield return new ChangeGroupHandler(chatSessionManager, userManager, messageSender);
         yield return new ChangeHybridSessionSettingsHandler(hybridSessionManager, messageSender);
         yield return new ChangeSessionPermissionsHandler(sessionManager, permissions, visibility, messageSender);
         yield return new CreateSessionCategoryHandler(sessionLayout, messageSender);

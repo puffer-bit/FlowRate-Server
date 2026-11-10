@@ -39,6 +39,68 @@ public class ChatSessionManagerTests
             new Mock<IMediaUploadRepository>().Object, new Mock<IMediaStorage>().Object, "coordinator");
     }
 
+    [Fact]
+    public async Task DirectChat_ConcurrentReverseCreation_ReturnsOneConversation()
+    {
+        var results = await Task.WhenAll(
+            _manager.CreateAsync(new CreateSessionModel("Second", -1,
+                new ChatSessionCreateData(Kind: ChatKind.Direct, MemberIds: [2])), 1),
+            _manager.CreateAsync(new CreateSessionModel("First", -1,
+                new ChatSessionCreateData(Kind: ChatKind.Direct, MemberIds: [1])), 2));
+        Assert.All(results, result => Assert.Null(result.result));
+        Assert.Same(results[0].session, results[1].session);
+        Assert.True(results[0].session!.MemberIds.SetEquals([1, 2]));
+        Assert.Single(_manager.GetAllSessions());
+        Assert.False(results[0].session!.IsAdmin(1));
+        Assert.Equal(ErrorCode.InsufficientPermissions, await _manager.DeleteAsync(results[0].session!.Id, 1));
+    }
+
+    [Fact]
+    public async Task Group_OnlyOwnerChangesMembers_AndOnlyMemberMayLeave()
+    {
+        var (_, group) = await _manager.CreateAsync(new CreateSessionModel("Friends", -1,
+            new ChatSessionCreateData(Kind: ChatKind.Group, MemberIds: [2, 3])), 1);
+        Assert.Equal(ErrorCode.InsufficientPermissions,
+            await _manager.ChangeGroupAsync(group!.Id, "Hijacked", [2], 2, 2, false));
+        Assert.Equal(ErrorCode.Conflict,
+            await _manager.ChangeGroupAsync(group.Id, group.Name, [], 1, 1, true));
+        Assert.Null(await _manager.ChangeGroupAsync(group.Id, "Renamed", [1, 2], 2, 1, false));
+        Assert.Equal("Renamed", group.Name);
+        Assert.Equal(2, group.AdminUserId);
+        Assert.False(group.MemberIds.Contains(3));
+        Assert.Null(await _manager.ChangeGroupAsync(group.Id, group.Name, [], 2, 1, true));
+        Assert.True(group.MemberIds.SetEquals([2]));
+        Assert.Equal(ErrorCode.InsufficientPermissions,
+            await _manager.ChangeGroupAsync(group.Id, group.Name, [], 2, 3, true));
+    }
+
+    [Theory]
+    [InlineData(ChatKind.Direct)]
+    [InlineData(ChatKind.Group)]
+    public async Task PrivateChats_RequireAnotherParticipant(ChatKind kind)
+    {
+        var (error, _) = await _manager.CreateAsync(new CreateSessionModel("Empty", -1,
+            new ChatSessionCreateData(Kind: kind, MemberIds: [1, 1])), 1);
+        Assert.Equal(ErrorCode.InvalidValue, error);
+        Assert.Empty(_manager.GetAllSessions());
+    }
+
+    [Fact]
+    public async Task DeletingLastMessage_RestoresPreviousPreview()
+    {
+        var id = await CreateChat("preview");
+        StoreMessage(1, id);
+        StoreMessage(2, id);
+        _manager.TryGetSession(id, out var chat);
+        chat!.SetLastMessage(_storedMessages[2]);
+        _messages.Setup(repository => repository.DeleteAsync(2, It.IsAny<CancellationToken>())).ReturnsAsync(3L);
+        _messages.Setup(repository => repository.GetLastMessagesAsync(id, 1, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new[] { _storedMessages[1] });
+        Assert.Null(await _manager.DeleteMessageAsync(id, 2, AuthorId));
+        Assert.Equal(1, chat.LastMessage!.Id);
+        Assert.Single(_events.Of<ChatSessionReconfiguredEvent>());
+    }
+
     private static CreateSessionModel Chat(string name) => new(name, 10, new ChatSessionCreateData());
 
     private async Task<int> CreateChat(string name)

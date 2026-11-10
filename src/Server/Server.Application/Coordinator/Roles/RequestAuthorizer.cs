@@ -40,6 +40,16 @@ public sealed class RequestAuthorizer
         if (senderId == UserModel.SystemUserId || policy == RequestPolicy.Open)
             return true;
 
+        // Private membership is authoritative, including for server administrators.
+        if (policy.SessionId is { } privateId && _sessions.TryGetSessionModel(privateId, out var privateScope)
+            && privateScope is Server.Core.Models.TextChat.ChatSessionModel { IsPrivate: true } privateChat)
+        {
+            if (message is Shared.Models.Requests.SessionActions.Generic.ChangeSessionPermissionsRequest
+                || message is Shared.Models.Requests.SessionActions.Generic.MoveSessionRequest)
+                return false;
+            return privateChat.MemberIds.Contains(senderId) && _permissions.HasIn(senderId, privateChat, policy.Required);
+        }
+
         // A session that does not exist is the handler's to answer; the coordinator permissions decide until then
         var byRole = policy.SessionId is { } scopeId && _sessions.TryGetSessionModel(scopeId, out var scope)
             ? _permissions.HasIn(senderId, scope, policy.Required)

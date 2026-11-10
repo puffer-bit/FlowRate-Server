@@ -1069,6 +1069,9 @@ namespace Server.Infrastructure.Database.Migrations
                     b.Property<string>("Description")
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("DirectKey")
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("IconPath")
                         .HasColumnType("TEXT");
 
@@ -1090,8 +1093,21 @@ namespace Server.Infrastructure.Database.Migrations
                     b.Property<bool>("IsVoiceMessagesAllowed")
                         .HasColumnType("INTEGER");
 
+                    b.Property<int>("Kind")
+                        .HasColumnType("INTEGER");
+
                     b.Property<long>("LastRevision")
                         .HasColumnType("INTEGER");
+
+                    b.Property<string>("MemberIdsJson")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT")
+                        .HasDefaultValue("[]");
+
+                    b.HasIndex("DirectKey")
+                        .IsUnique()
+                        .HasFilter("\"DirectKey\" IS NOT NULL");
 
                     b.ToTable("ChatSessions", (string)null);
                 });

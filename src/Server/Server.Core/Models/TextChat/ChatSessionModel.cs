@@ -8,6 +8,29 @@ public sealed class ChatSessionModel : SessionModel
 {
     private readonly Dictionary<int, ChatSessionUserModel> _users = new();
 
+    public ChatKind Kind { get; private set; }
+    public IReadOnlySet<int> MemberIds { get; private set; } = new HashSet<int>();
+    public bool IsPrivate => Kind != ChatKind.ServerChannel;
+    public ChatMessageModel? LastMessage { get; private set; }
+
+    public void SetLastMessage(ChatMessageModel? message)
+    {
+        if (message != null && message.ChatId != Id)
+            throw new ArgumentException("The last message must belong to this chat.", nameof(message));
+        LastMessage = message;
+    }
+
+    public void SetAudience(ChatKind kind, IEnumerable<int> memberIds)
+    {
+        var members = memberIds.ToHashSet();
+        if (!Enum.IsDefined(kind) || (kind != ChatKind.ServerChannel && members.Any(id => id <= 0))
+            || (kind == ChatKind.Direct && members.Count != 2)
+            || (kind == ChatKind.Group && members.Count is < 1 or > 100))
+            throw new ArgumentException("Invalid chat audience.");
+        Kind = kind;
+        MemberIds = members;
+    }
+
     public int CreatorUserId { get; }
     public int AdminUserId { get; private set; }
     public string? Description { get; private set; }
@@ -39,7 +62,7 @@ public sealed class ChatSessionModel : SessionModel
             options ?? ChatSessionOptions.Default);
 
     public bool IsAdmin(int userId) =>
-        userId == AdminUserId || (_users.TryGetValue(userId, out var user) && user.IsAdmin);
+        Kind != ChatKind.Direct && (userId == AdminUserId || (_users.TryGetValue(userId, out var user) && user.IsAdmin));
 
     public bool CanDeleteMessage(ChatMessageModel message, int userId) =>
         message.IsSentBy(userId) || IsAdmin(userId);

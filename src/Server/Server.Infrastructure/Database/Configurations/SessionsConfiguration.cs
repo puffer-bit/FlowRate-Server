@@ -17,7 +17,12 @@ public class HybridSessionConfiguration : IEntityTypeConfiguration<HybridSession
 
 public class ChatSessionConfiguration : IEntityTypeConfiguration<ChatSessionEntity>
 {
-    public void Configure(EntityTypeBuilder<ChatSessionEntity> builder) => builder.ToTable("ChatSessions");
+    public void Configure(EntityTypeBuilder<ChatSessionEntity> builder)
+    {
+        builder.ToTable("ChatSessions");
+        builder.Property(x => x.MemberIdsJson).HasDefaultValue("[]");
+        builder.HasIndex(x => x.DirectKey).IsUnique().HasFilter("\"DirectKey\" IS NOT NULL");
+    }
 }
 public class SessionPermissionOverrideConfiguration : IEntityTypeConfiguration<SessionPermissionOverrideEntity>
 {

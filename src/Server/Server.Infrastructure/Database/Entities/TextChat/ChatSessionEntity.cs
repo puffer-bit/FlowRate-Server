@@ -5,6 +5,10 @@ namespace Server.Infrastructure.Database.Entities.TextChat;
 [Table("ChatSessions")]
 public class ChatSessionEntity : SessionEntity
 {
+    public Shared.Enums.ChatKind Kind { get; set; }
+    public string MemberIdsJson { get; set; } = "[]";
+    public string? DirectKey { get; set; }
+
     public int CreatorUserId { get; set; }
     public int AdminUserId { get; set; }
     

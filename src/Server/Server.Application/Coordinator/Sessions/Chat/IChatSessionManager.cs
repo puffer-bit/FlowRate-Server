@@ -22,6 +22,8 @@ public interface IChatSessionManager
 
     Task<(ErrorCode? result, ChatSessionModel? session)> CreateAsync(CreateSessionModel request, int userId);
     Task<ErrorCode?> DeleteAsync(int sessionId, int userId);
+    Task<ErrorCode?> ChangeGroupAsync(int sessionId, string name, int[] memberIds, int ownerId, int userId, bool leave);
+
     bool TryGetSession(int sessionId, [NotNullWhen(true)] out ChatSessionModel? session);
     IReadOnlyCollection<ChatSessionModel> GetAllSessions();
 
