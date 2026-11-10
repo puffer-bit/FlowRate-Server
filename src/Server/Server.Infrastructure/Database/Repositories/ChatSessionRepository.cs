@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Server.Core.Models.TextChat;
+using Server.Infrastructure.Database.Entities.TextChat;
 using Server.Infrastructure.Mappers;
 using Server.Application.Abstractions.Persistence;
 
@@ -20,7 +21,8 @@ public class ChatSessionRepository : IChatSessionRepository
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
 
-        var textChatEntity = await context.ChatSessionEntities
+        var textChatEntity = await context.ChatSessionEntities.AsNoTracking()
+            .Include(chat => chat.Members)
             .FirstOrDefaultAsync(x => x.Id == chatId, cancellationToken);
 
         return textChatEntity?.ToModel();
@@ -31,7 +33,8 @@ public class ChatSessionRepository : IChatSessionRepository
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
 
-        var entities = await context.ChatSessionEntities.ToListAsync(cancellationToken);
+        var entities = await context.ChatSessionEntities.AsNoTracking()
+            .Include(chat => chat.Members).ToListAsync(cancellationToken);
         return entities.ToModelList();
     }
 
@@ -53,8 +56,22 @@ public class ChatSessionRepository : IChatSessionRepository
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
 
-        var entry = context.ChatSessionEntities.Update(instance.ToEntity());
-        entry.Property(x => x.LastRevision).IsModified = false;
+        var entity = await context.ChatSessionEntities.Include(chat => chat.Members)
+            .SingleAsync(chat => chat.Id == instance.Id, cancellationToken);
+        var revision = entity.LastRevision;
+        context.Entry(entity).CurrentValues.SetValues(instance.ToEntity());
+        entity.LastRevision = revision;
+        foreach (var member in entity.Members.Where(member => !instance.MemberIds.Contains(member.UserId)).ToArray())
+            entity.Members.Remove(member);
+        var existing = entity.Members.Select(member => member.UserId).ToHashSet();
+        foreach (var userId in instance.MemberIds.Where(userId => !existing.Contains(userId)))
+            entity.Members.Add(new ChatSessionMemberEntity
+            {
+                ChatSessionId = instance.Id,
+                UserId = userId,
+                AccountId = userId,
+                JoinedAt = DateTime.UtcNow
+            });
         await context.SaveChangesAsync(cancellationToken);
     }
 
@@ -80,7 +97,8 @@ public class ChatSessionRepository : IChatSessionRepository
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
 
-        var entities = await context.ChatSessionEntities
+        var entities = await context.ChatSessionEntities.AsNoTracking()
+            .Include(chat => chat.Members)
             .Where(s => s.CoordinatorInstanceId == coordinatorInstanceId)
             .ToListAsync(cancellationToken);
 

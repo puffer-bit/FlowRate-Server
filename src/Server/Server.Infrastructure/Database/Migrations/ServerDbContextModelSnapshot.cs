@@ -724,6 +724,34 @@ namespace Server.Infrastructure.Database.Migrations
                     b.ToTable("ChatReadStates", (string)null);
                 });
 
+            modelBuilder.Entity("Server.Infrastructure.Database.Entities.TextChat.ChatSessionMemberEntity", b =>
+                {
+                    b.Property<int>("ChatSessionId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("UserId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int?>("AccountId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime>("JoinedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.HasKey("ChatSessionId", "UserId");
+
+                    b.HasIndex("AccountId");
+
+                    b.HasIndex("UserId", "ChatSessionId");
+
+                    b.ToTable("ChatSessionMembers", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_ChatSessionMembers_AccountId", "\"AccountId\" IS NULL OR \"AccountId\" = \"UserId\"");
+                        });
+                });
+
             modelBuilder.Entity("Server.Infrastructure.Database.Entities.TextChat.ChatVideoContentEntity", b =>
                 {
                     b.Property<int>("Id")
@@ -1099,12 +1127,6 @@ namespace Server.Infrastructure.Database.Migrations
                     b.Property<long>("LastRevision")
                         .HasColumnType("INTEGER");
 
-                    b.Property<string>("MemberIdsJson")
-                        .IsRequired()
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("TEXT")
-                        .HasDefaultValue("[]");
-
                     b.HasIndex("DirectKey")
                         .IsUnique()
                         .HasFilter("\"DirectKey\" IS NOT NULL");
@@ -1251,6 +1273,22 @@ namespace Server.Infrastructure.Database.Migrations
                     b.Navigation("ChatSession");
                 });
 
+            modelBuilder.Entity("Server.Infrastructure.Database.Entities.TextChat.ChatSessionMemberEntity", b =>
+                {
+                    b.HasOne("Server.Infrastructure.Database.Entities.UserEntity", null)
+                        .WithMany()
+                        .HasForeignKey("AccountId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("Server.Infrastructure.Database.Entities.TextChat.ChatSessionEntity", "ChatSession")
+                        .WithMany("Members")
+                        .HasForeignKey("ChatSessionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("ChatSession");
+                });
+
             modelBuilder.Entity("Server.Infrastructure.Database.Entities.UserPasskeyEntity", b =>
                 {
                     b.HasOne("Server.Infrastructure.Database.Entities.UserEntity", null)
@@ -1328,6 +1366,8 @@ namespace Server.Infrastructure.Database.Migrations
 
             modelBuilder.Entity("Server.Infrastructure.Database.Entities.TextChat.ChatSessionEntity", b =>
                 {
+                    b.Navigation("Members");
+
                     b.Navigation("Messages");
                 });
 #pragma warning restore 612, 618

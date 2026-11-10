@@ -97,7 +97,7 @@ public static class SessionEntityMapper
 
         var model = new ChatSessionModel(entity.Id, entity.CoordinatorInstanceId, entity.Name, SessionModel.NoCapacityLimit,
             entity.CreatorUserId, entity.AdminUserId, options, entity.Description, entity.IconPath, entity.IsArchived);
-        model.SetAudience(entity.Kind, System.Text.Json.JsonSerializer.Deserialize(entity.MemberIdsJson, Shared.Serialization.ProtocolJsonContext.Default.Int32Array) ?? []);
+        model.SetAudience(entity.Kind, entity.Members.Select(member => member.UserId));
         return model;
     }
 
@@ -116,7 +116,13 @@ public static class SessionEntityMapper
             Id = model.Id,
             CoordinatorInstanceId = model.CoordinatorInstanceId,
             Kind = model.Kind,
-            MemberIdsJson = System.Text.Json.JsonSerializer.Serialize(model.MemberIds.Order().ToArray(), Shared.Serialization.ProtocolJsonContext.Default.Int32Array),
+            Members = model.MemberIds.Select(userId => new ChatSessionMemberEntity
+            {
+                ChatSessionId = model.Id,
+                UserId = userId,
+                AccountId = userId,
+                JoinedAt = DateTime.UtcNow
+            }).ToList(),
             DirectKey = model.Kind == Shared.Enums.ChatKind.Direct
                 ? model.CoordinatorInstanceId + ":" + string.Join(":", model.MemberIds.Order()) : null,
             CreatorUserId = model.CreatorUserId,

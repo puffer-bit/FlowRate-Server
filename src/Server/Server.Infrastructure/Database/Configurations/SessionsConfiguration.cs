@@ -20,7 +20,6 @@ public class ChatSessionConfiguration : IEntityTypeConfiguration<ChatSessionEnti
     public void Configure(EntityTypeBuilder<ChatSessionEntity> builder)
     {
         builder.ToTable("ChatSessions");
-        builder.Property(x => x.MemberIdsJson).HasDefaultValue("[]");
         builder.HasIndex(x => x.DirectKey).IsUnique().HasFilter("\"DirectKey\" IS NOT NULL");
     }
 }

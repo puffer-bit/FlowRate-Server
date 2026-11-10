@@ -1,4 +1,6 @@
 using System.Text.Json;
+using System.Data.Common;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Server.Application.Abstractions.Media;
@@ -28,6 +30,8 @@ using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
 using Server.Core.Models.TextChat;
 using Server.Infrastructure.Database;
+using Server.Infrastructure.Database.Entities;
+using Server.Infrastructure.Database.Entities.TextChat;
 using Server.Infrastructure.Database.Repositories;
 using Shared.Enums;
 using Xunit;
@@ -46,6 +50,11 @@ public sealed class PrivateChatRepositoryTests : IDisposable
         _repository = new ChatSessionRepository(_factory);
         using var context = _factory.CreateDbContext();
         context.Database.Migrate();
+        context.UserEntities.AddRange(Enumerable.Range(1, 6).Select(id => new UserEntity
+        {
+            Id = id, Username = $"User {id}", IdentityHash = [(byte)id], CoordinatorInstanceId = "coordinator"
+        }));
+        context.SaveChanges();
     }
 
     [Fact]
@@ -116,6 +125,154 @@ public sealed class PrivateChatRepositoryTests : IDisposable
     }
 
     [Fact]
+    public async Task ChatListsLoadMembershipInOneQueryRegardlessOfChatCount()
+    {
+        for (var index = 0; index < 3; index++)
+        {
+            var group = ChatSessionModel.Create("coordinator", $"Group {index}", 1);
+            group.SetAudience(ChatKind.Group, [1, 2, 3]);
+            await _repository.AddAsync(group);
+        }
+        var counter = new QueryCounter();
+        var factory = new Factory(new DbContextOptionsBuilder<ServerDbContext>()
+            .UseSqlite($"Data Source={_path}").AddInterceptors(counter).Options);
+        var repository = new ChatSessionRepository(factory);
+        var chats = await repository.GetByCoordinatorIdAsync("coordinator");
+        Assert.Equal(1, counter.Reads);
+        Assert.Equal(3, chats.Count);
+        Assert.All(chats, chat => Assert.True(chat.MemberIds.SetEquals([1, 2, 3])));
+        counter.Reads = 0;
+        Assert.Equal(3, (await repository.GetAllAsync()).Count);
+        Assert.Equal(1, counter.Reads);
+    }
+
+    [Fact]
+    public async Task FailedMembershipUpdateRollsBackChatAndMembersTogether()
+    {
+        var group = ChatSessionModel.Create("coordinator", "Friends", 1);
+        group.SetAudience(ChatKind.Group, [1, 2]);
+        group.Id = await _repository.AddAsync(group);
+        group.SetAudience(ChatKind.Group, [1, 99]);
+        group.Rename("Rejected");
+        await Assert.ThrowsAsync<DbUpdateException>(() => _repository.UpdateAsync(group));
+        var saved = await _repository.GetByIdAsync(group.Id);
+        Assert.Equal("Friends", saved!.Name);
+        Assert.True(saved.MemberIds.SetEquals([1, 2]));
+    }
+
+    [Fact]
+    public async Task MembershipUpdatesOnlyChangedRowsAndPreservesRevisionAndJoiningDate()
+    {
+        var group = ChatSessionModel.Create("coordinator", "Friends", 1);
+        group.SetAudience(ChatKind.Group, [1, 2]);
+        group.Id = await _repository.AddAsync(group);
+        var joined = new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        await using (var context = _factory.CreateDbContext())
+        {
+            var membership = await context.ChatSessionMembers.SingleAsync(member => member.ChatSessionId == group.Id && member.UserId == 1);
+            membership.JoinedAt = joined;
+            await context.SaveChangesAsync();
+            await context.ChatSessionEntities.Where(chat => chat.Id == group.Id)
+                .ExecuteUpdateAsync(update => update.SetProperty(chat => chat.LastRevision, 42));
+        }
+        group.SetAudience(ChatKind.Group, [1, 3]);
+        group.ChangeAdmin(3);
+        group.Rename("Renamed");
+        await _repository.UpdateAsync(group);
+        await using (var context = _factory.CreateDbContext())
+        {
+            var rows = await context.ChatSessionMembers.Where(member => member.ChatSessionId == group.Id).OrderBy(member => member.UserId).ToListAsync();
+            Assert.Equal(new[] { 1, 3 }, rows.Select(member => member.UserId));
+            Assert.Equal(joined, rows[0].JoinedAt);
+            Assert.True(rows[1].JoinedAt > joined);
+            Assert.Equal(42, await context.ChatSessionEntities.Where(chat => chat.Id == group.Id).Select(chat => chat.LastRevision).SingleAsync());
+        }
+        var saved = await _repository.GetByIdAsync(group.Id);
+        Assert.Equal(3, saved!.AdminUserId);
+        Assert.Equal("Renamed", saved.Name);
+        Assert.True(saved.MemberIds.SetEquals([1, 3]));
+    }
+
+    [Fact]
+    public async Task MembershipConstraintsAndChatDeletionAreEnforcedByDatabase()
+    {
+        var group = ChatSessionModel.Create("coordinator", "Friends", 1);
+        group.SetAudience(ChatKind.Group, [1, 2]);
+        group.Id = await _repository.AddAsync(group);
+        await using (var context = _factory.CreateDbContext())
+        {
+            context.ChatSessionMembers.Add(new ChatSessionMemberEntity { ChatSessionId = group.Id, UserId = 1, AccountId = 1 });
+            await Assert.ThrowsAsync<DbUpdateException>(() => context.SaveChangesAsync());
+        }
+        await using (var context = _factory.CreateDbContext())
+        {
+            context.ChatSessionMembers.Add(new ChatSessionMemberEntity { ChatSessionId = group.Id, UserId = 99, AccountId = 99 });
+            await Assert.ThrowsAsync<DbUpdateException>(() => context.SaveChangesAsync());
+        }
+        await using (var context = _factory.CreateDbContext())
+        {
+            context.ChatSessionMembers.Add(new ChatSessionMemberEntity { ChatSessionId = int.MaxValue, UserId = 1, AccountId = 1 });
+            await Assert.ThrowsAsync<DbUpdateException>(() => context.SaveChangesAsync());
+        }
+        await _repository.RemoveAsync(group.Id);
+        await using var verify = _factory.CreateDbContext();
+        Assert.Empty(await verify.ChatSessionMembers.ToListAsync());
+    }
+
+    [Fact]
+    public async Task DeletingAnAccountPreservesHistoricalMembershipAndDirectChatReload()
+    {
+        var direct = ChatSessionModel.Create("coordinator", "Direct", 1);
+        direct.SetAudience(ChatKind.Direct, [1, 2]);
+        direct.Id = await _repository.AddAsync(direct);
+        await using (var context = _factory.CreateDbContext())
+        {
+            await context.UserEntities.Where(user => user.Id == 2).ExecuteDeleteAsync();
+            var row = await context.ChatSessionMembers.SingleAsync(member => member.ChatSessionId == direct.Id && member.UserId == 2);
+            Assert.Null(row.AccountId);
+        }
+        var saved = await _repository.GetByIdAsync(direct.Id);
+        Assert.True(saved!.MemberIds.SetEquals([1, 2]));
+        saved.Rename("Retained history");
+        await _repository.UpdateAsync(saved);
+        Assert.True((await _repository.GetAllAsync()).Single().MemberIds.SetEquals([1, 2]));
+    }
+
+    [Fact]
+    public async Task MembershipMigrationPreservesExistingChatsAndDeletedAccountsOnUpgradeAndRollback()
+    {
+        await using (var context = _factory.CreateDbContext())
+        {
+            await context.GetService<IMigrator>().MigrateAsync("20261110153651_PrivateChats");
+            await context.Database.ExecuteSqlRawAsync("""
+                INSERT INTO Sessions (Id, Name, CoordinatorInstanceId, Capacity)
+                    VALUES (500, 'Group', 'coordinator', -1), (501, 'Direct', 'coordinator', -1);
+                INSERT INTO ChatSessions (Id, CreatorUserId, AdminUserId, LastRevision, IsReadOnly, IsArchived,
+                    IsAttachmentsAllowed, IsVoiceMessagesAllowed, IsVideoMessagesAllowed, IsDelayedMessagesAllowed,
+                    Kind, MemberIdsJson, DirectKey)
+                    VALUES (500, 1, 1, 7, 0, 0, 1, 1, 1, 1, 2, '[1,2,2,99]', NULL),
+                           (501, 1, 1, 0, 0, 0, 1, 1, 1, 1, 1, '[1,2]', 'coordinator:1:2');
+                """);
+            await context.Database.MigrateAsync();
+            Assert.False(context.Database.HasPendingModelChanges());
+            Assert.Equal(5, await context.ChatSessionMembers.CountAsync());
+            Assert.Null((await context.ChatSessionMembers.SingleAsync(member => member.ChatSessionId == 500 && member.UserId == 99)).AccountId);
+            Assert.Equal(7, (await context.ChatSessionEntities.SingleAsync(chat => chat.Id == 500)).LastRevision);
+            Assert.DoesNotContain("MemberIdsJson", await context.Database.SqlQueryRaw<string>("SELECT name AS Value FROM pragma_table_info('ChatSessions')").ToListAsync());
+            Assert.Empty(await context.Database.SqlQueryRaw<string>("SELECT [table] AS Value FROM pragma_foreign_key_check").ToListAsync());
+        }
+        Assert.True((await _repository.GetByIdAsync(500))!.MemberIds.SetEquals([1, 2, 99]));
+        Assert.True((await _repository.GetByIdAsync(501))!.MemberIds.SetEquals([1, 2]));
+        await using (var context = _factory.CreateDbContext())
+        {
+            await context.GetService<IMigrator>().MigrateAsync("20261110153651_PrivateChats");
+            Assert.Equal("[1,2,99]", await context.Database.SqlQueryRaw<string>("SELECT MemberIdsJson AS Value FROM ChatSessions WHERE Id = 500").SingleAsync());
+            await context.Database.MigrateAsync();
+        }
+        Assert.True((await _repository.GetByIdAsync(500))!.MemberIds.SetEquals([1, 2, 99]));
+    }
+
+    [Fact]
     public async Task Migration_PreservesExistingServerChannels()
     {
         using var context = _factory.CreateDbContext();
@@ -135,6 +292,18 @@ public sealed class PrivateChatRepositoryTests : IDisposable
     }
 
     public void Dispose() { SqliteConnection.ClearAllPools(); File.Delete(_path); }
+    private sealed class QueryCounter : DbCommandInterceptor
+    {
+        public int Reads { get; set; }
+        public override ValueTask<InterceptionResult<DbDataReader>> ReaderExecutingAsync(DbCommand command,
+            CommandEventData eventData, InterceptionResult<DbDataReader> result,
+            CancellationToken cancellationToken = default)
+        {
+            Reads++;
+            return ValueTask.FromResult(result);
+        }
+    }
+
     private sealed class Factory(DbContextOptions<ServerDbContext> options) : IDbContextFactory<ServerDbContext>
     {
         public ServerDbContext CreateDbContext() => new(options);
