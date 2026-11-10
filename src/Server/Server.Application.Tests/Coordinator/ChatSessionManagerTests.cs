@@ -1,3 +1,6 @@
+using Shared.Models.DataTransferObjects.ChatSession.Messages.Commands;
+using Shared.Models.DataTransferObjects.ChatSession.Messages.Content;
+using Shared.Models.Requests.SessionActions.ChatSession.Models;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Server.Application.Coordinator.Events;
@@ -50,6 +53,54 @@ public class ChatSessionManagerTests
         var message = ChatMessageModel.Create(chatId, AuthorId, DateTime.UtcNow, new ChatTextContentModel { Text = "hello" });
         message.Id = messageId;
         _storedMessages[messageId] = message;
+    }
+
+    [Theory]
+    [InlineData("/roll 7-7", ChatCommandKind.Roll)]
+    [InlineData("/flip", ChatCommandKind.Flip)]
+    public async Task Command_StoresAndPublishesOneServerGeneratedOutcome(string text, ChatCommandKind kind)
+    {
+        int chatId = await CreateChat("commands");
+        ChatMessageModel? stored = null;
+        _messages.Setup(r => r.AddAsync(It.IsAny<ChatMessageModel>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((ChatMessageModel message, CancellationToken _) =>
+            {
+                stored = message;
+                message.Id = 5;
+                _storedMessages[5] = message;
+                return message;
+            });
+        var forged = new ChatCommandResult { Kind = ChatCommandKind.Roll, Minimum = 1, Maximum = 1000, Value = 999 };
+        Assert.Null(await _manager.AddMessageAsync(chatId, new NewChatMessageModel
+        {
+            ChatId = chatId, TextContent = new ChatTextContentDTO { Text = text, CommandResult = forged }
+        }, AuthorId));
+        Assert.NotNull(stored);
+        var outcome = stored.TextContent!.CommandResult!;
+        Assert.True(outcome.IsValid());
+        Assert.Equal(kind, outcome.Kind);
+        Assert.NotEqual(forged, outcome);
+        if (kind == ChatCommandKind.Roll) Assert.Equal(7, outcome.Value);
+        var notification = Assert.Single(_events.Of<ChatSessionMessageAddedEvent>());
+        Assert.Same(stored, notification.Message);
+        _messages.Verify(r => r.AddAsync(It.IsAny<ChatMessageModel>(), It.IsAny<CancellationToken>()), Times.Once);
+        Assert.Equal(ErrorCode.InsufficientPermissions, await _manager.EditMessageAsync(chatId, 5, "/roll 1-1000", AuthorId));
+        Assert.Equal(outcome, stored.TextContent.CommandResult);
+    }
+
+    [Theory]
+    [InlineData("/roll 100-1")]
+    [InlineData("/roll 1-1001")]
+    [InlineData("/flip heads")]
+    public async Task InvalidCommand_DoesNotStoreOrPublishMessage(string text)
+    {
+        int chatId = await CreateChat("invalid-commands");
+        Assert.Equal(ErrorCode.InvalidValue, await _manager.AddMessageAsync(chatId, new NewChatMessageModel
+        {
+            ChatId = chatId, TextContent = new ChatTextContentDTO { Text = text }
+        }, AuthorId));
+        _messages.Verify(r => r.AddAsync(It.IsAny<ChatMessageModel>(), It.IsAny<CancellationToken>()), Times.Never);
+        Assert.Empty(_events.Of<ChatSessionMessageAddedEvent>());
     }
 
     [Fact]

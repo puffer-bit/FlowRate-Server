@@ -1,3 +1,4 @@
+using Shared.Models.DataTransferObjects.ChatSession.Messages.Commands;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Server.Core.Models.TextChat.Messages;
@@ -60,6 +61,25 @@ public sealed class MessagesRepositoryTests : IDisposable
         var message = (await _repository.GetByIdAsync(messageId))!;
         message.Edit(AuthorId, text, DateTime.UtcNow);
         await _repository.UpdateAsync(message);
+    }
+
+    [Theory]
+    [InlineData("/roll 1000-1000")]
+    [InlineData("/flip")]
+    public async Task CommandOutcome_SurvivesStorageHistoryAndReply(string text)
+    {
+        var message = NewMessage(text);
+        message.ExecuteCommand(ChatCommandRequest.Parse(text)!);
+        var stored = await _repository.AddAsync(message);
+        var loaded = await _repository.GetByIdAsync(stored.Id);
+        Assert.Equal(message.TextContent, loaded!.TextContent);
+        Assert.Equal(message.TextContent, Assert.Single(await _repository.GetBeforeAsync(_chatId, null, 10)).TextContent);
+        var reply = NewMessage("reply");
+        reply.ReplyTo(loaded);
+        var storedReply = await _repository.AddAsync(reply);
+        Assert.Equal(message.TextContent, (await _repository.GetByIdAsync(storedReply.Id))!.ReplyContent!.TextContent);
+        using var context = _factory.CreateDbContext();
+        Assert.False(context.Database.HasPendingModelChanges());
     }
 
     [Fact]

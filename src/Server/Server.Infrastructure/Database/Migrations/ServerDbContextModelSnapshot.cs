@@ -1172,6 +1172,18 @@ namespace Server.Infrastructure.Database.Migrations
                             b1.Property<int>("ChatMessageEntityId")
                                 .HasColumnType("INTEGER");
 
+                            b1.Property<int?>("CommandKind")
+                                .HasColumnType("INTEGER");
+
+                            b1.Property<int?>("CommandMaximum")
+                                .HasColumnType("INTEGER");
+
+                            b1.Property<int?>("CommandMinimum")
+                                .HasColumnType("INTEGER");
+
+                            b1.Property<int?>("CommandValue")
+                                .HasColumnType("INTEGER");
+
                             b1.Property<string>("Text")
                                 .IsRequired()
                                 .HasColumnType("TEXT");

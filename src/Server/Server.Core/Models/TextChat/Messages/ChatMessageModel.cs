@@ -1,3 +1,5 @@
+using System.Security.Cryptography;
+using Shared.Models.DataTransferObjects.ChatSession.Messages.Commands;
 using Server.Core.Models.TextChat.Messages.Content;
 using Server.Core.Models.TextChat.Messages.Reactions;
 using Server.Core.Models.User;
@@ -106,9 +108,21 @@ public sealed class ChatMessageModel
         _replyContent = target.ToReplyContent();
     }
 
+    public void ExecuteCommand(ChatCommandRequest command)
+    {
+        if (!command.IsValid || TextContent?.CommandResult != null)
+            throw new InvalidOperationException("Only valid, unresolved commands may execute.");
+        var result = new ChatCommandResult
+        {
+            Kind = command.Kind, Minimum = command.Minimum, Maximum = command.Maximum,
+            Value = RandomNumberGenerator.GetInt32(command.Minimum, command.Maximum + 1)
+        };
+        _textContent = new ChatTextContentModel { Text = result.ToFallbackText(), CommandResult = result };
+    }
+
     public ErrorCode? Edit(int userId, string text, DateTime now)
     {
-        if (!IsSentBy(userId) || IsDeleted || IsReadOnly || IsSystem)
+        if (!IsSentBy(userId) || IsDeleted || IsReadOnly || IsSystem || TextContent?.CommandResult != null)
             return ErrorCode.InsufficientPermissions;
 
         _textContent = new ChatTextContentModel { Text = text };

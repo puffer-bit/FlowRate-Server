@@ -1,3 +1,4 @@
+using Shared.Models.DataTransferObjects.ChatSession.Messages.Commands;
 using Server.Core.Models.TextChat.Messages;
 using Server.Core.Models.TextChat.Messages.Content;
 using Server.Core.Models.TextChat.Messages.Reactions;
@@ -91,7 +92,11 @@ public static class ChatMessageEntityMapper
         if (model == null) return null!;
         return new ChatTextContentEntity 
         {
-            Text = model.Text
+            Text = model.Text,
+            CommandKind = (int?)model.CommandResult?.Kind,
+            CommandMinimum = model.CommandResult?.Minimum,
+            CommandMaximum = model.CommandResult?.Maximum,
+            CommandValue = model.CommandResult?.Value
         };
     }
 
@@ -100,7 +105,11 @@ public static class ChatMessageEntityMapper
         if (entity == null) return null!;
         return new ChatTextContentModel
         {
-            Text = entity.Text
+            Text = entity.Text,
+            CommandResult = entity.CommandKind is { } kind && entity.CommandMinimum is { } minimum
+                && entity.CommandMaximum is { } maximum && entity.CommandValue is { } value
+                ? new ChatCommandResult { Kind = (ChatCommandKind)kind, Minimum = minimum, Maximum = maximum, Value = value }
+                : null
         };
     }
 

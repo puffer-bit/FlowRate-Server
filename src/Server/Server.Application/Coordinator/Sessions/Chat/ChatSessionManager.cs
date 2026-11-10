@@ -1,3 +1,4 @@
+using Shared.Models.DataTransferObjects.ChatSession.Messages.Commands;
 using System.Collections.Concurrent;
 using System.Diagnostics.CodeAnalysis;
 using Microsoft.Extensions.Logging;
@@ -223,11 +224,15 @@ public class ChatSessionManager : IChatSessionManager
             if (!chat.CanPost)
                 return ErrorCode.ChatReadOnly;
 
+            var command = ChatCommandRequest.Parse(message.TextContent?.Text);
+            if (command is { IsValid: false }) return ErrorCode.InvalidValue;
+
             var (attachmentsResult, images, files) = await ResolveAttachmentsAsync(chat, message, senderUserId);
             if (attachmentsResult != null)
                 return attachmentsResult;
 
             var messageModel = message.ToModel(senderUserId, DateTime.UtcNow, images, files);
+            if (command != null) messageModel.ExecuteCommand(command);
 
             if (message.ReplyToMessageId is { } replyToMessageId)
             {

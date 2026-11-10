@@ -65,7 +65,7 @@ public static class ChatMessageMapperExtensions
     public static ChatTextContentDTO ToDto(this ChatTextContentModel? model)
     {
         if (model == null) return null!;
-        return new ChatTextContentDTO { Text = model.Text };
+        return new ChatTextContentDTO { Text = model.Text, CommandResult = model.CommandResult };
     }
 
     public static ChatReplyContentDTO ToDto(this ChatReplyContentModel? model)
