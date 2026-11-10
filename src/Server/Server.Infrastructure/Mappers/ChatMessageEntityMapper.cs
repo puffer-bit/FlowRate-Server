@@ -40,6 +40,8 @@ public static class ChatMessageEntityMapper
             SystemActorUserId = model.SystemContent?.ActorUserId,
             SystemSubjectUserId = model.SystemContent?.SubjectUserId,
             SystemCallId = model.SystemContent?.CallId,
+            SystemCallEndReason = (int?)model.SystemContent?.CallEndReason,
+            SystemCallDurationSeconds = model.SystemContent?.CallDurationSeconds,
             IsDisposable = model.IsDisposable,
 
             TextContent = model.TextContent?.ToEntity()!,
@@ -81,7 +83,9 @@ public static class ChatMessageEntityMapper
                 Kind = (ChatSystemEventKind)kind,
                 ActorUserId = entity.SystemActorUserId,
                 SubjectUserId = entity.SystemSubjectUserId,
-                CallId = entity.SystemCallId
+                CallId = entity.SystemCallId,
+                CallEndReason = (Shared.Models.DataTransferObjects.DirectCallEndReason?)entity.SystemCallEndReason,
+                CallDurationSeconds = entity.SystemCallDurationSeconds
             } : null,
 
             TextContent = entity.TextContent?.ToModel(),

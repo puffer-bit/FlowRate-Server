@@ -64,6 +64,8 @@ public sealed class CoordinatorRoles : ICoordinatorPermissions, IDisposable
         if (userId == UserModel.SystemUserId)
             return Permission.All;
 
+        if (session is Server.Core.Models.HybridSession.HybridSessionModel { CallDevices: { } devices })
+            return devices.ContainsKey(userId) ? Permission.ViewSessions | Permission.JoinSessions | Permission.Speak : Permission.None;
         if (session is Server.Core.Models.TextChat.ChatSessionModel { IsPrivate: true } chat)
             return PrivatePermissions(chat, userId);
 
@@ -75,6 +77,8 @@ public sealed class CoordinatorRoles : ICoordinatorPermissions, IDisposable
         if (userId == UserModel.SystemUserId)
             return Permission.All;
 
+        if (session is Server.Core.Models.HybridSession.HybridSessionModel { CallDevices: { } devices })
+            return devices.ContainsKey(userId) ? Permission.ViewSessions | Permission.JoinSessions | Permission.Speak : Permission.None;
         if (session is Server.Core.Models.TextChat.ChatSessionModel { IsPrivate: true } chat)
             return PrivatePermissions(chat, userId);
 

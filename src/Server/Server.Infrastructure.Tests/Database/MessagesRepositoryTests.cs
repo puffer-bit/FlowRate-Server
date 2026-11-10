@@ -77,7 +77,9 @@ public sealed class MessagesRepositoryTests : IDisposable
         {
             Kind = kind, ActorUserId = 1,
             SubjectUserId = call ? null : kind == ChatSystemEventKind.MemberLeft ? 1 : 2,
-            CallId = call ? Guid.NewGuid() : null
+            CallId = call ? Guid.NewGuid() : null,
+            CallEndReason = kind == ChatSystemEventKind.CallEnded ? Shared.Models.DataTransferObjects.DirectCallEndReason.Completed : null,
+            CallDurationSeconds = kind == ChatSystemEventKind.CallEnded ? 75 : null
         };
         var stored = await _repository.AddAsync(ChatMessageModel.CreateSystem(_chatId, content, DateTime.UtcNow));
         var loaded = await _repository.GetByIdAsync(stored.Id);
@@ -90,6 +92,17 @@ public sealed class MessagesRepositoryTests : IDisposable
         Assert.Equal(stored.Revision, await _repository.GetRevisionAsync(_chatId));
         using var context = _factory.CreateDbContext();
         Assert.False(context.Database.HasPendingModelChanges());
+    }
+
+    [Theory]
+    [InlineData(Shared.Models.DataTransferObjects.DirectCallEndReason.Missed)]
+    [InlineData(Shared.Models.DataTransferObjects.DirectCallEndReason.Declined)]
+    public async Task UnansweredCallOutcome_SurvivesDatabaseReload(Shared.Models.DataTransferObjects.DirectCallEndReason reason)
+    {
+        var content = new ChatSystemContent { Kind = ChatSystemEventKind.CallEnded,
+            CallId = Guid.NewGuid(), CallEndReason = reason };
+        var stored = await _repository.AddAsync(ChatMessageModel.CreateSystem(_chatId, content, DateTime.UtcNow));
+        Assert.Equal(content, (await _repository.GetByIdAsync(stored.Id))!.SystemContent);
     }
 
     [Theory]

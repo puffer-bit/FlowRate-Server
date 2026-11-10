@@ -52,6 +52,8 @@ public class ChatMessageEntity
     public int? SystemActorUserId { get; set; }
     public int? SystemSubjectUserId { get; set; }
     public Guid? SystemCallId { get; set; }
+    public int? SystemCallEndReason { get; set; }
+    public int? SystemCallDurationSeconds { get; set; }
     public bool IsDisposable { get; set; }
     
     // Navigation fields

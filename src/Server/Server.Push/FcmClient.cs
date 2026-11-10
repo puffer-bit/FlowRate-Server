@@ -110,7 +110,7 @@ public sealed class FcmClient : IFcmClient
             {
                 writer.WriteStartObject("android");
                 writer.WriteString("priority", "HIGH");
-                writer.WriteString("ttl", $"{(long)MessageLifetime.TotalSeconds}s");
+                writer.WriteString("ttl", $"{Math.Clamp(message.TimeToLiveSeconds ?? (int)MessageLifetime.TotalSeconds, 0, 86400)}s");
                 writer.WriteEndObject();
             }
 

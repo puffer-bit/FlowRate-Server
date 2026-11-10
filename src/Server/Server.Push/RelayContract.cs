@@ -10,8 +10,8 @@ public static class RelayContract
     public const int MaxPayloadLength = 3500;
 }
 
-public sealed record RelayPushRequest(string Token, FcmPlatform Platform, string KeyId, string Payload);
+public sealed record RelayPushRequest(string Token, FcmPlatform Platform, string KeyId, string Payload, int? TimeToLiveSeconds = null);
 
-[JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase)]
+[JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase, DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull)]
 [JsonSerializable(typeof(RelayPushRequest))]
 public sealed partial class RelayJsonContext : JsonSerializerContext;

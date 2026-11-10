@@ -88,6 +88,9 @@ public partial class HybridSessionPeerManager : IHybridSessionPeerManager
     public Task<(ErrorCode? result, TransportData? transportData)> AddPeerAsync(int userId,
         string clientEpoch, string? connectionId = null) => LockedAsync<(ErrorCode? result, TransportData? transportData)>(async () =>
     {
+        if (Model.CallDevices is { } devices &&
+            (!devices.TryGetValue(userId, out var selected) || selected != connectionId))
+            return (ErrorCode.NotMember, null);
         var isNew = !_peers.TryGetValue(userId, out var peer);
         if (isNew)
         {

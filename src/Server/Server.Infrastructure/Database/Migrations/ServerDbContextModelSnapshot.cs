@@ -694,6 +694,12 @@ namespace Server.Infrastructure.Database.Migrations
                     b.Property<int?>("SystemActorUserId")
                         .HasColumnType("INTEGER");
 
+                    b.Property<int?>("SystemCallDurationSeconds")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int?>("SystemCallEndReason")
+                        .HasColumnType("INTEGER");
+
                     b.Property<Guid?>("SystemCallId")
                         .HasColumnType("TEXT");
 

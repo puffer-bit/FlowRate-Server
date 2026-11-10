@@ -20,6 +20,7 @@ public static class RequestPolicies
     public static RequestPolicy? Of(BaseMessage message) => message switch
     {
         AuthRequest or HeartbeatRequest => Open,
+        DirectCallRequest => Open, // Call manager verifies membership and the selected device.
 
         CoordinatorInfoRequest or CoordinatorUserInfoRequest or CoordinatorUserSearchRequest
             or RegisterPushTokenRequest or UnregisterPushTokenRequest or MediaTokenRequest => Open,

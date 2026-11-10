@@ -34,6 +34,9 @@ public abstract class HybridSessionRequestHandler<TRequest> : IMessageHandler<TR
         BaseMessage response;
         if (!_sessionManager.TryGetSession(GetSessionId(request), out var session))
             response = request.ToError(SessionNotFound(request));
+        else if (session.Model.CallDevices is { } devices &&
+            (!devices.TryGetValue(request.SenderId, out var selected) || selected != connectionId))
+            response = request.ToError(ErrorCode.NotMember);
         else if (DrivesOwnPeer && !session.PeerManager.IsPeerOf(request.SenderId, connectionId))
             response = request.ToError(ErrorCode.NotMember);
         else

@@ -18,7 +18,7 @@ public sealed class FcmPushSender : IPushSender
     public async Task<PushSendResult> SendAsync(PushMessage message, CancellationToken cancellationToken = default)
     {
         var result = await _client.SendAsync(
-            new FcmMessage(message.Token, message.Platform.ToFcm(), message.KeyId, message.Payload),
+            new FcmMessage(message.Token, message.Platform.ToFcm(), message.KeyId, message.Payload, message.TimeToLiveSeconds),
             cancellationToken);
 
         return new PushSendResult(result.Status switch

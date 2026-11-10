@@ -33,6 +33,15 @@ public sealed class RequestAuthorizer
 
     public async Task<bool> IsAllowedAsync(BaseMessage message)
     {
+        if (message is Shared.Models.Requests.SessionActions.HybridSession.HybridSessionRequest
+            && RequestPolicies.Of(message)?.SessionId is { } mediaSessionId
+            && _hybridSessions.TryGetSession(mediaSessionId, out var callSession)
+            && callSession.Model.CallDevices is { } callDevices)
+        {
+            if (!callDevices.ContainsKey(message.SenderId)) return false;
+            return message is not (Shared.Models.Requests.SessionActions.HybridSession.HybridSessionStartVideoRequest
+                or Shared.Models.Requests.SessionActions.HybridSession.HybridSessionStartScreenShareRequest);
+        }
         if (RequestPolicies.Of(message) is not { } policy)
             return false;
 
