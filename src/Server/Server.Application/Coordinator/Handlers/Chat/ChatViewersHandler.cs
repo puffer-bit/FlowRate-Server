@@ -83,6 +83,13 @@ public sealed class ChatViewersHandler : IMessageHandler<ChatViewersRequest>, ID
     {
         if (!_chats.TryGetSession(chatId, out var chat)
             || !_permissions.HasIn(viewerId, chat, Permission.ViewSessions)) return [];
+        if (chat.IsPrivate)
+        {
+            var members = await Task.WhenAll(chat.MemberIds.Select(_users.GetUserAsync));
+            return members.OfType<UserModel>().Where(user => !user.IsSystem)
+                .OrderBy(user => user.Username, StringComparer.OrdinalIgnoreCase)
+                .Select(user => user.ToDto(viewerId)).ToList();
+        }
         var roles = _permissions.Roles;
         return (await _users.GetAllUsersAsync()).Values
             .Where(user => !user.IsSystem

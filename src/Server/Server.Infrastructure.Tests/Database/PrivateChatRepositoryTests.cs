@@ -1,3 +1,27 @@
+using System.Text.Json;
+using Microsoft.Extensions.Logging.Abstractions;
+using Moq;
+using Server.Application.Abstractions.Media;
+using Server.Application.Abstractions.Persistence;
+using Server.Application.Coordinator.Events;
+using Server.Application.Coordinator.Handlers.Sessions;
+using Server.Application.Coordinator.Messaging;
+using Server.Application.Coordinator.Roles;
+using Server.Application.Coordinator.Sessions;
+using Server.Application.Coordinator.Sessions.Chat;
+using Server.Application.Coordinator.Sessions.Hybrid;
+using Server.Application.Coordinator.Sessions.Layout;
+using Server.Application.Coordinator.Users;
+using Server.Core.Models.User;
+using Shared.Enums.User;
+using Shared.Models;
+using Shared.Models.DataTransferObjects.ChatSession;
+using Shared.Models.Requests.SessionActions.Generic;
+using Shared.Models.Requests.SessionActions.Generic.Models;
+using Shared.Models.Requests.SessionActions.Generic.Models.SessionData;
+using Shared.Models.Responses.SessionActions.Generic;
+using Shared.Serialization;
+using Shared.Validation;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
@@ -39,6 +63,56 @@ public sealed class PrivateChatRepositoryTests : IDisposable
         var otherServer = ChatSessionModel.Create("other", "Other server", 1);
         otherServer.SetAudience(ChatKind.Direct, [1, 2]);
         await _repository.AddAsync(otherServer);
+    }
+
+    [Theory]
+    [InlineData(1)]
+    [InlineData(3)]
+    public async Task GroupCreation_PassesProtocolAuthorizationHandlerAndDatabase(int peerCount)
+    {
+        var peers = Enumerable.Range(2, peerCount).ToArray();
+        var events = Mock.Of<ICoordinatorEventBus>();
+        var messages = Mock.Of<IMessagesRepository>();
+        ChatSessionManager Chats() => new(NullLogger.Instance, events, _repository, messages,
+            Mock.Of<IMediaUploadRepository>(), Mock.Of<IMediaStorage>(), "coordinator");
+        var chats = Chats();
+        var layout = new Mock<ISessionLayoutService>(MockBehavior.Strict);
+        using var sessions = new SessionManager(chats, Mock.Of<IHybridSessionManager>(), layout.Object,
+            Mock.Of<ISessionPermissionsRepository>(), "coordinator");
+        var users = new Mock<IUserManager>();
+        users.Setup(manager => manager.GetUserAsync(It.IsAny<int>())).ReturnsAsync((int id) =>
+            new UserModel(id, "coordinator", $"User {id}", UserState.Normal, UserStatus.Online,
+                DateTime.UtcNow, DateTime.UtcNow));
+        BaseMessage? answer = null;
+        var sender = new Mock<IMessageSender>();
+        sender.Setup(s => s.SendMessageById("device", It.IsAny<BaseMessage>()))
+            .Callback<string, BaseMessage>((_, response) => answer = response);
+        var handler = new CreateSessionHandler(sessions, sender.Object, users.Object);
+        var authorizer = new RequestAuthorizer(Mock.Of<ICoordinatorPermissions>(), Mock.Of<IHybridSessionManager>(), sessions);
+        for (var index = 0; index < 2; index++)
+        {
+            BaseMessage request = new CreateSessionRequest(new CreateSessionModel("Friends", -1,
+                new ChatSessionCreateData(Kind: ChatKind.Group, MemberIds: peers))) { SenderId = 1 };
+            var json = JsonSerializer.Serialize(request, ProtocolJsonContext.Default.BaseMessage);
+            var decoded = Assert.IsType<CreateSessionRequest>(JsonSerializer.Deserialize(json, ProtocolJsonContext.Default.BaseMessage));
+            Assert.True(MessageValidator.TryValidate(decoded, out var errors), string.Join("; ", errors));
+            Assert.True(await authorizer.IsAllowedAsync(decoded));
+            await handler.HandleMessage(decoded, "device");
+            var response = Assert.IsType<CreateSessionResponse>(answer);
+            var wire = JsonSerializer.Serialize<BaseMessage>(response, ProtocolJsonContext.Default.BaseMessage);
+            var returned = Assert.IsType<CreateSessionResponse>(JsonSerializer.Deserialize(wire, ProtocolJsonContext.Default.BaseMessage));
+            var group = Assert.IsType<ChatSessionDTO>(returned.Session);
+            Assert.Equal(ChatKind.Group, group.Kind);
+            Assert.Equal(peers.Prepend(1), group.MemberIds);
+            var saved = await _repository.GetByIdAsync(group.Id);
+            Assert.True(saved!.MemberIds.SetEquals(peers.Prepend(1)));
+            Assert.Equal(1, saved.AdminUserId);
+        }
+        var reloaded = Chats();
+        await reloaded.LoadAsync();
+        Assert.Equal(2, reloaded.GetAllSessions().Count);
+        Assert.All(reloaded.GetAllSessions(), group => Assert.Equal(ChatKind.Group, group.Kind));
+        layout.VerifyNoOtherCalls();
     }
 
     [Fact]

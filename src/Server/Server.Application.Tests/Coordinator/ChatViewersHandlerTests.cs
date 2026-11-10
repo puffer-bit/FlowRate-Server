@@ -79,6 +79,45 @@ public sealed class ChatViewersHandlerTests : IDisposable
     }
 
     [Fact]
+    public async Task GroupSnapshotLoadsOnlyMembersRegardlessOfServerRoles()
+    {
+        _chat.SetAudience(ChatKind.Group, [1, 4, 5]);
+        var members = new Dictionary<int, UserModel>
+        {
+            [1] = User(1, "Owner"),
+            [4] = User(4, "Hidden by channel roles", UserState.Normal, 2),
+            [5] = User(5, "Banned member", UserState.Banned)
+        };
+        _all[3] = User(3, "Unrelated server user");
+        _users.Setup(users => users.GetUserAsync(It.IsAny<int>()))
+            .ReturnsAsync((int id) => members.GetValueOrDefault(id));
+        await Subscribe();
+        var snapshot = Assert.IsType<ChatViewersResponse>(Assert.Single(_sent));
+        Assert.Equal(new[] { 1, 4, 5 }, snapshot.Users.Select(user => user.Id).Order());
+        _users.Verify(users => users.GetAllUsersAsync(), Times.Never);
+        _users.Verify(users => users.GetUserAsync(3), Times.Never);
+    }
+
+    [Fact]
+    public async Task GroupMembershipChangesSendAddedAndRemovedMembers()
+    {
+        _chat.SetAudience(ChatKind.Group, [1, 3]);
+        _all[1] = User(1, "Owner");
+        _all[3] = User(3, "Removed");
+        _all[4] = User(4, "Added", UserState.Normal, 2);
+        _users.Setup(users => users.GetUserAsync(It.IsAny<int>()))
+            .ReturnsAsync((int id) => _all.GetValueOrDefault(id));
+        await Subscribe();
+        _sent.Clear();
+        _chat.SetAudience(ChatKind.Group, [1, 4]);
+        _visibility.Reconfigured(_chat);
+        var delta = Assert.IsType<ChatViewersChangedNotification>(Assert.Single(_sent));
+        Assert.Equal(new[] { 3 }, delta.Removed);
+        Assert.Equal(4, Assert.Single(delta.Upserted).Id);
+        _users.Verify(users => users.GetAllUsersAsync(), Times.Never);
+    }
+
+    [Fact]
     public async Task ChangesSendOnlyUpsertsAndRemovalsWithoutAnotherSnapshot()
     {
         _all[3] = User(3, "Alice");
