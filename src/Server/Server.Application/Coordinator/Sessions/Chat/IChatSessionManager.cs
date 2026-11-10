@@ -1,4 +1,5 @@
 using System.Diagnostics.CodeAnalysis;
+using Shared.Models.DataTransferObjects.ChatSession.Messages;
 using Server.Core.Models.TextChat;
 using Server.Core.Models.TextChat.Messages;
 using Shared.Enums;
@@ -31,6 +32,8 @@ public interface IChatSessionManager
     Task<(ErrorCode? result, ChatHistoryPage? page)> FetchMessagesBeforeAsync(int sessionId, int? beforeMessageId, int take);
     Task<(ErrorCode? result, ChatChanges? changes)> FetchChangesAsync(int sessionId, long afterRevision, int take);
     Task<(ErrorCode? result, ChatMessageModel? message)> FetchMessageAsync(int sessionId, int messageId);
+    Task<ErrorCode?> AddCallSystemMessageAsync(int sessionId,
+        ChatSystemContent content);
     Task<ErrorCode?> AddMessageAsync(int sessionId, NewChatMessageModel message, int senderUserId);
     Task<ErrorCode?> SetReactionAsync(int sessionId, int messageId, string emoji, bool isAdded, int userId);
     Task<ErrorCode?> EditMessageAsync(int sessionId, int messageId, string text, int userId);

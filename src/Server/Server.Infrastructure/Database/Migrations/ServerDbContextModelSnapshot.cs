@@ -691,6 +691,18 @@ namespace Server.Infrastructure.Database.Migrations
                     b.Property<DateTime>("SentTime")
                         .HasColumnType("TEXT");
 
+                    b.Property<int?>("SystemActorUserId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<Guid?>("SystemCallId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int?>("SystemEventKind")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int?>("SystemSubjectUserId")
+                        .HasColumnType("INTEGER");
+
                     b.PrimitiveCollection<string>("UsersIds")
                         .IsRequired()
                         .HasColumnType("TEXT");

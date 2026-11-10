@@ -1,3 +1,5 @@
+using Shared.Models.DataTransferObjects.ChatSession.Messages;
+using Server.Core.Models.TextChat.Messages;
 using System.Text.Json;
 using System.Data.Common;
 using Microsoft.EntityFrameworkCore.Diagnostics;
@@ -55,6 +57,37 @@ public sealed class PrivateChatRepositoryTests : IDisposable
             Id = id, Username = $"User {id}", IdentityHash = [(byte)id], CoordinatorInstanceId = "coordinator"
         }));
         context.SaveChanges();
+    }
+
+    [Fact]
+    public async Task MembershipAndSystemMessages_CommitTogether_WithOrderedRevisions()
+    {
+        var group = ChatSessionModel.Create("coordinator", "Group", 1);
+        group.SetAudience(ChatKind.Group, [1, 2]);
+        group.Id = await _repository.AddAsync(group);
+        group.SetAudience(ChatKind.Group, [1, 3]);
+        ChatMessageModel Message(ChatSystemEventKind kind, int subject) => ChatMessageModel.CreateSystem(group.Id,
+            new ChatSystemContent { Kind = kind, ActorUserId = 1, SubjectUserId = subject }, DateTime.UtcNow);
+        var stored = await _repository.UpdateWithSystemMessagesAsync(group,
+            [Message(ChatSystemEventKind.MemberAdded, 3), Message(ChatSystemEventKind.MemberRemoved, 2)]);
+        Assert.True((await _repository.GetByIdAsync(group.Id))!.MemberIds.SetEquals([1, 3]));
+        var messages = new MessagesRepository(_factory);
+        Assert.Equal(new long[] { 1, 2 }, stored.Select(message => message.Revision));
+        Assert.True(stored[0].Id < stored[1].Id);
+        Assert.Equal(stored.Select(message => message.SystemContent),
+            (await messages.GetBeforeAsync(group.Id, null, 10)).Select(message => message.SystemContent));
+        Assert.Equal(2, await messages.GetRevisionAsync(group.Id));
+
+        // The first message is inserted successfully, then a duplicate ID fails the second insert.
+        // Both that insert and the membership change must roll back.
+        group.SetAudience(ChatKind.Group, [1, 4]);
+        var duplicate = Message(ChatSystemEventKind.MemberRemoved, 3);
+        duplicate.Id = stored[0].Id;
+        await Assert.ThrowsAsync<DbUpdateException>(() => _repository.UpdateWithSystemMessagesAsync(group,
+            [Message(ChatSystemEventKind.MemberAdded, 4), duplicate]));
+        Assert.True((await _repository.GetByIdAsync(group.Id))!.MemberIds.SetEquals([1, 3]));
+        Assert.Equal(2, await messages.GetRevisionAsync(group.Id));
+        Assert.Equal(2, (await messages.GetBeforeAsync(group.Id, null, 10)).Count);
     }
 
     [Fact]

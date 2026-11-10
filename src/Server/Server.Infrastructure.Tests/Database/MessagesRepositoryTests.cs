@@ -1,3 +1,4 @@
+using Shared.Models.DataTransferObjects.ChatSession.Messages;
 using Shared.Models.DataTransferObjects.ChatSession.Messages.Commands;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
@@ -61,6 +62,34 @@ public sealed class MessagesRepositoryTests : IDisposable
         var message = (await _repository.GetByIdAsync(messageId))!;
         message.Edit(AuthorId, text, DateTime.UtcNow);
         await _repository.UpdateAsync(message);
+    }
+
+    [Theory]
+    [InlineData(ChatSystemEventKind.MemberAdded)]
+    [InlineData(ChatSystemEventKind.MemberRemoved)]
+    [InlineData(ChatSystemEventKind.MemberLeft)]
+    [InlineData(ChatSystemEventKind.CallStarted)]
+    [InlineData(ChatSystemEventKind.CallEnded)]
+    public async Task SystemEvent_SurvivesStorageHistoryAndIncrementalSync(ChatSystemEventKind kind)
+    {
+        var call = kind is ChatSystemEventKind.CallStarted or ChatSystemEventKind.CallEnded;
+        var content = new ChatSystemContent
+        {
+            Kind = kind, ActorUserId = 1,
+            SubjectUserId = call ? null : kind == ChatSystemEventKind.MemberLeft ? 1 : 2,
+            CallId = call ? Guid.NewGuid() : null
+        };
+        var stored = await _repository.AddAsync(ChatMessageModel.CreateSystem(_chatId, content, DateTime.UtcNow));
+        var loaded = await _repository.GetByIdAsync(stored.Id);
+        Assert.Equal(content, loaded!.SystemContent);
+        Assert.True(loaded.IsSystem);
+        Assert.True(loaded.IsReadOnly);
+        Assert.Equal(content.ToFallbackText(), loaded.TextContent!.Text);
+        Assert.Equal(content, Assert.Single(await _repository.GetBeforeAsync(_chatId, null, 10)).SystemContent);
+        Assert.Equal(content, Assert.Single(await _repository.GetChangesAsync(_chatId, 0, 10)).SystemContent);
+        Assert.Equal(stored.Revision, await _repository.GetRevisionAsync(_chatId));
+        using var context = _factory.CreateDbContext();
+        Assert.False(context.Database.HasPendingModelChanges());
     }
 
     [Theory]

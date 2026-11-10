@@ -1,3 +1,4 @@
+using Shared.Models.DataTransferObjects.ChatSession.Messages;
 using Shared.Models.DataTransferObjects.ChatSession.Messages.Commands;
 using Server.Core.Models.TextChat.Messages;
 using Server.Core.Models.TextChat.Messages.Content;
@@ -35,6 +36,10 @@ public static class ChatMessageEntityMapper
             IsDeleted = model.IsDeleted,
             IsReadOnly = model.IsReadOnly,
             IsSystem = model.IsSystem,
+            SystemEventKind = (int?)model.SystemContent?.Kind,
+            SystemActorUserId = model.SystemContent?.ActorUserId,
+            SystemSubjectUserId = model.SystemContent?.SubjectUserId,
+            SystemCallId = model.SystemContent?.CallId,
             IsDisposable = model.IsDisposable,
 
             TextContent = model.TextContent?.ToEntity()!,
@@ -71,6 +76,13 @@ public static class ChatMessageEntityMapper
             IsDeleted = entity.IsDeleted,
             IsReadOnly = entity.IsReadOnly,
             IsSystem = entity.IsSystem,
+            SystemContent = entity.SystemEventKind is { } kind ? new ChatSystemContent
+            {
+                Kind = (ChatSystemEventKind)kind,
+                ActorUserId = entity.SystemActorUserId,
+                SubjectUserId = entity.SystemSubjectUserId,
+                CallId = entity.SystemCallId
+            } : null,
 
             TextContent = entity.TextContent?.ToModel(),
             ReplyContent = replyContent,

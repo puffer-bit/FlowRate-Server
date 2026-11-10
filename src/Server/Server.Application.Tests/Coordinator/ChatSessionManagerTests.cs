@@ -1,3 +1,4 @@
+using Shared.Models.DataTransferObjects.ChatSession.Messages;
 using Shared.Models.DataTransferObjects.ChatSession.Messages.Commands;
 using Shared.Models.DataTransferObjects.ChatSession.Messages.Content;
 using Shared.Models.Requests.SessionActions.ChatSession.Models;
@@ -32,6 +33,18 @@ public class ChatSessionManagerTests
     {
         _chats.Setup(r => r.AddAsync(It.IsAny<Core.Models.TextChat.ChatSessionModel>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(() => _nextChatId++);
+        _chats.Setup(r => r.UpdateWithSystemMessagesAsync(It.IsAny<Core.Models.TextChat.ChatSessionModel>(),
+                It.IsAny<IReadOnlyList<ChatMessageModel>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((Core.Models.TextChat.ChatSessionModel _, IReadOnlyList<ChatMessageModel> messages, CancellationToken _) =>
+            {
+                foreach (var message in messages)
+                {
+                    message.Id = _storedMessages.Count + 1;
+                    message.MarkChanged(message.Id);
+                    _storedMessages[message.Id] = message;
+                }
+                return messages;
+            });
         _messages.Setup(r => r.GetByIdAsync(It.IsAny<int>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((int id, CancellationToken _) => _storedMessages.GetValueOrDefault(id));
 
@@ -72,6 +85,75 @@ public class ChatSessionManagerTests
         Assert.True(group.MemberIds.SetEquals([2]));
         Assert.Equal(ErrorCode.InsufficientPermissions,
             await _manager.ChangeGroupAsync(group.Id, group.Name, [], 2, 3, true));
+    }
+
+    [Fact]
+    public async Task MembershipChanges_StoreSystemMessages_AndRepeatingChangeDoesNotDuplicateThem()
+    {
+        var (_, group) = await _manager.CreateAsync(new CreateSessionModel("Friends", -1,
+            new ChatSessionCreateData(Kind: ChatKind.Group, MemberIds: [2, 3])), 1);
+        Assert.Null(await _manager.ChangeGroupAsync(group!.Id, "Friends", [1, 3, 4], 1, 1, false));
+        var notifications = _events.Of<ChatSessionMessageAddedEvent>().ToList();
+        Assert.Equal(new[] { ChatSystemEventKind.MemberAdded, ChatSystemEventKind.MemberRemoved },
+            notifications.Select(e => e.Message.SystemContent!.Kind));
+        Assert.Equal(new int?[] { 4, 2 }, notifications.Select(e => e.Message.SystemContent!.SubjectUserId));
+        Assert.All(notifications, e =>
+        {
+            Assert.True(e.Message.IsSystem);
+            Assert.True(e.Message.IsReadOnly);
+            Assert.Equal(UserModel.SystemUserId, e.Message.SenderUserId);
+            Assert.Equal(1, e.Message.SystemContent!.ActorUserId);
+            Assert.NotEmpty(e.Message.TextContent!.Text);
+        });
+        Assert.Same(notifications.Last().Message, group.LastMessage);
+        Assert.Null(await _manager.ChangeGroupAsync(group.Id, "Friends", [1, 3, 4], 1, 1, false));
+        Assert.Equal(2, _events.Of<ChatSessionMessageAddedEvent>().Count());
+        Assert.Null(await _manager.ChangeGroupAsync(group.Id, "", [], 1, 3, true));
+        Assert.Equal(ChatSystemEventKind.MemberLeft, _events.Of<ChatSessionMessageAddedEvent>().Last().Message.SystemContent!.Kind);
+        foreach (var notification in notifications)
+        {
+            Assert.Equal(ErrorCode.InsufficientPermissions,
+                await _manager.EditMessageAsync(group.Id, notification.Message.Id, "forged", 1));
+            Assert.Equal(ErrorCode.InsufficientPermissions,
+                await _manager.DeleteMessageAsync(group.Id, notification.Message.Id, 1, true));
+            Assert.Equal(ErrorCode.InsufficientPermissions,
+                await _manager.SetPinnedAsync(group.Id, notification.Message.Id, true, 1));
+            Assert.Equal(ErrorCode.InsufficientPermissions,
+                await _manager.SetReactionAsync(group.Id, notification.Message.Id, "👍", true, 1));
+        }
+    }
+
+    [Fact]
+    public async Task FailedMembershipWrite_DoesNotChangeAudienceOrPublishMessages()
+    {
+        var (_, group) = await _manager.CreateAsync(new CreateSessionModel("Friends", -1,
+            new ChatSessionCreateData(Kind: ChatKind.Group, MemberIds: [2])), 1);
+        _chats.Setup(r => r.UpdateWithSystemMessagesAsync(It.IsAny<Core.Models.TextChat.ChatSessionModel>(),
+            It.IsAny<IReadOnlyList<ChatMessageModel>>(), It.IsAny<CancellationToken>())).ThrowsAsync(new IOException());
+        Assert.Equal(ErrorCode.Internal, await _manager.ChangeGroupAsync(group!.Id, "Changed", [1, 3], 1, 1, false));
+        Assert.True(group.MemberIds.SetEquals([1, 2]));
+        Assert.Equal("Friends", group.Name);
+        Assert.Empty(_events.Of<ChatSessionMessageAddedEvent>());
+        Assert.Empty(_events.Of<ChatSessionReconfiguredEvent>());
+    }
+
+    [Theory]
+    [InlineData(ChatSystemEventKind.CallStarted)]
+    [InlineData(ChatSystemEventKind.CallEnded)]
+    public async Task CallEvents_UsePersistedChatMessageDelivery(ChatSystemEventKind kind)
+    {
+        var chatId = await CreateChat("calls");
+        _messages.Setup(r => r.AddAsync(It.IsAny<ChatMessageModel>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((ChatMessageModel message, CancellationToken _) => { message.Id = 20; return message; });
+        var content = new ChatSystemContent { Kind = kind, ActorUserId = 1, CallId = Guid.NewGuid() };
+        Assert.Null(await _manager.AddCallSystemMessageAsync(chatId, content));
+        var message = Assert.Single(_events.Of<ChatSessionMessageAddedEvent>()).Message;
+        Assert.Equal(content, message.SystemContent);
+        Assert.True(message.IsSystem);
+        Assert.Equal(20, message.Id);
+        Assert.Equal(content, Server.Application.Mappers.ChatMessageMapperExtensions.ToDto(message).SystemContent);
+        Assert.Equal(ErrorCode.InvalidValue, await _manager.AddCallSystemMessageAsync(chatId,
+            content with { CallId = Guid.Empty }));
     }
 
     [Theory]

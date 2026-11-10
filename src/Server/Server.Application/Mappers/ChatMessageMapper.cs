@@ -39,6 +39,7 @@ public static class ChatMessageMapperExtensions
             IsDeleted = model.IsDeleted,
             IsReadOnly = model.IsReadOnly,
             IsSystem = model.IsSystem,
+            SystemContent = model.SystemContent,
             IsDisposable = model.IsDisposable,
 
             TextContent = model.TextContent?.ToDto()!,

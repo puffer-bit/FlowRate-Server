@@ -1,3 +1,4 @@
+using Shared.Models.DataTransferObjects.ChatSession.Messages;
 using System.Security.Cryptography;
 using Shared.Models.DataTransferObjects.ChatSession.Messages.Commands;
 using Server.Core.Models.TextChat.Messages.Content;
@@ -64,6 +65,7 @@ public sealed class ChatMessageModel
     public bool IsDeleted { get; init; }
     public bool IsReadOnly { get; init; }
     public bool IsSystem { get; init; }
+    public ChatSystemContent? SystemContent { get; init; }
 
     public bool IsDelayed => DelayedSentTime.HasValue;
     public bool IsDisposable => DisposeTime.HasValue;
@@ -94,6 +96,22 @@ public sealed class ChatMessageModel
             throw new ArgumentException("A message needs text or an attachment.");
 
         return message;
+    }
+
+    public static ChatMessageModel CreateSystem(int chatId, ChatSystemContent content, DateTime now)
+    {
+        if (chatId <= 0 || !content.IsValid())
+            throw new ArgumentException("Invalid system chat event.");
+        return new ChatMessageModel
+        {
+            ChatId = chatId,
+            SenderUserId = UserModel.SystemUserId,
+            SentTime = now,
+            IsSystem = true,
+            IsReadOnly = true,
+            SystemContent = content,
+            TextContent = new ChatTextContentModel { Text = content.ToFallbackText() }
+        };
     }
 
     public bool HasAttachments => Images.Count + Videos.Count + Files.Count > 0;

@@ -1,3 +1,4 @@
+using Shared.Models.DataTransferObjects.ChatSession.Messages;
 using Shared.Models.DataTransferObjects.ChatSession.Messages.Commands;
 using System.Collections.Concurrent;
 using System.Diagnostics.CodeAnalysis;
@@ -5,6 +6,7 @@ using Microsoft.Extensions.Logging;
 using Server.Application.Coordinator.Events;
 using Server.Application.Mappers;
 using Server.Core.Models.Media;
+using Server.Core.Models.User;
 using Server.Core.Models.TextChat;
 using Server.Core.Models.TextChat.Messages.Content;
 using Server.Application.Abstractions.Media;
@@ -164,11 +166,25 @@ public class ChatSessionManager : IChatSessionManager
                 chat.Description, chat.IconPath, chat.IsArchived);
             changed.SetAudience(ChatKind.Group, members);
             changed.SetLastMessage(chat.LastMessage);
-            await _chatSessionRepository.UpdateAsync(changed);
+            var now = DateTime.UtcNow;
+            var messages = members.Except(chat.MemberIds).Order().Select(id =>
+                ChatMessageModel.CreateSystem(sessionId, new ChatSystemContent
+                {
+                    Kind = ChatSystemEventKind.MemberAdded, ActorUserId = userId, SubjectUserId = id
+                }, now)).Concat(chat.MemberIds.Except(members).Order().Select(id =>
+                ChatMessageModel.CreateSystem(sessionId, new ChatSystemContent
+                {
+                    Kind = leave ? ChatSystemEventKind.MemberLeft : ChatSystemEventKind.MemberRemoved,
+                    ActorUserId = userId, SubjectUserId = id
+                }, now))).ToList();
+            var stored = await _chatSessionRepository.UpdateWithSystemMessagesAsync(changed, messages);
             chat.SetAudience(ChatKind.Group, members);
             chat.Rename(changed.Name);
             chat.ChangeAdmin(changed.AdminUserId);
+            // Revoke removed members before delivering any of the new messages.
             await _coordinatorEventBus.PublishAsync(new ChatSessionReconfiguredEvent(chat, userId));
+            foreach (var message in stored)
+                await PublishAddedMessageAsync(chat, message, userId);
             return null;
         }
         catch (Exception exception)
@@ -325,6 +341,39 @@ public class ChatSessionManager : IChatSessionManager
             _logger.LogError(e, "Error while adding chat message.");
             return ErrorCode.Internal;
         }
+    }
+
+    /// <summary>Server-only entry point for the call lifecycle; never exposed as a client command.</summary>
+    public async Task<ErrorCode?> AddCallSystemMessageAsync(int sessionId, ChatSystemContent content)
+    {
+        if (!content.IsValid() || content.Kind is not (ChatSystemEventKind.CallStarted or ChatSystemEventKind.CallEnded))
+            return ErrorCode.InvalidValue;
+        var writeLock = MessageWriteLockOf(sessionId);
+        await writeLock.WaitAsync();
+        try
+        {
+            if (!_sessions.TryGetValue(sessionId, out var chat)) return ErrorCode.ChatNotFound;
+            var message = ChatMessageModel.CreateSystem(sessionId, content, DateTime.UtcNow);
+            var stored = await _messagesRepository.AddAsync(message);
+            await PublishAddedMessageAsync(chat, stored, content.ActorUserId ?? UserModel.SystemUserId);
+            return null;
+        }
+        catch (Exception exception)
+        {
+            _logger.LogError(exception, "Error while adding a call system message.");
+            return ErrorCode.Internal;
+        }
+        finally
+        {
+            writeLock.Release();
+        }
+    }
+
+    private async Task PublishAddedMessageAsync(ChatSessionModel chat, ChatMessageModel message, int actorUserId)
+    {
+        chat.SetLastMessage(message);
+        await _coordinatorEventBus.PublishAsync(new ChatSessionReconfiguredEvent(chat, actorUserId));
+        await _coordinatorEventBus.PublishAsync(new ChatSessionMessageAddedEvent(chat.Id, message));
     }
 
     public async Task<ErrorCode?> SetPinnedAsync(int sessionId, int messageId, bool pinned, int userId)
@@ -526,7 +575,7 @@ public class ChatSessionManager : IChatSessionManager
                 if (message == null || message.IsDeleted)
                     return ErrorCode.MessageNotFound;
 
-                if (!mayDeleteAny && !chat.CanDeleteMessage(message, userId))
+                if (message.IsSystem || (!mayDeleteAny && !chat.CanDeleteMessage(message, userId)))
                     return ErrorCode.InsufficientPermissions;
 
                 var revision = await _messagesRepository.DeleteAsync(messageId);

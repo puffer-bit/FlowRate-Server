@@ -1,3 +1,4 @@
+using Server.Core.Models.TextChat.Messages;
 using Microsoft.EntityFrameworkCore;
 using Server.Core.Models.TextChat;
 using Server.Infrastructure.Database.Entities.TextChat;
@@ -56,6 +57,38 @@ public class ChatSessionRepository : IChatSessionRepository
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
 
+        await UpdateEntityAsync(context, instance, cancellationToken);
+        await context.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<ChatMessageModel>> UpdateWithSystemMessagesAsync(
+        ChatSessionModel instance, IReadOnlyList<ChatMessageModel> messages,
+        CancellationToken cancellationToken = default)
+    {
+        if (messages.Any(message => message.ChatId != instance.Id || !message.IsSystem
+                || message.SystemContent?.IsValid() != true))
+            throw new ArgumentException("Expected system messages of the updated chat.", nameof(messages));
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+        await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
+        var entity = await UpdateEntityAsync(context, instance, cancellationToken);
+        var stored = new List<ChatMessageModel>();
+        foreach (var message in messages)
+        {
+            var entry = message.ToEntity();
+            entry.Revision = ++entity.LastRevision;
+            context.ChatMessagesEntities.Add(entry);
+            // Assign IDs in event order, independently of EF's insertion ordering.
+            await context.SaveChangesAsync(cancellationToken);
+            stored.Add(entry.ToModel());
+        }
+        await context.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        return stored;
+    }
+
+    private static async Task<ChatSessionEntity> UpdateEntityAsync(ServerDbContext context,
+        ChatSessionModel instance, CancellationToken cancellationToken)
+    {
         var entity = await context.ChatSessionEntities.Include(chat => chat.Members)
             .SingleAsync(chat => chat.Id == instance.Id, cancellationToken);
         var revision = entity.LastRevision;
@@ -72,7 +105,7 @@ public class ChatSessionRepository : IChatSessionRepository
                 AccountId = userId,
                 JoinedAt = DateTime.UtcNow
             });
-        await context.SaveChangesAsync(cancellationToken);
+        return entity;
     }
 
     public async Task RemoveAsync(
