@@ -13,6 +13,11 @@ namespace Server.Application.Coordinator.Sessions.Hybrid;
 public interface IHybridSessionManager : IDisposable
 {
     Task LoadAsync();
+    bool HasDirectCall(int userId);
+    Task PublishCurrentCallAsync(int userId, string connectionId);
+    Task EndCallForSessionAsync(int sessionId, int userId, string connectionId);
+    Task<(ErrorCode? Error, Shared.Models.DataTransferObjects.DirectCallDTO? Call)> ChangeCallAsync(
+        Shared.Models.Requests.SessionActions.ChatSession.DirectCallRequest request, string connectionId);
 
     Task<(ErrorCode? result, HybridSessionModel? session)> CreateAsync(CreateSessionModel request, int userId);
     Task<ErrorCode?> DeleteAsync(int sessionId, int userId);

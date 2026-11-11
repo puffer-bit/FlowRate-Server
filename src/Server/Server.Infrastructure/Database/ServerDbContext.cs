@@ -15,6 +15,7 @@ public class ServerDbContext : DbContext
     public DbSet<SessionEntity> Sessions { get; set; }
     public DbSet<HybridSessionEntity> VideoSessionsEntities { get; set; }
     public DbSet<ChatSessionEntity> ChatSessionEntities { get; set; }
+    public DbSet<ChatSessionMemberEntity> ChatSessionMembers { get; set; }
     public DbSet<ChatMessageEntity> ChatMessagesEntities { get; set; }
     public DbSet<ChatImageContentEntity> ChatImageContents { get; set; }
     public DbSet<ChatVideoContentEntity> ChatVideoContents { get; set; }

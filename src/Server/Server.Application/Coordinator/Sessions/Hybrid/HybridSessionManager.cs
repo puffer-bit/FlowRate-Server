@@ -18,7 +18,7 @@ using Server.Application.Orchestrator.SFUPool;
 
 namespace Server.Application.Coordinator.Sessions.Hybrid;
 
-public class HybridSessionManager : IHybridSessionManager
+public partial class HybridSessionManager : IHybridSessionManager
 {
     private readonly ILogger _logger;
     private readonly ICoordinatorEventBus _coordinatorEventBus;
@@ -256,10 +256,11 @@ public class HybridSessionManager : IHybridSessionManager
     public bool TryGetSession(int sessionId, [NotNullWhen(true)] out IHybridSession? session) =>
         _sessions.TryGetValue(sessionId, out session);
 
-    public IReadOnlyCollection<IHybridSession> GetAllSessions() => _sessions.Values.ToList();
+    public IReadOnlyCollection<IHybridSession> GetAllSessions() => _sessions.Values.Where(s => s.Model.CallDevices == null).ToList();
 
     public async Task RemoveUserFromAllSessionsAsync(int userId)
     {
+        await EndCallsForDeviceAsync(userId, null);
         foreach (var session in _sessions.Values)
         {
             if (!session.PeerManager.HasPeer(userId))
@@ -279,6 +280,7 @@ public class HybridSessionManager : IHybridSessionManager
 
     public async Task RemoveConnectionFromAllSessionsAsync(int userId, string connectionId)
     {
+        await EndCallsForDeviceAsync(userId, connectionId);
         foreach (var session in _sessions.Values)
         {
             if (!session.PeerManager.HasPeer(userId))
@@ -298,6 +300,7 @@ public class HybridSessionManager : IHybridSessionManager
 
     public async Task CloseAllSessionsAsync()
     {
+        await EndAllCallsAsync();
         foreach (var session in _sessions.Values)
         {
             try
@@ -353,6 +356,8 @@ public class HybridSessionManager : IHybridSessionManager
 
     public void Dispose()
     {
+        _callLifetime.Cancel();
+        _callLifetime.Dispose();
         if (_permissions != null)
             _permissions.PermissionsChanged -= OnPermissionsChanged;
         if (_visibility != null)

@@ -1,3 +1,4 @@
+using Shared.Models.DataTransferObjects.ChatSession.Messages;
 using Shared.Models.DataTransferObjects.ChatSession.Messages.Commands;
 using Server.Core.Models.TextChat.Messages;
 using Server.Core.Models.TextChat.Messages.Content;
@@ -35,6 +36,12 @@ public static class ChatMessageEntityMapper
             IsDeleted = model.IsDeleted,
             IsReadOnly = model.IsReadOnly,
             IsSystem = model.IsSystem,
+            SystemEventKind = (int?)model.SystemContent?.Kind,
+            SystemActorUserId = model.SystemContent?.ActorUserId,
+            SystemSubjectUserId = model.SystemContent?.SubjectUserId,
+            SystemCallId = model.SystemContent?.CallId,
+            SystemCallEndReason = (int?)model.SystemContent?.CallEndReason,
+            SystemCallDurationSeconds = model.SystemContent?.CallDurationSeconds,
             IsDisposable = model.IsDisposable,
 
             TextContent = model.TextContent?.ToEntity()!,
@@ -71,6 +78,15 @@ public static class ChatMessageEntityMapper
             IsDeleted = entity.IsDeleted,
             IsReadOnly = entity.IsReadOnly,
             IsSystem = entity.IsSystem,
+            SystemContent = entity.SystemEventKind is { } kind ? new ChatSystemContentModel
+            {
+                Kind = (ChatSystemEventKind)kind,
+                ActorUserId = entity.SystemActorUserId,
+                SubjectUserId = entity.SystemSubjectUserId,
+                CallId = entity.SystemCallId,
+                CallEndReason = (Shared.Models.DataTransferObjects.DirectCallEndReason?)entity.SystemCallEndReason,
+                CallDurationSeconds = entity.SystemCallDurationSeconds
+            } : null,
 
             TextContent = entity.TextContent?.ToModel(),
             ReplyContent = replyContent,
@@ -108,7 +124,7 @@ public static class ChatMessageEntityMapper
             Text = entity.Text,
             CommandResult = entity.CommandKind is { } kind && entity.CommandMinimum is { } minimum
                 && entity.CommandMaximum is { } maximum && entity.CommandValue is { } value
-                ? new ChatCommandResult { Kind = (ChatCommandKind)kind, Minimum = minimum, Maximum = maximum, Value = value }
+                ? new ChatCommandResultModel { Kind = (ChatCommandKind)kind, Minimum = minimum, Maximum = maximum, Value = value }
                 : null
         };
     }

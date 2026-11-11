@@ -1,5 +1,4 @@
 using System.Security.Cryptography;
-using Shared.Models.DataTransferObjects.ChatSession.Messages.Commands;
 using Server.Core.Models.TextChat.Messages.Content;
 using Server.Core.Models.TextChat.Messages.Reactions;
 using Server.Core.Models.User;
@@ -64,6 +63,7 @@ public sealed class ChatMessageModel
     public bool IsDeleted { get; init; }
     public bool IsReadOnly { get; init; }
     public bool IsSystem { get; init; }
+    public ChatSystemContentModel? SystemContent { get; init; }
 
     public bool IsDelayed => DelayedSentTime.HasValue;
     public bool IsDisposable => DisposeTime.HasValue;
@@ -96,6 +96,22 @@ public sealed class ChatMessageModel
         return message;
     }
 
+    public static ChatMessageModel CreateSystem(int chatId, ChatSystemContentModel content, DateTime now)
+    {
+        if (chatId <= 0 || !content.IsValid())
+            throw new ArgumentException("Invalid system chat event.");
+        return new ChatMessageModel
+        {
+            ChatId = chatId,
+            SenderUserId = UserModel.SystemUserId,
+            SentTime = now,
+            IsSystem = true,
+            IsReadOnly = true,
+            SystemContent = content,
+            TextContent = new ChatTextContentModel { Text = content.ToFallbackText() }
+        };
+    }
+
     public bool HasAttachments => Images.Count + Videos.Count + Files.Count > 0;
 
     public bool IsSentBy(int userId) => SenderUserId == userId;
@@ -108,11 +124,11 @@ public sealed class ChatMessageModel
         _replyContent = target.ToReplyContent();
     }
 
-    public void ExecuteCommand(ChatCommandRequest command)
+    public void ExecuteCommand(ChatCommandModel command)
     {
         if (!command.IsValid || TextContent?.CommandResult != null)
             throw new InvalidOperationException("Only valid, unresolved commands may execute.");
-        var result = new ChatCommandResult
+        var result = new ChatCommandResultModel
         {
             Kind = command.Kind, Minimum = command.Minimum, Maximum = command.Maximum,
             Value = RandomNumberGenerator.GetInt32(command.Minimum, command.Maximum + 1)

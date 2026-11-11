@@ -1,3 +1,4 @@
+using Shared.Models.DataTransferObjects.ChatSession.Messages;
 using Shared.Models.DataTransferObjects.ChatSession.Messages.Commands;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
@@ -64,12 +65,54 @@ public sealed class MessagesRepositoryTests : IDisposable
     }
 
     [Theory]
+    [InlineData(ChatSystemEventKind.MemberAdded)]
+    [InlineData(ChatSystemEventKind.MemberRemoved)]
+    [InlineData(ChatSystemEventKind.MemberLeft)]
+    [InlineData(ChatSystemEventKind.CallStarted)]
+    [InlineData(ChatSystemEventKind.CallEnded)]
+    public async Task SystemEvent_SurvivesStorageHistoryAndIncrementalSync(ChatSystemEventKind kind)
+    {
+        var call = kind is ChatSystemEventKind.CallStarted or ChatSystemEventKind.CallEnded;
+        var content = new ChatSystemContentModel
+        {
+            Kind = kind, ActorUserId = 1,
+            SubjectUserId = call ? null : kind == ChatSystemEventKind.MemberLeft ? 1 : 2,
+            CallId = call ? Guid.NewGuid() : null,
+            CallEndReason = kind == ChatSystemEventKind.CallEnded ? Shared.Models.DataTransferObjects.DirectCallEndReason.Completed : null,
+            CallDurationSeconds = kind == ChatSystemEventKind.CallEnded ? 75 : null
+        };
+        var stored = await _repository.AddAsync(ChatMessageModel.CreateSystem(_chatId, content, DateTime.UtcNow));
+        var loaded = await _repository.GetByIdAsync(stored.Id);
+        Assert.Equal(content, loaded!.SystemContent);
+        Assert.True(loaded.IsSystem);
+        Assert.True(loaded.IsReadOnly);
+        Assert.Equal(content.ToFallbackText(), loaded.TextContent!.Text);
+        Assert.Equal(content, Assert.Single(await _repository.GetBeforeAsync(_chatId, null, 10)).SystemContent);
+        Assert.Equal(content, Assert.Single(await _repository.GetChangesAsync(_chatId, 0, 10)).SystemContent);
+        Assert.Equal(stored.Revision, await _repository.GetRevisionAsync(_chatId));
+        using var context = _factory.CreateDbContext();
+        Assert.False(context.Database.HasPendingModelChanges());
+    }
+
+    [Theory]
+    [InlineData(Shared.Models.DataTransferObjects.DirectCallEndReason.Missed)]
+    [InlineData(Shared.Models.DataTransferObjects.DirectCallEndReason.Declined)]
+    public async Task UnansweredCallOutcome_SurvivesDatabaseReload(Shared.Models.DataTransferObjects.DirectCallEndReason reason)
+    {
+        var content = new ChatSystemContentModel { Kind = ChatSystemEventKind.CallEnded,
+            CallId = Guid.NewGuid(), CallEndReason = reason };
+        var stored = await _repository.AddAsync(ChatMessageModel.CreateSystem(_chatId, content, DateTime.UtcNow));
+        Assert.Equal(content, (await _repository.GetByIdAsync(stored.Id))!.SystemContent);
+    }
+
+    [Theory]
     [InlineData("/roll 1000-1000")]
     [InlineData("/flip")]
     public async Task CommandOutcome_SurvivesStorageHistoryAndReply(string text)
     {
         var message = NewMessage(text);
-        message.ExecuteCommand(ChatCommandRequest.Parse(text)!);
+        var command = ChatCommandRequest.Parse(text)!;
+        message.ExecuteCommand(new ChatCommandModel(command.Kind, command.Minimum, command.Maximum));
         var stored = await _repository.AddAsync(message);
         var loaded = await _repository.GetByIdAsync(stored.Id);
         Assert.Equal(message.TextContent, loaded!.TextContent);

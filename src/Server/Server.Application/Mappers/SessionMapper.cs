@@ -48,6 +48,9 @@ public static class SessionMapperExtensions
         {
             Id = model.Id,
             CoordinatorInstanceId = model.CoordinatorInstanceId,
+            Kind = model.Kind,
+            MemberIds = model.MemberIds.Order().ToArray(),
+            LastMessage = model.LastMessage?.ToDto(),
             CreatorUserId = model.CreatorUserId,
             AdminUserId = model.AdminUserId,
             Name = model.Name,

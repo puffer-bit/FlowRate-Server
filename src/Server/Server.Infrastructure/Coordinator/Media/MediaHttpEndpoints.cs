@@ -147,7 +147,7 @@ public sealed class MediaHttpEndpoints : IMediaHttpEndpoints
             return;
         }
 
-        var file = await _media.OpenImageAsync(imageId, variant == MediaEndpoints.VariantPreview, context.RequestAborted);
+        var file = await _media.OpenImageAsync(imageId, variant == MediaEndpoints.VariantPreview, context.RequestAborted, (int)context.Items[UserIdItem]!);
         if (file == null)
         {
             context.Response.StatusCode = StatusCodes.Status404NotFound;
@@ -169,7 +169,7 @@ public sealed class MediaHttpEndpoints : IMediaHttpEndpoints
             return;
         }
 
-        var file = await _media.OpenFileAsync(fileId, context.RequestAborted);
+        var file = await _media.OpenFileAsync(fileId, context.RequestAborted, (int)context.Items[UserIdItem]!);
         if (file == null)
         {
             context.Response.StatusCode = StatusCodes.Status404NotFound;
@@ -230,7 +230,10 @@ public sealed class MediaHttpEndpoints : IMediaHttpEndpoints
         }
 
         if (await _media.IsAllowedAsync(userId, isUpload: false, context.RequestAborted))
+        {
+            context.Items[UserIdItem] = userId;
             return true;
+        }
 
         context.Response.StatusCode = StatusCodes.Status403Forbidden;
         return false;

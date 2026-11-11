@@ -14,6 +14,17 @@
 The server side of FlowRate: text chats, voice and video sessions, push notifications and a browser control panel.
 Deploy it on your own Linux server, then share the server address with your community. The installation includes the server, the media service for voice and screen sharing, and a browser control panel.
 
+Personal chats and groups belong to their coordinator and use persistent membership, separate from
+server channels and role permissions. Only participants receive their messages and attachments;
+server administration permissions do not grant access to personal conversations. A compatible
+protocol 5 client is required. Existing text chats remain server channels after the database migration.
+Membership is stored in `ChatSessionMembers`, one row per participant, with indexes for both chat and
+user lookups. Chat lists load membership in a single database query. Membership updates retain unchanged
+rows and their joining dates. The migration transfers existing JSON membership before removing the old
+column; existing participants receive the migration time as their joining date. Deleting a chat removes
+its membership rows, while deleting an account retains its historical participant id and clears the
+nullable account reference so that private chat history remains loadable.
+
 ## First launch
 
 You need a Linux machine (x64 or arm64), SSH access, and an IP address that your clients can reach.

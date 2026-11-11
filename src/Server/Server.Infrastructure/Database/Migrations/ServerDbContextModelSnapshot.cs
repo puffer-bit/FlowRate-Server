@@ -691,6 +691,24 @@ namespace Server.Infrastructure.Database.Migrations
                     b.Property<DateTime>("SentTime")
                         .HasColumnType("TEXT");
 
+                    b.Property<int?>("SystemActorUserId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int?>("SystemCallDurationSeconds")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int?>("SystemCallEndReason")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<Guid?>("SystemCallId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int?>("SystemEventKind")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int?>("SystemSubjectUserId")
+                        .HasColumnType("INTEGER");
+
                     b.PrimitiveCollection<string>("UsersIds")
                         .IsRequired()
                         .HasColumnType("TEXT");
@@ -722,6 +740,34 @@ namespace Server.Infrastructure.Database.Migrations
                     b.HasIndex("ChatId");
 
                     b.ToTable("ChatReadStates", (string)null);
+                });
+
+            modelBuilder.Entity("Server.Infrastructure.Database.Entities.TextChat.ChatSessionMemberEntity", b =>
+                {
+                    b.Property<int>("ChatSessionId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("UserId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int?>("AccountId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime>("JoinedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.HasKey("ChatSessionId", "UserId");
+
+                    b.HasIndex("AccountId");
+
+                    b.HasIndex("UserId", "ChatSessionId");
+
+                    b.ToTable("ChatSessionMembers", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_ChatSessionMembers_AccountId", "\"AccountId\" IS NULL OR \"AccountId\" = \"UserId\"");
+                        });
                 });
 
             modelBuilder.Entity("Server.Infrastructure.Database.Entities.TextChat.ChatVideoContentEntity", b =>
@@ -1069,6 +1115,9 @@ namespace Server.Infrastructure.Database.Migrations
                     b.Property<string>("Description")
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("DirectKey")
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("IconPath")
                         .HasColumnType("TEXT");
 
@@ -1090,8 +1139,15 @@ namespace Server.Infrastructure.Database.Migrations
                     b.Property<bool>("IsVoiceMessagesAllowed")
                         .HasColumnType("INTEGER");
 
+                    b.Property<int>("Kind")
+                        .HasColumnType("INTEGER");
+
                     b.Property<long>("LastRevision")
                         .HasColumnType("INTEGER");
+
+                    b.HasIndex("DirectKey")
+                        .IsUnique()
+                        .HasFilter("\"DirectKey\" IS NOT NULL");
 
                     b.ToTable("ChatSessions", (string)null);
                 });
@@ -1235,6 +1291,22 @@ namespace Server.Infrastructure.Database.Migrations
                     b.Navigation("ChatSession");
                 });
 
+            modelBuilder.Entity("Server.Infrastructure.Database.Entities.TextChat.ChatSessionMemberEntity", b =>
+                {
+                    b.HasOne("Server.Infrastructure.Database.Entities.UserEntity", null)
+                        .WithMany()
+                        .HasForeignKey("AccountId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("Server.Infrastructure.Database.Entities.TextChat.ChatSessionEntity", "ChatSession")
+                        .WithMany("Members")
+                        .HasForeignKey("ChatSessionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("ChatSession");
+                });
+
             modelBuilder.Entity("Server.Infrastructure.Database.Entities.UserPasskeyEntity", b =>
                 {
                     b.HasOne("Server.Infrastructure.Database.Entities.UserEntity", null)
@@ -1312,6 +1384,8 @@ namespace Server.Infrastructure.Database.Migrations
 
             modelBuilder.Entity("Server.Infrastructure.Database.Entities.TextChat.ChatSessionEntity", b =>
                 {
+                    b.Navigation("Members");
+
                     b.Navigation("Messages");
                 });
 #pragma warning restore 612, 618

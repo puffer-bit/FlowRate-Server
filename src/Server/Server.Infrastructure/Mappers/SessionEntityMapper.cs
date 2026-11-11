@@ -95,8 +95,10 @@ public static class SessionEntityMapper
             entity.IsVideoMessagesAllowed,
             entity.IsDelayedMessagesAllowed);
 
-        return new ChatSessionModel(entity.Id, entity.CoordinatorInstanceId, entity.Name, SessionModel.NoCapacityLimit,
+        var model = new ChatSessionModel(entity.Id, entity.CoordinatorInstanceId, entity.Name, SessionModel.NoCapacityLimit,
             entity.CreatorUserId, entity.AdminUserId, options, entity.Description, entity.IconPath, entity.IsArchived);
+        model.SetAudience(entity.Kind, entity.Members.Select(member => member.UserId));
+        return model;
     }
 
     public static List<ChatSessionModel> ToModelList(this IEnumerable<ChatSessionEntity>? entities)
@@ -113,6 +115,16 @@ public static class SessionEntityMapper
         {
             Id = model.Id,
             CoordinatorInstanceId = model.CoordinatorInstanceId,
+            Kind = model.Kind,
+            Members = model.MemberIds.Select(userId => new ChatSessionMemberEntity
+            {
+                ChatSessionId = model.Id,
+                UserId = userId,
+                AccountId = userId,
+                JoinedAt = DateTime.UtcNow
+            }).ToList(),
+            DirectKey = model.Kind == Shared.Enums.ChatKind.Direct
+                ? model.CoordinatorInstanceId + ":" + string.Join(":", model.MemberIds.Order()) : null,
             CreatorUserId = model.CreatorUserId,
             AdminUserId = model.AdminUserId,
             Name = model.Name,

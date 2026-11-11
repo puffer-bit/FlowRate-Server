@@ -103,10 +103,13 @@ public sealed class SessionVisibility : IDisposable
     public void Deleted(int sessionId, BaseMessage notification)
     {
         AudienceChanged?.Invoke();
+        List<int> recipients;
         lock (_lock)
-            foreach (var shown in _shown.Values)
-                shown.Remove(sessionId);
-        _messageSender.BroadcastMessage(notification);
+        {
+            recipients = _shown.Where(pair => pair.Value.Contains(sessionId)).Select(pair => pair.Key).ToList();
+            foreach (var shown in _shown.Values) shown.Remove(sessionId);
+        }
+        _messageSender.BroadcastMessage(recipients, notification);
     }
 
     /// <summary>Brings the session lists of the users in step with what they may see now.</summary>

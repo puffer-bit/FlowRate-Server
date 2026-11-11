@@ -30,6 +30,8 @@ public class HybridSessionRequestHandlerTests
     public HybridSessionRequestHandlerTests()
     {
         var session = new Mock<IHybridSession>();
+        session.Setup(s => s.Model).Returns(new Server.Core.Models.HybridSession.HybridSessionModel(
+            SessionId, "server", "Room", 10, HostId, Shared.Enums.WebRTC.WebRTCEngine.Mediasoup));
         session.Setup(s => s.PeerManager).Returns(_peers.Object);
         var found = session.Object;
         _sessions.Setup(m => m.TryGetSession(SessionId, out found)).Returns(true);

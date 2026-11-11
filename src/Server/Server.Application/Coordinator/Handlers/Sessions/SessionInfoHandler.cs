@@ -14,27 +14,31 @@ namespace Server.Application.Coordinator.Handlers.Sessions;
 
 public class SessionInfoHandler : IMessageHandler<SessionInfoRequest>
 {
+    private readonly Server.Application.Coordinator.Sessions.Hybrid.IHybridSessionManager? _calls;
     private readonly SessionVisibility _visibility;
     private readonly ISessionLayoutService _layout;
     private readonly IMessageSender _messageSender;
 
-    public SessionInfoHandler(SessionVisibility visibility, ISessionLayoutService layout, IMessageSender messageSender)
+    public SessionInfoHandler(SessionVisibility visibility, ISessionLayoutService layout, IMessageSender messageSender, Server.Application.Coordinator.Sessions.Hybrid.IHybridSessionManager? calls = null)
     {
+        _calls = calls;
         _visibility = visibility;
         _layout = layout;
         _messageSender = messageSender;
     }
 
-    public Task<HandleMessageResult> HandleMessage(SessionInfoRequest? request, string connectionId)
+    public async Task<HandleMessageResult> HandleMessage(SessionInfoRequest? request, string connectionId)
     {
         if (request == null)
-            return Task.FromResult(HandleMessageResult.ForbiddenRequest);
+            return HandleMessageResult.ForbiddenRequest;
 
         _messageSender.SendMessageById(connectionId, request.SessionId is { } sessionId
             ? SingleSession(request, sessionId)
             : AllSessions(request));
 
-        return Task.FromResult(HandleMessageResult.NoError);
+        if (request.SessionId == null && _calls != null)
+            await _calls.PublishCurrentCallAsync(request.SenderId, connectionId);
+        return HandleMessageResult.NoError;
     }
 
     private BaseMessage AllSessions(SessionInfoRequest request)

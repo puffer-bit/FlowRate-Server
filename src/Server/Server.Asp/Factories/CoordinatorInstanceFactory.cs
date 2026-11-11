@@ -106,6 +106,7 @@ public class CoordinatorInstanceFactory : ICoordinatorInstanceFactory
         pushNotifier.Watch(userManager, chatSessionManager, roles);
         visibility.Watch(roles, sessionManager, userManager);
         hybridSessionManager.WatchPermissions(roles, visibility);
+        hybridSessionManager.ConfigureCalls(chatSessionManager, userManager, messageSender, connectionsContext, _provider.GetRequiredService<TimeProvider>(), pushNotifier.NotifyCallAsync);
         mediaService.Watch(roles);
         pushReplyService.Watch(roles);
         var authenticator = CreateAuthenticator(logger, coordinatorInstanceContext);
@@ -275,9 +276,10 @@ public class CoordinatorInstanceFactory : ICoordinatorInstanceFactory
         yield return new UserIdentityResetHandler(messageSender, connectionManager, securityReplies,
             _provider.GetRequiredService<IUserRepository>(), userSessions);
         
-        yield return ActivatorUtilities.CreateInstance<CreateSessionHandler>(_provider, sessionManager, messageSender);
+        yield return ActivatorUtilities.CreateInstance<CreateSessionHandler>(_provider, sessionManager, messageSender, userManager);
         yield return ActivatorUtilities.CreateInstance<LeaveSessionHandler>(_provider, hybridSessionManager, messageSender);
         yield return ActivatorUtilities.CreateInstance<DeleteSessionHandler>(_provider, sessionManager, messageSender);
+        yield return new ChangeGroupHandler(chatSessionManager, userManager, messageSender);
         yield return new ChangeHybridSessionSettingsHandler(hybridSessionManager, messageSender);
         yield return new ChangeSessionPermissionsHandler(sessionManager, permissions, visibility, messageSender);
         yield return new CreateSessionCategoryHandler(sessionLayout, messageSender);
@@ -289,6 +291,7 @@ public class CoordinatorInstanceFactory : ICoordinatorInstanceFactory
         yield return ActivatorUtilities.CreateInstance<ApproveInSessionHandler>(_provider, hybridSessionManager, messageSender);
         yield return ActivatorUtilities.CreateInstance<RejectInSessionHandler>(_provider, hybridSessionManager, messageSender);
         
+        yield return new Server.Application.Coordinator.Handlers.Chat.DirectCallHandler(hybridSessionManager, messageSender);
         yield return ActivatorUtilities.CreateInstance<HybridSessionJoinHandler>(_provider, hybridSessionManager, messageSender);
         yield return ActivatorUtilities.CreateInstance<HybridSessionConnectHandler>(_provider, hybridSessionManager, messageSender);
         yield return ActivatorUtilities.CreateInstance<HybridSessionPeerListRequestHandler>(_provider, hybridSessionManager, messageSender);
@@ -320,7 +323,7 @@ public class CoordinatorInstanceFactory : ICoordinatorInstanceFactory
         yield return new ChatMarkReadHandler(readService, messageSender);
         yield return new ChatTypingHandler(chatSessionManager, userManager, visibility, messageSender);
 
-        yield return new SessionInfoHandler(visibility, sessionLayout, messageSender);
+        yield return new SessionInfoHandler(visibility, sessionLayout, messageSender, hybridSessionManager);
         yield return ActivatorUtilities.CreateInstance<UserActionHandler>(_provider, messageSender, userManager, logger);
         yield return new UserSearchHandler(messageSender, userManager);
         yield return new UserListHandler(messageSender, userManager);
