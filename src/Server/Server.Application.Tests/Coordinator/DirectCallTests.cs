@@ -35,6 +35,7 @@ public sealed class DirectCallTests : IDisposable
     private readonly ConcurrentQueue<(string Device, DirectCallDTO Call)> _sent = new();
     private readonly ConcurrentQueue<ChatSystemContent> _history = new();
     private readonly HybridSessionManager _manager;
+    private readonly Mock<IVideoSessionRepository> _repository = new();
     private readonly TaskCompletionSource _expired = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private bool _sfuReady = true;
     private readonly ConcurrentDictionary<int, string[]> _devices = new();
@@ -76,13 +77,76 @@ public sealed class DirectCallTests : IDisposable
                 if (changed.Call.EndReason == DirectCallEndReason.Missed) _expired.TrySetResult();
             });
         _manager = new HybridSessionManager(NullLogger.Instance, Mock.Of<ICoordinatorEventBus>(), _factory.Object,
-            Mock.Of<ISFUNodeSelector>(), Mock.Of<IVideoSessionRepository>(), "server");
+            Mock.Of<ISFUNodeSelector>(), _repository.Object, "server");
         _manager.ConfigureCalls(_chats.Object, _users.Object, sender.Object, connections.Object, _time);
     }
 
     private Task<(ErrorCode? Error, DirectCallDTO? Call)> Act(Guid id, DirectCallAction action,
         int user = 1, string device = "caller") =>
         _manager.ChangeCallAsync(new DirectCallRequest(7, id, action) { SenderId = user }, device);
+
+    private async Task<Mock<IHybridSessionPeerManager>> AddVoiceChannelAsync(params int[] users)
+    {
+        var members = users.ToHashSet();
+        var peers = new Mock<IHybridSessionPeerManager>();
+        peers.Setup(p => p.HasPeer(It.IsAny<int>())).Returns((int user) => members.Contains(user));
+        peers.Setup(p => p.RemovePeerAsync(It.IsAny<int>()))
+            .Callback((int user) => members.Remove(user)).ReturnsAsync((ErrorCode?)null);
+        var model = HybridSessionModel.Create("server", "Voice", 10, 1, Shared.Enums.WebRTC.WebRTCEngine.Mediasoup);
+        model.Id = 20;
+        var channel = new Mock<IHybridSession>();
+        channel.Setup(s => s.Model).Returns(model);
+        channel.Setup(s => s.PeerManager).Returns(peers.Object);
+        channel.Setup(s => s.AssignSfuNodeAsync()).Returns(Task.CompletedTask);
+        _factory.Setup(f => f.CreateHybridSession(model, It.IsAny<ICoordinatorEventBus>(), It.IsAny<ISFUNodeSelector>()))
+            .Returns(channel.Object);
+        _repository.Setup(r => r.GetByCoordinatorIdAsync("server", default)).ReturnsAsync(new List<HybridSessionModel> { model });
+        await _manager.LoadAsync();
+        return peers;
+    }
+
+    [Fact]
+    public async Task StartingCall_LeavesCallerChannel_AndKeepsRecipientUntilAcceptance()
+    {
+        var peers = await AddVoiceChannelAsync(1, 2, 3);
+        var id = Guid.NewGuid();
+        var ringing = await Act(id, DirectCallAction.Start);
+        Assert.Null(ringing.Error);
+        Assert.False(peers.Object.HasPeer(1));
+        Assert.True(peers.Object.HasPeer(2));
+        Assert.True(peers.Object.HasPeer(3));
+        var accepted = await Act(id, DirectCallAction.Accept, 2, "callee");
+        Assert.Null(accepted.Error);
+        Assert.Equal(DirectCallState.Active, accepted.Call!.State);
+        Assert.False(peers.Object.HasPeer(2));
+        Assert.True(peers.Object.HasPeer(3));
+        peers.Verify(p => p.RemovePeerAsync(1), Times.Once);
+        peers.Verify(p => p.RemovePeerAsync(2), Times.Once);
+    }
+
+    [Theory]
+    [InlineData(DirectCallAction.Decline, 2, "callee")]
+    [InlineData(DirectCallAction.End, 1, "caller")]
+    public async Task UnansweredCall_DoesNotRemoveRecipientFromChannel(DirectCallAction action, int user, string device)
+    {
+        var peers = await AddVoiceChannelAsync(2);
+        var id = Guid.NewGuid();
+        Assert.Null((await Act(id, DirectCallAction.Start)).Error);
+        Assert.Null((await Act(id, action, user, device)).Error);
+        Assert.True(peers.Object.HasPeer(2));
+        peers.Verify(p => p.RemovePeerAsync(2), Times.Never);
+    }
+
+    [Fact]
+    public async Task FailedMediaCreation_KeepsRecipientInChannel()
+    {
+        var peers = await AddVoiceChannelAsync(2);
+        _sfuReady = false;
+        var id = Guid.NewGuid();
+        await Act(id, DirectCallAction.Start);
+        Assert.Equal(ErrorCode.SFUUnavailable, (await Act(id, DirectCallAction.Accept, 2, "callee")).Error);
+        Assert.True(peers.Object.HasPeer(2));
+    }
 
     [Fact]
     public async Task OfflineRecipient_CanReconnectAndAcceptPendingInvitation()

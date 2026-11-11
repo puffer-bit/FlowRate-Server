@@ -77,8 +77,8 @@ public partial class HybridSessionManager
                 var other = chat.MemberIds.Single(id => id != request.SenderId);
                 if (_calls.Values.Any(c => c.State != DirectCallState.Ended &&
                     (c.Contains(request.SenderId) || c.Contains(other)))) return (ErrorCode.Conflict, null);
-                if (_sessions.Values.Any(s => s.PeerManager.HasPeer(request.SenderId) || s.PeerManager.HasPeer(other)))
-                    return (ErrorCode.Conflict, null);
+                var leaveError = await LeaveVoiceChannelsForCallAsync(request.SenderId);
+                if (leaveError != null) return (leaveError, null);
                 call = new Call(request.CallId, chat.Id, request.SenderId, other, connectionId, _callTime.GetUtcNow());
                 _calls.TryAdd(call.Id, call);
                 PublishCall(call);
@@ -98,8 +98,6 @@ public partial class HybridSessionManager
                         if (request.SenderId != call.Callee) return (ErrorCode.NotMember, null);
                         if (call.State == DirectCallState.Active)
                             return call.CalleeDevice == connectionId ? (null, CallDto(call, connectionId)) : (ErrorCode.Conflict, null);
-                        if (_sessions.Values.Any(s => s.PeerManager.HasPeer(call.Caller) || s.PeerManager.HasPeer(call.Callee)))
-                            return (ErrorCode.Conflict, null);
                         var model = new HybridSessionModel(call.ChatId, _coordinatorInstanceId, chat.Name, 2,
                             call.Caller, WebRTCEngine.Mediasoup)
                         {
@@ -111,6 +109,14 @@ public partial class HybridSessionManager
                         {
                             session.Dispose();
                             return (ErrorCode.SFUUnavailable, null);
+                        }
+                        var callerLeaveError = await LeaveVoiceChannelsForCallAsync(call.Caller);
+                        var calleeLeaveError = callerLeaveError == null
+                            ? await LeaveVoiceChannelsForCallAsync(call.Callee) : null;
+                        if (callerLeaveError != null || calleeLeaveError != null)
+                        {
+                            session.Dispose();
+                            return (callerLeaveError ?? calleeLeaveError, null);
                         }
                         // Record the transition before announcing it; a failed write leaves the invitation pending.
                         var error = await _callChats.AddCallSystemMessageAsync(call.ChatId, new ChatSystemContent
@@ -140,6 +146,17 @@ public partial class HybridSessionManager
             return (null, CallDto(call, connectionId));
         }
         finally { _callsLock.Release(); }
+    }
+
+    private async Task<ErrorCode?> LeaveVoiceChannelsForCallAsync(int userId)
+    {
+        foreach (var session in _sessions.Values.Where(s => s.Model.CallDevices == null))
+        {
+            if (!session.PeerManager.HasPeer(userId)) continue;
+            var error = await session.PeerManager.RemovePeerAsync(userId);
+            if (error is not (null or ErrorCode.PeerNotFound)) return error;
+        }
+        return null;
     }
 
     private DirectCallDTO CallDto(Call call, string device) => new(call.Id, call.ChatId, call.Caller, call.Callee,
