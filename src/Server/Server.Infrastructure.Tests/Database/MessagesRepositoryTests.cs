@@ -73,7 +73,7 @@ public sealed class MessagesRepositoryTests : IDisposable
     public async Task SystemEvent_SurvivesStorageHistoryAndIncrementalSync(ChatSystemEventKind kind)
     {
         var call = kind is ChatSystemEventKind.CallStarted or ChatSystemEventKind.CallEnded;
-        var content = new ChatSystemContent
+        var content = new ChatSystemContentModel
         {
             Kind = kind, ActorUserId = 1,
             SubjectUserId = call ? null : kind == ChatSystemEventKind.MemberLeft ? 1 : 2,
@@ -99,7 +99,7 @@ public sealed class MessagesRepositoryTests : IDisposable
     [InlineData(Shared.Models.DataTransferObjects.DirectCallEndReason.Declined)]
     public async Task UnansweredCallOutcome_SurvivesDatabaseReload(Shared.Models.DataTransferObjects.DirectCallEndReason reason)
     {
-        var content = new ChatSystemContent { Kind = ChatSystemEventKind.CallEnded,
+        var content = new ChatSystemContentModel { Kind = ChatSystemEventKind.CallEnded,
             CallId = Guid.NewGuid(), CallEndReason = reason };
         var stored = await _repository.AddAsync(ChatMessageModel.CreateSystem(_chatId, content, DateTime.UtcNow));
         Assert.Equal(content, (await _repository.GetByIdAsync(stored.Id))!.SystemContent);
@@ -111,7 +111,8 @@ public sealed class MessagesRepositoryTests : IDisposable
     public async Task CommandOutcome_SurvivesStorageHistoryAndReply(string text)
     {
         var message = NewMessage(text);
-        message.ExecuteCommand(ChatCommandRequest.Parse(text)!);
+        var command = ChatCommandRequest.Parse(text)!;
+        message.ExecuteCommand(new ChatCommandModel(command.Kind, command.Minimum, command.Maximum));
         var stored = await _repository.AddAsync(message);
         var loaded = await _repository.GetByIdAsync(stored.Id);
         Assert.Equal(message.TextContent, loaded!.TextContent);

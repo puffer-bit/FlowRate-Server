@@ -78,7 +78,7 @@ public static class ChatMessageEntityMapper
             IsDeleted = entity.IsDeleted,
             IsReadOnly = entity.IsReadOnly,
             IsSystem = entity.IsSystem,
-            SystemContent = entity.SystemEventKind is { } kind ? new ChatSystemContent
+            SystemContent = entity.SystemEventKind is { } kind ? new ChatSystemContentModel
             {
                 Kind = (ChatSystemEventKind)kind,
                 ActorUserId = entity.SystemActorUserId,
@@ -124,7 +124,7 @@ public static class ChatMessageEntityMapper
             Text = entity.Text,
             CommandResult = entity.CommandKind is { } kind && entity.CommandMinimum is { } minimum
                 && entity.CommandMaximum is { } maximum && entity.CommandValue is { } value
-                ? new ChatCommandResult { Kind = (ChatCommandKind)kind, Minimum = minimum, Maximum = maximum, Value = value }
+                ? new ChatCommandResultModel { Kind = (ChatCommandKind)kind, Minimum = minimum, Maximum = maximum, Value = value }
                 : null
         };
     }

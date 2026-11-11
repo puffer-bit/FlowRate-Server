@@ -3,6 +3,7 @@ using Server.Core.Models.TextChat.Messages.Content;
 using Server.Core.Models.TextChat.Messages.Reactions;
 using Server.Core.Models.User;
 using Shared.Models.DataTransferObjects.ChatSession.Messages;
+using Shared.Models.DataTransferObjects.ChatSession.Messages.Commands;
 using Shared.Models.DataTransferObjects.ChatSession.Messages.Content;
 using Shared.Models.DataTransferObjects.ChatSession.Messages.Mentions;
 using Shared.Models.DataTransferObjects.ChatSession.Messages.Reactions;
@@ -39,7 +40,7 @@ public static class ChatMessageMapperExtensions
             IsDeleted = model.IsDeleted,
             IsReadOnly = model.IsReadOnly,
             IsSystem = model.IsSystem,
-            SystemContent = model.SystemContent,
+            SystemContent = model.SystemContent?.ToDto(),
             IsDisposable = model.IsDisposable,
 
             TextContent = model.TextContent?.ToDto()!,
@@ -55,6 +56,37 @@ public static class ChatMessageMapperExtensions
         };
     }
 
+    public static ChatSystemContentModel ToModel(this ChatSystemContent dto) => new()
+    {
+        Kind = dto.Kind,
+        ActorUserId = dto.ActorUserId,
+        SubjectUserId = dto.SubjectUserId,
+        CallId = dto.CallId,
+        CallEndReason = dto.CallEndReason,
+        CallDurationSeconds = dto.CallDurationSeconds
+    };
+
+    public static ChatSystemContent ToDto(this ChatSystemContentModel model) => new()
+    {
+        Kind = model.Kind,
+        ActorUserId = model.ActorUserId,
+        SubjectUserId = model.SubjectUserId,
+        CallId = model.CallId,
+        CallEndReason = model.CallEndReason,
+        CallDurationSeconds = model.CallDurationSeconds
+    };
+
+    public static ChatCommandModel ToModel(this ChatCommandRequest dto) =>
+        new(dto.Kind, dto.Minimum, dto.Maximum);
+
+    public static ChatCommandResult ToDto(this ChatCommandResultModel model) => new()
+    {
+        Kind = model.Kind,
+        Minimum = model.Minimum,
+        Maximum = model.Maximum,
+        Value = model.Value
+    };
+
     public static List<ChatMessageDTO> ToDtoList(this IEnumerable<ChatMessageModel>? models)
     {
         if (models == null) return new List<ChatMessageDTO>();
@@ -66,7 +98,7 @@ public static class ChatMessageMapperExtensions
     public static ChatTextContentDTO ToDto(this ChatTextContentModel? model)
     {
         if (model == null) return null!;
-        return new ChatTextContentDTO { Text = model.Text, CommandResult = model.CommandResult };
+        return new ChatTextContentDTO { Text = model.Text, CommandResult = model.CommandResult?.ToDto() };
     }
 
     public static ChatReplyContentDTO ToDto(this ChatReplyContentModel? model)

@@ -1,3 +1,4 @@
+using Server.Core.Models.TextChat.Messages.Content;
 using Shared.Models.DataTransferObjects.ChatSession.Messages;
 using Server.Core.Models.TextChat.Messages;
 using System.Text.Json;
@@ -67,7 +68,7 @@ public sealed class PrivateChatRepositoryTests : IDisposable
         group.Id = await _repository.AddAsync(group);
         group.SetAudience(ChatKind.Group, [1, 3]);
         ChatMessageModel Message(ChatSystemEventKind kind, int subject) => ChatMessageModel.CreateSystem(group.Id,
-            new ChatSystemContent { Kind = kind, ActorUserId = 1, SubjectUserId = subject }, DateTime.UtcNow);
+            new ChatSystemContentModel { Kind = kind, ActorUserId = 1, SubjectUserId = subject }, DateTime.UtcNow);
         var stored = await _repository.UpdateWithSystemMessagesAsync(group,
             [Message(ChatSystemEventKind.MemberAdded, 3), Message(ChatSystemEventKind.MemberRemoved, 2)]);
         Assert.True((await _repository.GetByIdAsync(group.Id))!.MemberIds.SetEquals([1, 3]));

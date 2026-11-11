@@ -168,11 +168,11 @@ public class ChatSessionManager : IChatSessionManager
             changed.SetLastMessage(chat.LastMessage);
             var now = DateTime.UtcNow;
             var messages = members.Except(chat.MemberIds).Order().Select(id =>
-                ChatMessageModel.CreateSystem(sessionId, new ChatSystemContent
+                ChatMessageModel.CreateSystem(sessionId, new ChatSystemContentModel
                 {
                     Kind = ChatSystemEventKind.MemberAdded, ActorUserId = userId, SubjectUserId = id
                 }, now)).Concat(chat.MemberIds.Except(members).Order().Select(id =>
-                ChatMessageModel.CreateSystem(sessionId, new ChatSystemContent
+                ChatMessageModel.CreateSystem(sessionId, new ChatSystemContentModel
                 {
                     Kind = leave ? ChatSystemEventKind.MemberLeft : ChatSystemEventKind.MemberRemoved,
                     ActorUserId = userId, SubjectUserId = id
@@ -303,7 +303,7 @@ public class ChatSessionManager : IChatSessionManager
                 return attachmentsResult;
 
             var messageModel = message.ToModel(senderUserId, DateTime.UtcNow, images, files);
-            if (command != null) messageModel.ExecuteCommand(command);
+            if (command != null) messageModel.ExecuteCommand(command.ToModel());
 
             if (message.ReplyToMessageId is { } replyToMessageId)
             {
@@ -353,7 +353,7 @@ public class ChatSessionManager : IChatSessionManager
         try
         {
             if (!_sessions.TryGetValue(sessionId, out var chat)) return ErrorCode.ChatNotFound;
-            var message = ChatMessageModel.CreateSystem(sessionId, content, DateTime.UtcNow);
+            var message = ChatMessageModel.CreateSystem(sessionId, content.ToModel(), DateTime.UtcNow);
             var stored = await _messagesRepository.AddAsync(message);
             await PublishAddedMessageAsync(chat, stored, content.ActorUserId ?? UserModel.SystemUserId);
             return null;

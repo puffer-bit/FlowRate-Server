@@ -7,6 +7,7 @@ using Moq;
 using Server.Application.Coordinator.Events;
 using Server.Application.Coordinator.Sessions.Chat;
 using Server.Application.Tests.Fakes;
+using Server.Application.Mappers;
 using Server.Core.Models.TextChat.Messages;
 using Server.Core.Models.TextChat.Messages.Content;
 using Server.Core.Models.User;
@@ -148,7 +149,7 @@ public class ChatSessionManagerTests
         var content = new ChatSystemContent { Kind = kind, ActorUserId = 1, CallId = Guid.NewGuid() };
         Assert.Null(await _manager.AddCallSystemMessageAsync(chatId, content));
         var message = Assert.Single(_events.Of<ChatSessionMessageAddedEvent>()).Message;
-        Assert.Equal(content, message.SystemContent);
+        Assert.Equal(content.ToModel(), message.SystemContent);
         Assert.True(message.IsSystem);
         Assert.Equal(20, message.Id);
         Assert.Equal(content, Server.Application.Mappers.ChatMessageMapperExtensions.ToDto(message).SystemContent);
@@ -223,7 +224,7 @@ public class ChatSessionManagerTests
         var outcome = stored.TextContent!.CommandResult!;
         Assert.True(outcome.IsValid());
         Assert.Equal(kind, outcome.Kind);
-        Assert.NotEqual(forged, outcome);
+        Assert.NotEqual(forged, outcome.ToDto());
         if (kind == ChatCommandKind.Roll) Assert.Equal(7, outcome.Value);
         var notification = Assert.Single(_events.Of<ChatSessionMessageAddedEvent>());
         Assert.Same(stored, notification.Message);
