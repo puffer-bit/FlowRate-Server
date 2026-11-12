@@ -12,6 +12,7 @@ namespace Server.Application.Coordinator.Sessions.Hybrid.Peers;
 /// </summary>
 public partial class HybridSessionPeerManager
 {
+    private readonly Dictionary<int, Outbound> _cameraOutbounds = new();
     private readonly Dictionary<int, Outbound> _voiceOutbounds = new();
     private readonly Dictionary<int, Outbound> _screenOutbounds = new();
     private readonly Dictionary<int, Outbound> _screenAudioOutbounds = new();
@@ -201,36 +202,44 @@ public partial class HybridSessionPeerManager
     public Task<(ErrorCode? result, Outbound? outbound)> StartVideoShareAsync(int userId) =>
         LockedAsync<(ErrorCode? result, Outbound? outbound)>(async () =>
     {
-        if (!EnsureReady("start video share", userId))
+        if (!EnsureReady("start camera", userId))
             return (ErrorCode.SFUUnavailable, null);
-
         if (!_peers.TryGetValue(userId, out var peer))
-        {
-            _logger.LogError("Peer with ID {userId} failed to start video. Peer not exists.", userId);
             return (ErrorCode.PeerNotFound, null);
-        }
-
         if (!peer.IsAdmitted)
             return (ErrorCode.NotAdmitted, null);
+        if (_cameraOutbounds.TryGetValue(userId, out var existing))
+            return (null, existing);
 
         var (result, outbound) = await Gateway.AddOutbound(Model.Id, userId, MediaSourceType.Camera, MediaType.Video,
             Model.Media.ForOutbound(MediaSourceType.Camera, MediaType.Video));
         if (result != SFUOutboundCreateResult.NoError || outbound == null)
-        {
-            _logger.LogError("Peer with ID {userId} failed to start video. SFU service return error: {error}", userId, result);
             return (ErrorCode.SFUError, null);
-        }
 
-        await _coordinatorEventBus.PublishAsync(new HybridSessionPeerStartedVideoShareEvent(Model.Id, userId, outbound));
-
-        _logger.LogTrace("Peer with ID {userId} successful started video.", userId);
+        _cameraOutbounds[userId] = outbound;
+        await ConsumeAllAsync(_peers.Values
+            .Where(listener => listener.UserId != userId && listener.CanReceiveMedia)
+            .Select(listener => (listener.UserId, outbound)));
         return (null, outbound);
     }, timedOut: (ErrorCode.TimedOut, null));
 
-    public Task<ErrorCode?> StopVideoShareAsync(int initiatorId, int userId)
+    public Task<ErrorCode?> StopVideoShareAsync(int initiatorId, int userId) => LockedAsync<ErrorCode?>(async () =>
     {
-        throw new NotImplementedException();
-    }
+        if (!EnsureReady("stop camera", userId))
+            return ErrorCode.SFUUnavailable;
+        if (!_peers.ContainsKey(userId))
+            return ErrorCode.PeerNotFound;
+        if (!_cameraOutbounds.TryGetValue(userId, out var outbound))
+            return null;
+        var result = await Gateway.RemoveOutbound(Model.Id, userId, outbound.Id);
+        if (result != SFUOutboundCreateResult.NoError)
+            return ErrorCode.SFUError;
+        _cameraOutbounds.Remove(userId);
+        ForgetInbounds(outbound.Id);
+        await _coordinatorEventBus.PublishAsync(new HybridSessionPeerStoppedVideoShareEvent(Model.Id, userId,
+            InitiatorOrNull(initiatorId, userId)));
+        return null;
+    }, timedOut: ErrorCode.TimedOut);
 
     public Task<(ErrorCode? result, Outbound? outbound, Outbound? audioOutbound)> StartScreenShareAsync(
         int userId, bool withAudio) => LockedAsync<(ErrorCode? result, Outbound? outbound, Outbound? audioOutbound)>(async () =>
@@ -553,7 +562,7 @@ public partial class HybridSessionPeerManager
     }
 
     private Task ConsumeExistingOutboundsAsync(int listenerUserId) =>
-        ConsumeAllAsync(_voiceOutbounds.Values
+        ConsumeAllAsync(_voiceOutbounds.Values.Concat(_cameraOutbounds.Values)
             .Where(outbound => outbound.UserId != listenerUserId)
             .Select(outbound => (listenerUserId, outbound)));
 
@@ -576,9 +585,13 @@ public partial class HybridSessionPeerManager
                 continue;
 
             _inbounds[(listenerUserId, outbound.Id)] = inbound;
-            await _coordinatorEventBus.PublishAsync(new HybridSessionPeerStartedVoiceShareEvent(Model.Id,
-                outbound.UserId, listenerUserId, inbound,
-                _peers.TryGetValue(listenerUserId, out var listener) ? listener.ConnectionId : null));
+            var connectionId = _peers.TryGetValue(listenerUserId, out var listener) ? listener.ConnectionId : null;
+            if (outbound.SourceType == MediaSourceType.Camera)
+                await _coordinatorEventBus.PublishAsync(new HybridSessionPeerStartedVideoShareEvent(Model.Id,
+                    outbound.UserId, listenerUserId, inbound, connectionId));
+            else
+                await _coordinatorEventBus.PublishAsync(new HybridSessionPeerStartedVoiceShareEvent(Model.Id,
+                    outbound.UserId, listenerUserId, inbound, connectionId));
         }
     }
 
@@ -624,6 +637,8 @@ public partial class HybridSessionPeerManager
         }
 
         var outbounds = new List<Outbound>();
+        if (_cameraOutbounds.Remove(userId, out var camera))
+            outbounds.Add(camera);
         _voiceOutbounds.Remove(userId, out var voice);
         _screenOutbounds.Remove(userId, out var screen);
         if (voice != null)
@@ -696,6 +711,7 @@ public partial class HybridSessionPeerManager
 
     private void ResetMediaState()
     {
+        _cameraOutbounds.Clear();
         _voiceOutbounds.Clear();
         _screenOutbounds.Clear();
         _screenAudioOutbounds.Clear();

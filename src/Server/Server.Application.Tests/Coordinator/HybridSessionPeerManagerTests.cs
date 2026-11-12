@@ -43,6 +43,55 @@ public class HybridSessionPeerManagerTests
     private static HybridSessionPeerState StateOf(HybridSessionPeerManager manager, int userId) =>
         manager.GetAllPeerSnapshots()[userId].State;
 
+    [Fact]
+    public async Task Camera_AutoRoutesToConnectedPeers_AndLateJoiners_WithoutScreenAudio()
+    {
+        var manager = await CreateManager();
+        await JoinAndConnect(manager, HostId, GuestId);
+        var (error, camera) = await manager.StartVideoShareAsync(HostId);
+        Assert.Null(error);
+        Assert.Equal(MediaSourceType.Camera, camera!.SourceType);
+        var first = Assert.Single(_events.Of<HybridSessionPeerStartedVideoShareEvent>());
+        Assert.Equal(GuestId, first.ListenerUserId);
+        Assert.Equal(MediaType.Video, first.Inbound.MediaType);
+        Assert.Equal(MediaSourceType.Camera, first.Inbound.SourceType);
+        Assert.Equal(camera, (await manager.StartVideoShareAsync(HostId)).outbound);
+        Assert.Single(_events.Of<HybridSessionPeerStartedVideoShareEvent>());
+        await JoinAndConnect(manager, OtherGuestId);
+        Assert.Equal(2, _events.Of<HybridSessionPeerStartedVideoShareEvent>().Count);
+        Assert.Contains(_events.Of<HybridSessionPeerStartedVideoShareEvent>(), e => e.ListenerUserId == OtherGuestId);
+        Assert.Empty(_events.Of<HybridSessionPeerStartedVoiceShareEvent>());
+        Assert.False(manager.GetAllPeerSnapshots()[HostId].IsScreenShareActive);
+    }
+
+    [Fact]
+    public async Task Camera_StopAndRestartAreIndependentOfScreen_AndLeaveReleasesCamera()
+    {
+        var manager = await CreateManager();
+        await JoinAndConnect(manager, HostId, GuestId);
+        var (_, camera) = await manager.StartVideoShareAsync(HostId);
+        var (_, screen, _) = await manager.StartScreenShareAsync(HostId, withAudio: false);
+        Assert.Null(await manager.StopVideoShareAsync(HostId, HostId));
+        Assert.Equal(1, _gateway.CallCount($"RemoveOutbound:{camera!.Id}"));
+        Assert.Equal(0, _gateway.CallCount($"RemoveOutbound:{screen!.Id}"));
+        Assert.Single(_events.Of<HybridSessionPeerStoppedVideoShareEvent>());
+        Assert.Null(await manager.StopVideoShareAsync(HostId, HostId));
+        Assert.Single(_events.Of<HybridSessionPeerStoppedVideoShareEvent>());
+        var (_, restarted) = await manager.StartVideoShareAsync(HostId);
+        Assert.NotEqual(camera.Id, restarted!.Id);
+        await manager.RemovePeerAsync(HostId);
+        Assert.Equal(1, _gateway.CallCount($"RemoveOutbound:{restarted.Id}"));
+    }
+
+    [Fact]
+    public async Task Camera_WaitingForAdmissionCannotPublish()
+    {
+        var manager = await CreateManager(isHostMustApprove: true);
+        await manager.AddPeerAsync(GuestId, "epoch");
+        Assert.Equal(ErrorCode.NotAdmitted, (await manager.StartVideoShareAsync(GuestId)).result);
+        Assert.Empty(_events.Of<HybridSessionPeerStartedVideoShareEvent>());
+    }
+
     // Joining
 
     [Theory]
