@@ -23,6 +23,8 @@ public class HybridSessionNotifier :
     IEventHandler<HybridSessionPeerLeftEvent>,
     IEventHandler<HybridSessionPeerReplacedEvent>,
     IEventHandler<HybridSessionPeerKickedEvent>,
+    IEventHandler<HybridSessionPeerStartedVideoShareEvent>,
+    IEventHandler<HybridSessionPeerStoppedVideoShareEvent>,
     IEventHandler<HybridSessionPeerStartedVoiceShareEvent>,
     IEventHandler<HybridSessionPeerStoppedVoiceShareEvent>,
     IEventHandler<HybridSessionPeerStartedScreenShareEvent>,
@@ -131,6 +133,20 @@ public class HybridSessionNotifier :
     public Task HandleAsync(HybridSessionPeerKickedEvent evt, CancellationToken ct = default)
     {
         _visibility.Send(evt.SessionId, new HybridSessionPeerKickedNotification(evt.SessionId, evt.UserId, evt.InitiatorUserId, evt.Reason));
+        return Task.CompletedTask;
+    }
+
+    public Task HandleAsync(HybridSessionPeerStartedVideoShareEvent evt, CancellationToken ct = default)
+    {
+        SendToPeer(evt.ListenerUserId, evt.ListenerConnectionId,
+            new HybridSessionPeerStartedVideoShareNotification(evt.SessionId, evt.UserId, evt.Inbound));
+        return Task.CompletedTask;
+    }
+
+    public Task HandleAsync(HybridSessionPeerStoppedVideoShareEvent evt, CancellationToken ct = default)
+    {
+        _visibility.Send(evt.SessionId, new HybridSessionPeerStoppedVideoShareNotification(evt.SessionId,
+            evt.UserId, evt.InitiatorUserId));
         return Task.CompletedTask;
     }
 

@@ -36,8 +36,11 @@ public record HybridSessionPeerApprovedEvent(int SessionId, int UserId, int Init
 public record HybridSessionPeerRejectedEvent(int SessionId, int UserId, int? InitiatorUserId = null, string? Reason = null)
     : HybridSessionUpdatedEvent(SessionId);
 
-/// <summary>Not sent to clients yet: video is not routed to the other peers.</summary>
-public record HybridSessionPeerStartedVideoShareEvent(int SessionId, int UserId, Outbound Outbound)
+/// <summary>A listener receives a camera on their active session connection.</summary>
+public record HybridSessionPeerStartedVideoShareEvent(int SessionId, int UserId, int ListenerUserId,
+    Inbound Inbound, string? ListenerConnectionId = null) : HybridSessionUpdatedEvent(SessionId);
+
+public record HybridSessionPeerStoppedVideoShareEvent(int SessionId, int UserId, int? InitiatorUserId = null)
     : HybridSessionUpdatedEvent(SessionId);
 
 /// <summary>A listener started to receive the voice of a peer, on the connection they take part from.</summary>
