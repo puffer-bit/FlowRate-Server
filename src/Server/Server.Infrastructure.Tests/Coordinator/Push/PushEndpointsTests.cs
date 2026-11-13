@@ -69,8 +69,8 @@ public sealed class PushEndpointsTests : IDisposable
         var chat = ChatSessionModel.Create(Coordinator, "general", UserId);
         _chats.Setup(c => c.TryGetSession(ChatId, out chat)).Returns(true);
         _reads.Setup(r => r.GetLastMessageIdAsync(ChatId, It.IsAny<CancellationToken>())).ReturnsAsync(50);
-        _reads.Setup(r => r.MoveAsync(UserId, ChatId, It.IsAny<int>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((int _, int _, int messageId, CancellationToken _) => messageId);
+        _reads.Setup(r => r.MoveAsync(UserId, ChatId, It.IsAny<int>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((int _, int _, int messageId, DateTime? _, CancellationToken _) => new ChatReadMove(messageId, true));
         _reads.Setup(r => r.GetUnreadAsync(ChatId, UserId, It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync([]);
         var reads = new ChatReadService(NullLogger.Instance, _reads.Object, new Mock<IMessageSender>().Object);
@@ -172,7 +172,7 @@ public sealed class PushEndpointsTests : IDisposable
         Assert.Equal(HttpStatusCode.NoContent,
             await PostAsync(_token, """{"chatId":7,"messageId":42}""", PushEndpoints.MarkRead));
 
-        _reads.Verify(r => r.MoveAsync(UserId, ChatId, 42, It.IsAny<CancellationToken>()), Times.Once);
+        _reads.Verify(r => r.MoveAsync(UserId, ChatId, 42, It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Theory]

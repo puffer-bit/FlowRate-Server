@@ -322,6 +322,7 @@ public class CoordinatorInstanceFactory : ICoordinatorInstanceFactory
         yield return new ChatHistoryWindowHandler(chatSessionManager, messageSender);
         yield return new ChatReadStatesHandler(readService, messageSender);
         yield return new ChatMarkReadHandler(readService, messageSender);
+        yield return new ChatMessageReadersHandler(readService, messageSender);
         yield return new ChatTypingHandler(chatSessionManager, userManager, visibility, messageSender);
 
         yield return new SessionInfoHandler(visibility, sessionLayout, messageSender, hybridSessionManager);

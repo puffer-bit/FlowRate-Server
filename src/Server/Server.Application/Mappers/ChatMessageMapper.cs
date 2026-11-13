@@ -166,7 +166,8 @@ public static class ChatMessageMapperExtensions
         return new ChatReactionDTO
         {
             UserId = model.UserId,
-            Emoji = model.Emoji
+            Emoji = model.Emoji,
+            ReactedAt = model.ReactedAt
         };
     }
 
