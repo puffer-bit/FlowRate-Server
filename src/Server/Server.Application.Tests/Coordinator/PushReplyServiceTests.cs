@@ -42,8 +42,8 @@ public class PushReplyServiceTests
         var chat = ChatSessionModel.Create(CoordinatorId, "general", UserId);
         _chats.Setup(c => c.TryGetSession(ChatId, out chat)).Returns(true);
         _reads.Setup(r => r.GetLastMessageIdAsync(ChatId, It.IsAny<CancellationToken>())).ReturnsAsync(50);
-        _reads.Setup(r => r.MoveAsync(UserId, ChatId, It.IsAny<int>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((int _, int _, int messageId, CancellationToken _) => messageId);
+        _reads.Setup(r => r.MoveAsync(UserId, ChatId, It.IsAny<int>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((int _, int _, int messageId, DateTime? _, CancellationToken _) => new ChatReadMove(messageId, true));
         _reads.Setup(r => r.GetUnreadAsync(ChatId, UserId, It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync([]);
     }
@@ -147,7 +147,7 @@ public class PushReplyServiceTests
         var result = await Create().MarkReadAsync(Token, new PushMarkReadRequest(ChatId, 42));
 
         Assert.Equal(PushReplyResult.Sent, result);
-        _reads.Verify(r => r.MoveAsync(UserId, ChatId, 42, It.IsAny<CancellationToken>()), Times.Once);
+        _reads.Verify(r => r.MoveAsync(UserId, ChatId, 42, It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()), Times.Once);
         _sender.Verify(s => s.SendMessageByUserId(UserId, It.IsAny<ChatReadStateChangedNotification>()), Times.Once);
     }
 

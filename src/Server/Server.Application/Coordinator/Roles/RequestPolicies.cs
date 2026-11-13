@@ -91,6 +91,7 @@ public static class RequestPolicies
         ChatSessionHistoryPageRequest request => InSession(request.ChatId, View),
         ChatSessionChangesRequest request => InSession(request.ChatId, View),
         ChatMarkReadRequest request => InSession(request.ChatId, View),
+        ChatMessageReadersRequest request => InSession(request.ChatId, View),
         ChatViewersRequest { Subscribe: false } => Open,
         ChatViewersRequest request => InSession(request.ChatId, View),
         ChatReadStatesRequest => Open,
@@ -117,7 +118,8 @@ public static class RequestPolicies
         LeaveSessionRequest or SessionInfoRequest or HybridSessionLeaveRequest => true,
 
         ChatPinnedMessagesRequest or ChatHistoryWindowRequest or ChatSessionHistoryRequest or ChatSessionMessageRequest or ChatSessionHistoryPageRequest
-            or ChatSessionChangesRequest or ChatReadStatesRequest or ChatMarkReadRequest or ChatViewersRequest => true,
+            or ChatSessionChangesRequest or ChatReadStatesRequest or ChatMarkReadRequest or ChatViewersRequest
+            or ChatMessageReadersRequest => true,
 
         // Securing one's own account is never held back
         UserSecurityInfoRequest or UserSetPasswordRequest or UserTwoFactorSetupRequest or UserTwoFactorEnableRequest
