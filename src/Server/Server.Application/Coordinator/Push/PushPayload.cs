@@ -41,7 +41,7 @@ public static class PushPayload
         return stream.ToArray();
     }
 
-    public static byte[] CreateCall(string coordinatorInstanceId, string callerName,
+    public static byte[] CreateCall(string coordinatorInstanceId, string callerName, string? callerAvatarUrl,
         Shared.Models.DataTransferObjects.DirectCallDTO call)
     {
         using var stream = new MemoryStream();
@@ -54,6 +54,8 @@ public static class PushPayload
             writer.WriteNumber("senderId", call.CallerId);
             writer.WriteNumber("recipientId", call.CalleeId);
             writer.WriteString("senderName", callerName);
+            if (callerAvatarUrl != null)
+                writer.WriteString("senderAvatarUrl", callerAvatarUrl);
             writer.WriteNumber("sentTime", call.CreatedAt.ToUnixTimeMilliseconds());
             writer.WriteString("callId", call.CallId);
             writer.WriteNumber("callState", (int)call.State);

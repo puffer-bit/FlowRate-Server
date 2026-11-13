@@ -170,7 +170,7 @@ public sealed class PushNotifier : IEventHandler<ChatSessionMessageAddedEvent>, 
         if (!_sender.IsEnabled || _userManager == null)
             return;
         var caller = await _userManager.GetUserAsync(call.CallerId);
-        var payload = PushPayload.CreateCall(_coordinatorInstanceId, caller?.Username ?? "", call);
+        var payload = PushPayload.CreateCall(_coordinatorInstanceId, caller?.Username ?? "", caller?.AvatarUrl, call);
         var devices = await _devices.GetAllAsync(_coordinatorInstanceId, _stopping.Token);
         foreach (var device in devices.Where(d => d.UserId == call.CalleeId))
         {

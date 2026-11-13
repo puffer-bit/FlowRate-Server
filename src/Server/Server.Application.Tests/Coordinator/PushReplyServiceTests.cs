@@ -71,6 +71,22 @@ public class PushReplyServiceTests
     }
 
     [Fact]
+    public async Task DeclineCall_DeclinesAsTheUserOfTheDevice()
+    {
+        var calls = new Mock<Server.Application.Coordinator.Sessions.Hybrid.IHybridSessionManager>();
+        var callId = Guid.NewGuid();
+        calls.Setup(c => c.DeclineCallFromPushAsync(callId, UserId)).ReturnsAsync((ErrorCode?)null);
+        var service = Create();
+        service.WatchCalls(calls.Object);
+
+        Assert.Equal(PushReplyResult.Sent, await service.DeclineCallAsync(Token, new PushDeclineCallRequest(callId)));
+        Assert.Equal(PushReplyResult.Unauthorized, await service.DeclineCallAsync("other", new PushDeclineCallRequest(callId)));
+        Assert.Equal(PushReplyResult.Invalid, await service.DeclineCallAsync(Token, new PushDeclineCallRequest(Guid.Empty)));
+        calls.Verify(c => c.DeclineCallFromPushAsync(callId, UserId), Times.Once);
+        calls.VerifyNoOtherCalls();
+    }
+
+    [Fact]
     public async Task Reply_WithAnUnknownToken_IsUnauthorized()
     {
         var result = await Create().ReplyAsync("other", new PushReplyRequest(ChatId, "hi"));

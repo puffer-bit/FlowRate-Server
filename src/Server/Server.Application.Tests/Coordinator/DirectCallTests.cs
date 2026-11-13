@@ -106,6 +106,36 @@ public sealed class DirectCallTests : IDisposable
     }
 
     [Fact]
+    public async Task DeclineFromPush_EndsRingingCall_ForCalleeOnly()
+    {
+        var id = Guid.NewGuid();
+        await Act(id, DirectCallAction.Start);
+
+        Assert.Equal(ErrorCode.NotMember, await _manager.DeclineCallFromPushAsync(id, 1));
+        Assert.Equal(ErrorCode.SessionNotFound, await _manager.DeclineCallFromPushAsync(Guid.NewGuid(), 2));
+        Assert.Null(await _manager.DeclineCallFromPushAsync(id, 2));
+
+        Assert.Contains(_history, h => h.Kind == ChatSystemEventKind.CallEnded
+                                       && h.CallEndReason == DirectCallEndReason.Declined && h.ActorUserId == 2);
+        Assert.Contains(_sent, s => s.Device == "caller" && s.Call.State == DirectCallState.Ended);
+        Assert.False(_manager.HasDirectCall(1));
+        // A repeated button press is harmless
+        Assert.Null(await _manager.DeclineCallFromPushAsync(id, 2));
+        Assert.Single(_history, h => h.Kind == ChatSystemEventKind.CallEnded);
+    }
+
+    [Fact]
+    public async Task DeclineFromPush_DoesNotEndCallAnsweredElsewhere()
+    {
+        var id = Guid.NewGuid();
+        await Act(id, DirectCallAction.Start);
+        await Act(id, DirectCallAction.Accept, 2, "callee");
+
+        Assert.Equal(ErrorCode.Conflict, await _manager.DeclineCallFromPushAsync(id, 2));
+        Assert.True(_manager.HasDirectCall(2));
+    }
+
+    [Fact]
     public async Task StartingCall_LeavesCallerChannel_AndKeepsRecipientUntilAcceptance()
     {
         var peers = await AddVoiceChannelAsync(1, 2, 3);

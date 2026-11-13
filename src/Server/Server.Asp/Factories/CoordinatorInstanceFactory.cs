@@ -109,6 +109,7 @@ public class CoordinatorInstanceFactory : ICoordinatorInstanceFactory
         hybridSessionManager.ConfigureCalls(chatSessionManager, userManager, messageSender, connectionsContext, _provider.GetRequiredService<TimeProvider>(), pushNotifier.NotifyCallAsync);
         mediaService.Watch(roles);
         pushReplyService.Watch(roles);
+        pushReplyService.WatchCalls(hybridSessionManager);
         var authenticator = CreateAuthenticator(logger, coordinatorInstanceContext);
         var heartbeatManager = CreateHeartbeatManager(logger, connectionsContext, new HeartbeatSettings(
             coordinatorInstanceModel.Heartbeat.Interval,

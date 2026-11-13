@@ -18,6 +18,11 @@ public interface IHybridSessionManager : IDisposable
     Task EndCallForSessionAsync(int sessionId, int userId, string connectionId);
     Task<(ErrorCode? Error, Shared.Models.DataTransferObjects.DirectCallDTO? Call)> ChangeCallAsync(
         Shared.Models.Requests.SessionActions.ChatSession.DirectCallRequest request, string connectionId);
+    /// <summary>
+    /// Declines a call that rings for <paramref name="userId"/> without a connection, from the button of a
+    /// push notification. A call that has already ended needs nothing and is no error.
+    /// </summary>
+    Task<ErrorCode?> DeclineCallFromPushAsync(Guid callId, int userId);
 
     Task<(ErrorCode? result, HybridSessionModel? session)> CreateAsync(CreateSessionModel request, int userId);
     Task<ErrorCode?> DeleteAsync(int sessionId, int userId);

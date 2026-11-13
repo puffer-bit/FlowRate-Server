@@ -148,6 +148,33 @@ public partial class HybridSessionManager
         finally { _callsLock.Release(); }
     }
 
+    public async Task<ErrorCode?> DeclineCallFromPushAsync(Guid callId, int userId)
+    {
+        await _callsLock.WaitAsync();
+        try
+        {
+            if (_callChats == null) return ErrorCode.FeatureDisabled;
+            if (!_calls.TryGetValue(callId, out var call)) return ErrorCode.SessionNotFound;
+            if (call.Callee != userId) return ErrorCode.NotMember;
+            if (call.State == DirectCallState.Ringing && _callTime.GetUtcNow() >= call.Created.AddSeconds(45))
+                await FinishCallAsync(call, DirectCallEndReason.Missed);
+            return call.State switch
+            {
+                DirectCallState.Ended => null,
+                // Answered on another device of the user: the notification of this one is late
+                DirectCallState.Active => ErrorCode.Conflict,
+                _ => await DeclineAsync(call)
+            };
+        }
+        finally { _callsLock.Release(); }
+
+        async Task<ErrorCode?> DeclineAsync(Call call)
+        {
+            await FinishCallAsync(call, DirectCallEndReason.Declined, userId);
+            return null;
+        }
+    }
+
     private async Task<ErrorCode?> LeaveVoiceChannelsForCallAsync(int userId)
     {
         foreach (var session in _sessions.Values.Where(s => s.Model.CallDevices == null))
