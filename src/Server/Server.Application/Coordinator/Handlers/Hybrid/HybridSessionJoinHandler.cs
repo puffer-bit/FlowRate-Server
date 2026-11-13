@@ -15,7 +15,10 @@ public class HybridSessionJoinHandler : HybridSessionRequestHandler<HybridSessio
     public HybridSessionJoinHandler(IHybridSessionManager sessionManager, IMessageSender messageSender)
         : base(sessionManager, messageSender)
     {
+        _callSessions = sessionManager;
     }
+
+    private readonly IHybridSessionManager _callSessions;
 
     protected override int GetSessionId(HybridSessionJoinRequest request) => request.SessionId;
 
@@ -23,21 +26,17 @@ public class HybridSessionJoinHandler : HybridSessionRequestHandler<HybridSessio
     protected override async Task<BaseMessage> HandleAsync(HybridSessionJoinRequest request, IHybridSession session,
         string connectionId)
     {
+        if (session.Model.CallDevices == null && _callSessions.HasDirectCall(request.SenderId))
+            return request.ToError(ErrorCode.Conflict);
         var (result, transportData) = await session.PeerManager.AddPeerAsync(request.SenderId,
             request.ClientEpoch ?? string.Empty, connectionId);
-        return request.ToResponse(result, transportData);
+        return request.Answer(result, () => request.ToResponse(transportData));
     }
 
     protected override async Task<BaseMessage> HandleAsync(HybridSessionJoinRequest request, IHybridSession session)
     {
         var (result, transportData) = await session.PeerManager.AddPeerAsync(request.SenderId,
             request.ClientEpoch ?? string.Empty);
-        return request.ToResponse(result, transportData);
+        return request.Answer(result, () => request.ToResponse(transportData));
     }
-
-    protected override BaseMessage SessionNotFound(HybridSessionJoinRequest request) =>
-        request.ToResponse(HybridSessionJoinResult.SessionNotExists);
-
-    public override BaseMessage CreateFailureResponse(HybridSessionJoinRequest request) =>
-        request.ToResponse(HybridSessionJoinResult.InternalError);
 }

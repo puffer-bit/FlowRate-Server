@@ -25,6 +25,7 @@ public class CoordinatorSettingsApplier
     private readonly IMessageSender _messageSender;
     private readonly IUserManager _userManager;
     private readonly RequestRateLimits _rateLimits;
+    private readonly Server.Application.Coordinator.Connections.IConnectionManager? _connections;
 
     public CoordinatorSettingsApplier(
         ILogger logger,
@@ -34,9 +35,11 @@ public class CoordinatorSettingsApplier
         IMessageSender messageSender,
         IUserManager userManager,
         RequestRateLimits rateLimits,
-        IMediaService? mediaService = null)
+        IMediaService? mediaService = null,
+        Server.Application.Coordinator.Connections.IConnectionManager? connections = null)
     {
         _logger = logger;
+        _connections = connections;
         _context = context;
         _heartbeatManager = heartbeatManager;
         _mediaService = mediaService;
@@ -50,6 +53,12 @@ public class CoordinatorSettingsApplier
     {
         // The server password and the name are read from the context on every use
         _context.ApplySettings(model);
+        foreach (var connection in _connections?.GetAllConnections() ?? [])
+            if (!model.AccessList.IsAllowed(connection.IpEndpoint))
+            {
+                connection.Send(new CoordinatorUserBannedNotification(connection.UserId ?? 0, "This IP address is not allowed."));
+                connection.Close();
+            }
 
         _heartbeatManager.ApplySettings(new HeartbeatSettings(model.Heartbeat.Interval, model.Heartbeat.Timeout));
         _mediaService?.SetLimits(model.Media);

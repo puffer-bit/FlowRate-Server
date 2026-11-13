@@ -58,7 +58,7 @@ public class Authenticator : IAuthenticator
     public async Task<LoginChallenge?> BeginUserLoginAsync(string userIdentity, CancellationToken ct = default)
     {
         var user = await _userRepository.GetByIdentityAsync(_coordinatorInstanceContext.Id, userIdentity, ct);
-        if (user == null || user.IsSystem || user.IsBanned)
+        if (user == null || user.IsSystem)
             return null;
 
         var security = await _userSecurityDataRepository.GetByUserIdAsync(user.Id, ct);

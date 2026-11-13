@@ -14,7 +14,9 @@ public enum AttachUserResult
     /// <summary>No user of the coordinator has the identity given.</summary>
     UnknownIdentity,
     /// <summary>The connection closed before the user was attached.</summary>
-    ConnectionClosed
+    ConnectionClosed,
+    /// <summary>The user already has five connections open.</summary>
+    ConnectionLimitReached
 }
 
 /// <param name="User">Set when the user was attached.</param>

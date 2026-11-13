@@ -1,8 +1,13 @@
+using Shared.Models.DataTransferObjects.ChatSession.Messages;
+using Shared.Models.DataTransferObjects.ChatSession.Messages.Commands;
+using Shared.Models.DataTransferObjects.ChatSession.Messages.Content;
+using Shared.Models.Requests.SessionActions.ChatSession.Models;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Server.Application.Coordinator.Events;
 using Server.Application.Coordinator.Sessions.Chat;
 using Server.Application.Tests.Fakes;
+using Server.Application.Mappers;
 using Server.Core.Models.TextChat.Messages;
 using Server.Core.Models.TextChat.Messages.Content;
 using Server.Core.Models.User;
@@ -29,6 +34,18 @@ public class ChatSessionManagerTests
     {
         _chats.Setup(r => r.AddAsync(It.IsAny<Core.Models.TextChat.ChatSessionModel>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(() => _nextChatId++);
+        _chats.Setup(r => r.UpdateWithSystemMessagesAsync(It.IsAny<Core.Models.TextChat.ChatSessionModel>(),
+                It.IsAny<IReadOnlyList<ChatMessageModel>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((Core.Models.TextChat.ChatSessionModel _, IReadOnlyList<ChatMessageModel> messages, CancellationToken _) =>
+            {
+                foreach (var message in messages)
+                {
+                    message.Id = _storedMessages.Count + 1;
+                    message.MarkChanged(message.Id);
+                    _storedMessages[message.Id] = message;
+                }
+                return messages;
+            });
         _messages.Setup(r => r.GetByIdAsync(It.IsAny<int>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((int id, CancellationToken _) => _storedMessages.GetValueOrDefault(id));
 
@@ -36,12 +53,143 @@ public class ChatSessionManagerTests
             new Mock<IMediaUploadRepository>().Object, new Mock<IMediaStorage>().Object, "coordinator");
     }
 
+    [Fact]
+    public async Task DirectChat_ConcurrentReverseCreation_ReturnsOneConversation()
+    {
+        var results = await Task.WhenAll(
+            _manager.CreateAsync(new CreateSessionModel("Second", -1,
+                new ChatSessionCreateData(Kind: ChatKind.Direct, MemberIds: [2])), 1),
+            _manager.CreateAsync(new CreateSessionModel("First", -1,
+                new ChatSessionCreateData(Kind: ChatKind.Direct, MemberIds: [1])), 2));
+        Assert.All(results, result => Assert.Null(result.result));
+        Assert.Same(results[0].session, results[1].session);
+        Assert.True(results[0].session!.MemberIds.SetEquals([1, 2]));
+        Assert.Single(_manager.GetAllSessions());
+        Assert.False(results[0].session!.IsAdmin(1));
+        Assert.Equal(ErrorCode.InsufficientPermissions, await _manager.DeleteAsync(results[0].session!.Id, 1));
+    }
+
+    [Fact]
+    public async Task Group_OnlyOwnerChangesMembers_AndOnlyMemberMayLeave()
+    {
+        var (_, group) = await _manager.CreateAsync(new CreateSessionModel("Friends", -1,
+            new ChatSessionCreateData(Kind: ChatKind.Group, MemberIds: [2, 3])), 1);
+        Assert.Equal(ErrorCode.InsufficientPermissions,
+            await _manager.ChangeGroupAsync(group!.Id, "Hijacked", [2], 2, 2, false));
+        Assert.Equal(ErrorCode.Conflict,
+            await _manager.ChangeGroupAsync(group.Id, group.Name, [], 1, 1, true));
+        Assert.Null(await _manager.ChangeGroupAsync(group.Id, "Renamed", [1, 2], 2, 1, false));
+        Assert.Equal("Renamed", group.Name);
+        Assert.Equal(2, group.AdminUserId);
+        Assert.False(group.MemberIds.Contains(3));
+        Assert.Null(await _manager.ChangeGroupAsync(group.Id, group.Name, [], 2, 1, true));
+        Assert.True(group.MemberIds.SetEquals([2]));
+        Assert.Equal(ErrorCode.InsufficientPermissions,
+            await _manager.ChangeGroupAsync(group.Id, group.Name, [], 2, 3, true));
+    }
+
+    [Fact]
+    public async Task MembershipChanges_StoreSystemMessages_AndRepeatingChangeDoesNotDuplicateThem()
+    {
+        var (_, group) = await _manager.CreateAsync(new CreateSessionModel("Friends", -1,
+            new ChatSessionCreateData(Kind: ChatKind.Group, MemberIds: [2, 3])), 1);
+        Assert.Null(await _manager.ChangeGroupAsync(group!.Id, "Friends", [1, 3, 4], 1, 1, false));
+        var notifications = _events.Of<ChatSessionMessageAddedEvent>().ToList();
+        Assert.Equal(new[] { ChatSystemEventKind.MemberAdded, ChatSystemEventKind.MemberRemoved },
+            notifications.Select(e => e.Message.SystemContent!.Kind));
+        Assert.Equal(new int?[] { 4, 2 }, notifications.Select(e => e.Message.SystemContent!.SubjectUserId));
+        Assert.All(notifications, e =>
+        {
+            Assert.True(e.Message.IsSystem);
+            Assert.True(e.Message.IsReadOnly);
+            Assert.Equal(UserModel.SystemUserId, e.Message.SenderUserId);
+            Assert.Equal(1, e.Message.SystemContent!.ActorUserId);
+            Assert.NotEmpty(e.Message.TextContent!.Text);
+        });
+        Assert.Same(notifications.Last().Message, group.LastMessage);
+        Assert.Null(await _manager.ChangeGroupAsync(group.Id, "Friends", [1, 3, 4], 1, 1, false));
+        Assert.Equal(2, _events.Of<ChatSessionMessageAddedEvent>().Count());
+        Assert.Null(await _manager.ChangeGroupAsync(group.Id, "", [], 1, 3, true));
+        Assert.Equal(ChatSystemEventKind.MemberLeft, _events.Of<ChatSessionMessageAddedEvent>().Last().Message.SystemContent!.Kind);
+        foreach (var notification in notifications)
+        {
+            Assert.Equal(ErrorCode.InsufficientPermissions,
+                await _manager.EditMessageAsync(group.Id, notification.Message.Id, "forged", 1));
+            Assert.Equal(ErrorCode.InsufficientPermissions,
+                await _manager.DeleteMessageAsync(group.Id, notification.Message.Id, 1, true));
+            Assert.Equal(ErrorCode.InsufficientPermissions,
+                await _manager.SetPinnedAsync(group.Id, notification.Message.Id, true, 1));
+            Assert.Equal(ErrorCode.InsufficientPermissions,
+                await _manager.SetReactionAsync(group.Id, notification.Message.Id, "👍", true, 1));
+        }
+    }
+
+    [Fact]
+    public async Task FailedMembershipWrite_DoesNotChangeAudienceOrPublishMessages()
+    {
+        var (_, group) = await _manager.CreateAsync(new CreateSessionModel("Friends", -1,
+            new ChatSessionCreateData(Kind: ChatKind.Group, MemberIds: [2])), 1);
+        _chats.Setup(r => r.UpdateWithSystemMessagesAsync(It.IsAny<Core.Models.TextChat.ChatSessionModel>(),
+            It.IsAny<IReadOnlyList<ChatMessageModel>>(), It.IsAny<CancellationToken>())).ThrowsAsync(new IOException());
+        Assert.Equal(ErrorCode.Internal, await _manager.ChangeGroupAsync(group!.Id, "Changed", [1, 3], 1, 1, false));
+        Assert.True(group.MemberIds.SetEquals([1, 2]));
+        Assert.Equal("Friends", group.Name);
+        Assert.Empty(_events.Of<ChatSessionMessageAddedEvent>());
+        Assert.Empty(_events.Of<ChatSessionReconfiguredEvent>());
+    }
+
+    [Theory]
+    [InlineData(ChatSystemEventKind.CallStarted)]
+    [InlineData(ChatSystemEventKind.CallEnded)]
+    public async Task CallEvents_UsePersistedChatMessageDelivery(ChatSystemEventKind kind)
+    {
+        var chatId = await CreateChat("calls");
+        _messages.Setup(r => r.AddAsync(It.IsAny<ChatMessageModel>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((ChatMessageModel message, CancellationToken _) => { message.Id = 20; return message; });
+        var content = new ChatSystemContent { Kind = kind, ActorUserId = 1, CallId = Guid.NewGuid() };
+        Assert.Null(await _manager.AddCallSystemMessageAsync(chatId, content));
+        var message = Assert.Single(_events.Of<ChatSessionMessageAddedEvent>()).Message;
+        Assert.Equal(content.ToModel(), message.SystemContent);
+        Assert.True(message.IsSystem);
+        Assert.Equal(20, message.Id);
+        Assert.Equal(content, Server.Application.Mappers.ChatMessageMapperExtensions.ToDto(message).SystemContent);
+        Assert.Equal(ErrorCode.InvalidValue, await _manager.AddCallSystemMessageAsync(chatId,
+            content with { CallId = Guid.Empty }));
+    }
+
+    [Theory]
+    [InlineData(ChatKind.Direct)]
+    [InlineData(ChatKind.Group)]
+    public async Task PrivateChats_RequireAnotherParticipant(ChatKind kind)
+    {
+        var (error, _) = await _manager.CreateAsync(new CreateSessionModel("Empty", -1,
+            new ChatSessionCreateData(Kind: kind, MemberIds: [1, 1])), 1);
+        Assert.Equal(ErrorCode.InvalidValue, error);
+        Assert.Empty(_manager.GetAllSessions());
+    }
+
+    [Fact]
+    public async Task DeletingLastMessage_RestoresPreviousPreview()
+    {
+        var id = await CreateChat("preview");
+        StoreMessage(1, id);
+        StoreMessage(2, id);
+        _manager.TryGetSession(id, out var chat);
+        chat!.SetLastMessage(_storedMessages[2]);
+        _messages.Setup(repository => repository.DeleteAsync(2, It.IsAny<CancellationToken>())).ReturnsAsync(3L);
+        _messages.Setup(repository => repository.GetLastMessagesAsync(id, 1, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new[] { _storedMessages[1] });
+        Assert.Null(await _manager.DeleteMessageAsync(id, 2, AuthorId));
+        Assert.Equal(1, chat.LastMessage!.Id);
+        Assert.Single(_events.Of<ChatSessionReconfiguredEvent>());
+    }
+
     private static CreateSessionModel Chat(string name) => new(name, 10, new ChatSessionCreateData());
 
     private async Task<int> CreateChat(string name)
     {
         var (result, chat) = await _manager.CreateAsync(Chat(name), AuthorId);
-        Assert.Equal(CreateSessionResult.NoError, result);
+        Assert.Equal(null, result);
         return chat!.Id;
     }
 
@@ -50,6 +198,218 @@ public class ChatSessionManagerTests
         var message = ChatMessageModel.Create(chatId, AuthorId, DateTime.UtcNow, new ChatTextContentModel { Text = "hello" });
         message.Id = messageId;
         _storedMessages[messageId] = message;
+    }
+
+    [Theory]
+    [InlineData("/roll 7-7", ChatCommandKind.Roll)]
+    [InlineData("/flip", ChatCommandKind.Flip)]
+    public async Task Command_StoresAndPublishesOneServerGeneratedOutcome(string text, ChatCommandKind kind)
+    {
+        int chatId = await CreateChat("commands");
+        ChatMessageModel? stored = null;
+        _messages.Setup(r => r.AddAsync(It.IsAny<ChatMessageModel>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((ChatMessageModel message, CancellationToken _) =>
+            {
+                stored = message;
+                message.Id = 5;
+                _storedMessages[5] = message;
+                return message;
+            });
+        var forged = new ChatCommandResult { Kind = ChatCommandKind.Roll, Minimum = 1, Maximum = 1000, Value = 999 };
+        Assert.Null(await _manager.AddMessageAsync(chatId, new NewChatMessageModel
+        {
+            ChatId = chatId, TextContent = new ChatTextContentDTO { Text = text, CommandResult = forged }
+        }, AuthorId));
+        Assert.NotNull(stored);
+        var outcome = stored.TextContent!.CommandResult!;
+        Assert.True(outcome.IsValid());
+        Assert.Equal(kind, outcome.Kind);
+        Assert.NotEqual(forged, outcome.ToDto());
+        if (kind == ChatCommandKind.Roll) Assert.Equal(7, outcome.Value);
+        var notification = Assert.Single(_events.Of<ChatSessionMessageAddedEvent>());
+        Assert.Same(stored, notification.Message);
+        _messages.Verify(r => r.AddAsync(It.IsAny<ChatMessageModel>(), It.IsAny<CancellationToken>()), Times.Once);
+        Assert.Equal(ErrorCode.InsufficientPermissions, await _manager.EditMessageAsync(chatId, 5, "/roll 1-1000", AuthorId));
+        Assert.Equal(outcome, stored.TextContent.CommandResult);
+    }
+
+    [Theory]
+    [InlineData("/roll 100-1")]
+    [InlineData("/roll 1-1001")]
+    [InlineData("/flip heads")]
+    public async Task InvalidCommand_DoesNotStoreOrPublishMessage(string text)
+    {
+        int chatId = await CreateChat("invalid-commands");
+        Assert.Equal(ErrorCode.InvalidValue, await _manager.AddMessageAsync(chatId, new NewChatMessageModel
+        {
+            ChatId = chatId, TextContent = new ChatTextContentDTO { Text = text }
+        }, AuthorId));
+        _messages.Verify(r => r.AddAsync(It.IsAny<ChatMessageModel>(), It.IsAny<CancellationToken>()), Times.Never);
+        Assert.Empty(_events.Of<ChatSessionMessageAddedEvent>());
+    }
+
+    [Fact]
+    public async Task Pins_AreIdempotent_AndDoNotEditText()
+    {
+        var chatId = await CreateChat("pins");
+        StoreMessage(5, chatId);
+        _messages.Setup(r => r.GetPinnedAsync(chatId, It.IsAny<CancellationToken>())).ReturnsAsync([]);
+        _messages.Setup(r => r.UpdateAsync(It.IsAny<ChatMessageModel>(), It.IsAny<CancellationToken>())).ReturnsAsync(9);
+        Assert.Null(await _manager.SetPinnedAsync(chatId, 5, true, 2));
+        var pinnedAt = _storedMessages[5].PinnedAt;
+        Assert.NotNull(pinnedAt);
+        Assert.Equal(2, _storedMessages[5].PinnedByUserId);
+        Assert.Null(await _manager.SetPinnedAsync(chatId, 5, true, 3));
+        Assert.Equal(pinnedAt, _storedMessages[5].PinnedAt);
+        Assert.Equal(2, _storedMessages[5].PinnedByUserId);
+        Assert.Null(_storedMessages[5].EditTime);
+        Assert.Null(await _manager.SetPinnedAsync(chatId, 5, false, 3));
+        Assert.Null(_storedMessages[5].PinnedAt);
+        Assert.Null(_storedMessages[5].PinnedByUserId);
+        Assert.Equal(2, _events.Of<ChatSessionMessageEditedEvent>().Count());
+        _messages.Verify(r => r.UpdateAsync(It.IsAny<ChatMessageModel>(), It.IsAny<CancellationToken>()), Times.Exactly(2));
+    }
+
+    [Fact]
+    public async Task PinLimitDoesNotPreventUnpinningOrIdempotentRequests()
+    {
+        var chat = await CreateChat("limit");
+        StoreMessage(5, chat);
+        _messages.Setup(r => r.GetPinnedAsync(chat, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Enumerable.Repeat(_storedMessages[5], 100).ToList());
+        Assert.Equal(ErrorCode.InvalidRequest, await _manager.SetPinnedAsync(chat, 5, true, 2));
+        _storedMessages[5].SetPinned(true, 1, DateTime.UtcNow);
+        Assert.Null(await _manager.SetPinnedAsync(chat, 5, true, 2));
+        Assert.Null(await _manager.SetPinnedAsync(chat, 5, false, 2));
+        Assert.False(_storedMessages[5].IsPinned);
+        _messages.Verify(r => r.UpdateAsync(It.IsAny<ChatMessageModel>(), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task Pins_RejectCrossChatDeletedSystemAndArchivedMessages()
+    {
+        var chat = await CreateChat("pins");
+        var other = await CreateChat("other");
+        StoreMessage(5, other);
+        Assert.Equal(ErrorCode.MessageNotFound, await _manager.SetPinnedAsync(chat, 5, true, 2));
+        foreach (var system in new[] { true, false })
+        {
+            _storedMessages[5] = new ChatMessageModel
+            {
+                Id = 5, ChatId = chat, SenderUserId = 1, SentTime = DateTime.UtcNow,
+                IsSystem = system, IsDeleted = !system
+            };
+            Assert.NotNull(await _manager.SetPinnedAsync(chat, 5, true, 2));
+        }
+        StoreMessage(5, chat);
+        _manager.TryGetSession(chat, out var model);
+        model!.Archive();
+        Assert.Equal(ErrorCode.ChatReadOnly, await _manager.SetPinnedAsync(chat, 5, true, 2));
+        _messages.Verify(r => r.UpdateAsync(It.IsAny<ChatMessageModel>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task Window_CentersOnTarget_AndContinuesDownToLiveEnd()
+    {
+        var chat = await CreateChat("window");
+        foreach (var id in new[] { 1, 3, 5, 8, 10, 11 }) StoreMessage(id, chat);
+        _messages.Setup(r => r.GetBeforeAsync(chat, It.IsAny<int?>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((int _, int? before, int take, CancellationToken token) => _storedMessages.Values
+                .Where(x => x.ChatId == chat && (!before.HasValue || x.Id < before))
+                .OrderByDescending(x => x.Id).Take(take).OrderBy(x => x.Id).ToList());
+        _messages.Setup(r => r.GetAfterAsync(chat, It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((int _, int after, int take, CancellationToken token) => _storedMessages.Values
+                .Where(x => x.ChatId == chat && x.Id > after).OrderBy(x => x.Id).Take(take).ToList());
+        _messages.Setup(r => r.GetRevisionAsync(chat, It.IsAny<CancellationToken>())).ReturnsAsync(50);
+        var around = await _manager.FetchWindowAsync(chat, 5,
+            Shared.Models.Requests.SessionActions.ChatSession.ChatHistoryDirection.Around, 3);
+        Assert.Null(around.result);
+        Assert.Equal(new[] { 3, 5, 8 }, around.window!.Messages.Select(x => x.Id));
+        Assert.True(around.window.HasOlder);
+        Assert.True(around.window.HasNewer);
+        Assert.Equal(50, around.window.Revision);
+        var after = await _manager.FetchWindowAsync(chat, 8,
+            Shared.Models.Requests.SessionActions.ChatSession.ChatHistoryDirection.After, 3);
+        Assert.Equal(new[] { 10, 11 }, after.window!.Messages.Select(x => x.Id));
+        Assert.True(after.window.HasOlder);
+        Assert.False(after.window.HasNewer);
+    }
+
+    [Fact]
+    public async Task Window_RejectsMissingCrossChatAndDeletedTargets()
+    {
+        var chat = await CreateChat("window");
+        var other = await CreateChat("other");
+        StoreMessage(5, other);
+        var direction = Shared.Models.Requests.SessionActions.ChatSession.ChatHistoryDirection.Around;
+        Assert.Equal(ErrorCode.MessageNotFound, (await _manager.FetchWindowAsync(chat, 5, direction, 30)).result);
+        Assert.Equal(ErrorCode.MessageNotFound, (await _manager.FetchWindowAsync(chat, 6, direction, 30)).result);
+        _storedMessages[5] = new ChatMessageModel
+        { Id = 5, ChatId = chat, SenderUserId = 1, SentTime = DateTime.UtcNow, IsDeleted = true };
+        Assert.Equal(ErrorCode.MessageNotFound, (await _manager.FetchWindowAsync(chat, 5, direction, 30)).result);
+    }
+
+    [Fact]
+    public async Task Reactions_ArePerUserAndIdempotent_WithoutEditingTheText()
+    {
+        var chatId = await CreateChat("general");
+        StoreMessage(5, chatId);
+        _messages.Setup(r => r.UpdateAsync(It.IsAny<ChatMessageModel>(), It.IsAny<CancellationToken>())).ReturnsAsync(9);
+
+        Assert.Null(await _manager.SetReactionAsync(chatId, 5, "👍", true, 2));
+        Assert.Null(await _manager.SetReactionAsync(chatId, 5, "👍", true, 2));
+        Assert.Null(await _manager.SetReactionAsync(chatId, 5, "👍", true, 3));
+        Assert.Equal(2, _storedMessages[5].Reactions.Count);
+        Assert.Null(await _manager.SetReactionAsync(chatId, 5, "👍", false, 2));
+        Assert.Null(await _manager.SetReactionAsync(chatId, 5, "👍", false, 2));
+
+        var reaction = Assert.Single(_storedMessages[5].Reactions);
+        Assert.Equal(3, reaction.UserId);
+        Assert.Null(_storedMessages[5].EditTime);
+        Assert.Equal("hello", _storedMessages[5].TextContent!.Text);
+        Assert.Equal(3, _events.Of<ChatSessionMessageEditedEvent>().Count());
+        Assert.All(_events.Of<ChatSessionMessageEditedEvent>(), e => Assert.Equal(9, e.Message.Revision));
+        _messages.Verify(r => r.UpdateAsync(It.IsAny<ChatMessageModel>(), It.IsAny<CancellationToken>()), Times.Exactly(3));
+    }
+
+    [Fact]
+    public async Task Reactions_RejectUnknownChat_CrossChatMessage_AndInvalidEmoji()
+    {
+        var chatId = await CreateChat("general");
+        var otherChat = await CreateChat("other");
+        StoreMessage(5, otherChat);
+
+        Assert.Equal(ErrorCode.ChatNotFound, await _manager.SetReactionAsync(999, 5, "👍", true, 2));
+        Assert.Equal(ErrorCode.MessageNotFound, await _manager.SetReactionAsync(chatId, 5, "👍", true, 2));
+        Assert.NotNull(await _manager.SetReactionAsync(otherChat, 5, "text", true, 2));
+        _messages.Verify(r => r.UpdateAsync(It.IsAny<ChatMessageModel>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Theory]
+    [InlineData(true, false, false)]
+    [InlineData(false, true, false)]
+    [InlineData(false, false, true)]
+    public async Task Reactions_RejectDeletedSystemAndReadOnlyMessages(bool deleted, bool system, bool readOnly)
+    {
+        var chatId = await CreateChat("general");
+        _storedMessages[5] = new ChatMessageModel
+        {
+            Id = 5, ChatId = chatId, SenderUserId = AuthorId, SentTime = DateTime.UtcNow,
+            IsDeleted = deleted, IsSystem = system, IsReadOnly = readOnly
+        };
+        Assert.NotNull(await _manager.SetReactionAsync(chatId, 5, "👍", true, 2));
+        _messages.Verify(r => r.UpdateAsync(It.IsAny<ChatMessageModel>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task Reactions_RejectArchivedChats()
+    {
+        var chatId = await CreateChat("general");
+        StoreMessage(5, chatId);
+        Assert.True(_manager.TryGetSession(chatId, out var chat));
+        chat.Archive();
+        Assert.Equal(ErrorCode.ChatReadOnly, await _manager.SetReactionAsync(chatId, 5, "👍", true, 2));
+        _messages.Verify(r => r.UpdateAsync(It.IsAny<ChatMessageModel>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
@@ -69,8 +429,8 @@ public class ChatSessionManagerTests
             _manager.CreateAsync(Chat("general"), AuthorId),
             _manager.CreateAsync(Chat("general"), AuthorId));
 
-        Assert.Single(results, r => r.result == CreateSessionResult.NoError);
-        Assert.Single(results, r => r.result == CreateSessionResult.NameAlreadyUsed);
+        Assert.Single(results, r => r.result == null);
+        Assert.Single(results, r => r.result == ErrorCode.NameTaken);
         Assert.Single(_manager.GetAllSessions());
     }
 
@@ -79,7 +439,7 @@ public class ChatSessionManagerTests
     {
         var chatId = await CreateChat("general");
 
-        Assert.Equal(DeleteSessionResult.NoError, await _manager.DeleteAsync(chatId, AuthorId));
+        Assert.Equal(null, await _manager.DeleteAsync(chatId, AuthorId));
 
         Assert.False(_manager.TryGetSession(chatId, out _));
         _chats.Verify(r => r.RemoveAsync(chatId, It.IsAny<CancellationToken>()), Times.Once);
@@ -88,7 +448,7 @@ public class ChatSessionManagerTests
     [Fact]
     public async Task Delete_UnknownChat_ReturnsSessionNotExists()
     {
-        Assert.Equal(DeleteSessionResult.SessionNotExists, await _manager.DeleteAsync(42, AuthorId));
+        Assert.Equal(ErrorCode.SessionNotFound, await _manager.DeleteAsync(42, AuthorId));
     }
 
     [Fact]
@@ -100,7 +460,7 @@ public class ChatSessionManagerTests
 
         var (result, message) = await _manager.FetchMessageAsync(chatId, 5);
 
-        Assert.Equal(FetchMessageResult.MessageNotExists, result);
+        Assert.Equal(ErrorCode.MessageNotFound, result);
         Assert.Null(message);
     }
 
@@ -111,7 +471,7 @@ public class ChatSessionManagerTests
 
         var (result, message) = await _manager.FetchMessageAsync(42, 5);
 
-        Assert.Equal(FetchMessageResult.MessageNotExists, result);
+        Assert.Equal(ErrorCode.MessageNotFound, result);
         Assert.Null(message);
     }
 
@@ -120,7 +480,7 @@ public class ChatSessionManagerTests
     {
         var (result, messages) = await _manager.FetchMessagesAsync(42, 10, null);
 
-        Assert.Equal(FetchMessagesResult.ChatNotExists, result);
+        Assert.Equal(ErrorCode.ChatNotFound, result);
         Assert.Null(messages);
         _messages.Verify(r => r.GetByTakeSkipAsync(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<int>(),
             It.IsAny<CancellationToken>()), Times.Never);
@@ -134,7 +494,7 @@ public class ChatSessionManagerTests
 
         var (result, message) = await _manager.FetchMessageAsync(chatId, 5);
 
-        Assert.Equal(FetchMessageResult.NoError, result);
+        Assert.Equal(null, result);
         Assert.Equal(5, message!.Id);
     }
 
@@ -147,7 +507,7 @@ public class ChatSessionManagerTests
 
         var result = await _manager.DeleteMessageAsync(chatId, 5, AuthorId);
 
-        Assert.Equal(DeleteMessageResult.MessageNotExists, result);
+        Assert.Equal(ErrorCode.MessageNotFound, result);
         _messages.Verify(r => r.DeleteAsync(It.IsAny<int>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
@@ -160,7 +520,7 @@ public class ChatSessionManagerTests
 
         var result = await _manager.EditMessageAsync(chatId, 5, "changed", AuthorId);
 
-        Assert.Equal(EditMessageResult.MessageNotExists, result);
+        Assert.Equal(ErrorCode.MessageNotFound, result);
         _messages.Verify(r => r.UpdateAsync(It.IsAny<ChatMessageModel>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
@@ -171,7 +531,7 @@ public class ChatSessionManagerTests
         StoreMessage(messageId: 5, chatId: chatId);
         _messages.Setup(r => r.DeleteAsync(5, It.IsAny<CancellationToken>())).ReturnsAsync(7);
 
-        Assert.Equal(DeleteMessageResult.NoError, await _manager.DeleteMessageAsync(chatId, 5, AuthorId));
+        Assert.Equal(null, await _manager.DeleteMessageAsync(chatId, 5, AuthorId));
 
         var deleted = Assert.Single(_events.Of<ChatSessionMessageDeletedEvent>());
         Assert.Equal((5, 7L), (deleted.MessageId, deleted.Revision));
@@ -184,7 +544,7 @@ public class ChatSessionManagerTests
         StoreMessage(messageId: 5, chatId: chatId);
         _messages.Setup(r => r.DeleteAsync(5, It.IsAny<CancellationToken>())).ReturnsAsync((long?)null);
 
-        Assert.Equal(DeleteMessageResult.MessageNotExists, await _manager.DeleteMessageAsync(chatId, 5, AuthorId));
+        Assert.Equal(ErrorCode.MessageNotFound, await _manager.DeleteMessageAsync(chatId, 5, AuthorId));
         Assert.Empty(_events.Of<ChatSessionMessageDeletedEvent>());
     }
 
@@ -195,7 +555,7 @@ public class ChatSessionManagerTests
         StoreMessage(messageId: 5, chatId: chatId);
         _messages.Setup(r => r.UpdateAsync(It.IsAny<ChatMessageModel>(), It.IsAny<CancellationToken>())).ReturnsAsync(9);
 
-        Assert.Equal(EditMessageResult.NoError, await _manager.EditMessageAsync(chatId, 5, "changed", AuthorId));
+        Assert.Equal(null, await _manager.EditMessageAsync(chatId, 5, "changed", AuthorId));
 
         Assert.Equal(9, Assert.Single(_events.Of<ChatSessionMessageEditedEvent>()).Message.Revision);
     }
@@ -209,7 +569,7 @@ public class ChatSessionManagerTests
 
         var (result, page) = await _manager.FetchMessagesBeforeAsync(chatId, 40, 30);
 
-        Assert.Equal(FetchMessagesResult.NoError, result);
+        Assert.Equal(null, result);
         Assert.Equal(12, page!.Revision);
     }
 
@@ -218,7 +578,7 @@ public class ChatSessionManagerTests
     {
         var (result, page) = await _manager.FetchMessagesBeforeAsync(42, null, 30);
 
-        Assert.Equal(FetchMessagesResult.ChatNotExists, result);
+        Assert.Equal(ErrorCode.ChatNotFound, result);
         Assert.Null(page);
     }
 
@@ -234,7 +594,7 @@ public class ChatSessionManagerTests
 
         var (result, changes) = await _manager.FetchChangesAsync(chatId, 3, 1);
 
-        Assert.Equal(FetchMessagesResult.NoError, result);
+        Assert.Equal(null, result);
         Assert.Single(changes!.Messages);
         Assert.True(changes.HasMore);
         Assert.False(changes.Reset);

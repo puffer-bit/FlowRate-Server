@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using Server.Core.Models.TextChat.Messages.Content;
 using Server.Core.Models.TextChat.Messages.Reactions;
 using Server.Core.Models.User;
@@ -43,11 +44,26 @@ public sealed class ChatMessageModel
 
     public IReadOnlyList<string> UsersIds { get; init; } = [];
 
+    private DateTime? _pinnedAt;
+    private int? _pinnedByUserId;
+    public DateTime? PinnedAt { get => _pinnedAt; init => _pinnedAt = value; }
+    public int? PinnedByUserId { get => _pinnedByUserId; init => _pinnedByUserId = value; }
+    public bool IsPinned => PinnedAt.HasValue;
+
+    public bool SetPinned(bool pinned, int userId, DateTime now)
+    {
+        if (IsPinned == pinned) return false;
+        _pinnedAt = pinned ? now : null;
+        _pinnedByUserId = pinned ? userId : null;
+        return true;
+    }
+
     public bool IsDelivered { get => _isDelivered; init => _isDelivered = value; }
     public bool IsReposted { get; init; }
     public bool IsDeleted { get; init; }
     public bool IsReadOnly { get; init; }
     public bool IsSystem { get; init; }
+    public ChatSystemContentModel? SystemContent { get; init; }
 
     public bool IsDelayed => DelayedSentTime.HasValue;
     public bool IsDisposable => DisposeTime.HasValue;
@@ -80,6 +96,22 @@ public sealed class ChatMessageModel
         return message;
     }
 
+    public static ChatMessageModel CreateSystem(int chatId, ChatSystemContentModel content, DateTime now)
+    {
+        if (chatId <= 0 || !content.IsValid())
+            throw new ArgumentException("Invalid system chat event.");
+        return new ChatMessageModel
+        {
+            ChatId = chatId,
+            SenderUserId = UserModel.SystemUserId,
+            SentTime = now,
+            IsSystem = true,
+            IsReadOnly = true,
+            SystemContent = content,
+            TextContent = new ChatTextContentModel { Text = content.ToFallbackText() }
+        };
+    }
+
     public bool HasAttachments => Images.Count + Videos.Count + Files.Count > 0;
 
     public bool IsSentBy(int userId) => SenderUserId == userId;
@@ -92,14 +124,26 @@ public sealed class ChatMessageModel
         _replyContent = target.ToReplyContent();
     }
 
-    public EditMessageResult Edit(int userId, string text, DateTime now)
+    public void ExecuteCommand(ChatCommandModel command)
     {
-        if (!IsSentBy(userId) || IsDeleted || IsReadOnly || IsSystem)
-            return EditMessageResult.InsufficientPermissions;
+        if (!command.IsValid || TextContent?.CommandResult != null)
+            throw new InvalidOperationException("Only valid, unresolved commands may execute.");
+        var result = new ChatCommandResultModel
+        {
+            Kind = command.Kind, Minimum = command.Minimum, Maximum = command.Maximum,
+            Value = RandomNumberGenerator.GetInt32(command.Minimum, command.Maximum + 1)
+        };
+        _textContent = new ChatTextContentModel { Text = result.ToFallbackText(), CommandResult = result };
+    }
+
+    public ErrorCode? Edit(int userId, string text, DateTime now)
+    {
+        if (!IsSentBy(userId) || IsDeleted || IsReadOnly || IsSystem || TextContent?.CommandResult != null)
+            return ErrorCode.InsufficientPermissions;
 
         _textContent = new ChatTextContentModel { Text = text };
         _editTime = now;
-        return EditMessageResult.NoError;
+        return null;
     }
 
     public void MarkDelivered() => _isDelivered = true;
@@ -122,6 +166,7 @@ public sealed class ChatMessageModel
     public ChatReplyContentModel ToReplyContent() => new()
     {
         MessageId = Id,
+        HasAttachments = !IsDeleted && (Images.Count > 0 || Videos.Count > 0 || Files.Count > 0),
         SenderUserId = SenderUserId,
         SentTime = SentTime,
         TextContent = TextContent,

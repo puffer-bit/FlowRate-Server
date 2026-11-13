@@ -11,12 +11,14 @@ using Server.Application.Mappers;
 using Server.Application.Abstractions.Factories;
 using Server.Application.Coordinator.Sessions.Hybrid.Peers;
 using Server.Application.Coordinator.Users;
+using Server.Application.Coordinator.Roles;
+using Server.Core.Models.User;
 using Server.Application.Orchestrator;
 using Server.Application.Orchestrator.SFUPool;
 
 namespace Server.Application.Coordinator.Sessions.Hybrid;
 
-public class HybridSessionManager : IHybridSessionManager
+public partial class HybridSessionManager : IHybridSessionManager
 {
     private readonly ILogger _logger;
     private readonly ICoordinatorEventBus _coordinatorEventBus;
@@ -26,6 +28,54 @@ public class HybridSessionManager : IHybridSessionManager
     private readonly string _coordinatorInstanceId;
 
     private readonly ConcurrentDictionary<int, IHybridSession> _sessions = new();
+    private ICoordinatorPermissions? _permissions;
+    private SessionVisibility? _visibility;
+
+    public void WatchPermissions(ICoordinatorPermissions permissions, SessionVisibility visibility)
+    {
+        _permissions = permissions;
+        _visibility = visibility;
+        permissions.PermissionsChanged += OnPermissionsChanged;
+        visibility.AudienceChanged += OnSessionPermissionsChanged;
+    }
+
+    private void OnPermissionsChanged(IReadOnlyCollection<int> userIds) =>
+        _ = ApplyVoicePermissionsAsync(userIds);
+
+    private void OnSessionPermissionsChanged() => _ = ApplyVoicePermissionsAsync(null);
+
+    private async Task ApplyVoicePermissionsAsync(IReadOnlyCollection<int>? userIds)
+    {
+        if (_permissions == null)
+            return;
+
+        foreach (var session in _sessions.Values)
+        {
+            foreach (var peer in session.PeerManager.GetAllPeerSnapshots().Values)
+            {
+                try
+                {
+                    if (userIds != null && !userIds.Contains(peer.UserId))
+                        continue;
+                    if (peer.IsMicrophoneMuted || _permissions.HasIn(peer.UserId, session.Model,
+                            Permission.ViewSessions | Permission.Speak))
+                        continue;
+
+                    // Pause the producer on the SFU even if the client keeps sending audio.
+                    var result = await session.PeerManager.SetMicrophoneMutedAsync(UserModel.SystemUserId,
+                        peer.UserId, true);
+                    if (result is not (null or ErrorCode.MediaNotActive))
+                        _logger.LogError("Applying voice permissions for user {UserId} in session {SessionId} failed: {Error}",
+                            peer.UserId, session.Model.Id, result);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Applying voice permissions for user {UserId} in session {SessionId} failed.",
+                        peer.UserId, session.Model.Id);
+                }
+            }
+        }
+    }
 
     // Serializes creation, deletion and changes, so that two sessions cannot take the same name
     private readonly SemaphoreSlim _lifecycleLock = new(1, 1);
@@ -64,14 +114,14 @@ public class HybridSessionManager : IHybridSessionManager
         }
     }
 
-    public async Task<(CreateSessionResult result, HybridSessionModel? session)> CreateAsync(CreateSessionModel request,
+    public async Task<(ErrorCode? result, HybridSessionModel? session)> CreateAsync(CreateSessionModel request,
         int userId)
     {
         if (request.Capacity <= 1)
-            return (CreateSessionResult.WrongCapacity, null);
+            return (ErrorCode.InvalidValue, null);
 
         if (request.SessionData is not HybridSessionCreateData hybridData)
-            return (CreateSessionResult.UnexpectedParameters, null);
+            return (ErrorCode.InvalidValue, null);
 
         await _lifecycleLock.WaitAsync();
         try
@@ -79,7 +129,7 @@ public class HybridSessionManager : IHybridSessionManager
             if (_sessions.Values.Any(s => s.Model.Name == request.Name))
             {
                 _logger.LogTrace("Failed to create hybrid session. Name \"{Name}\" already used", request.Name);
-                return (CreateSessionResult.NameAlreadyUsed, null);
+                return (ErrorCode.NameTaken, null);
             }
 
             var model = HybridSessionModel.Create(_coordinatorInstanceId, request.Name, request.Capacity, userId,
@@ -98,12 +148,12 @@ public class HybridSessionManager : IHybridSessionManager
 
             _logger.LogTrace("Hybrid session \"{Name}\" (ID: {SessionId}) created", model.Name, model.Id);
             await _coordinatorEventBus.PublishAsync(new HybridSessionCreatedEvent(model, userId));
-            return (CreateSessionResult.NoError, model);
+            return (null, model);
         }
         catch (Exception e)
         {
             _logger.LogError(e, "Failed to create hybrid session.");
-            return (CreateSessionResult.InternalError, null);
+            return (ErrorCode.Internal, null);
         }
         finally
         {
@@ -111,13 +161,13 @@ public class HybridSessionManager : IHybridSessionManager
         }
     }
 
-    public async Task<DeleteSessionResult> DeleteAsync(int sessionId, int userId)
+    public async Task<ErrorCode?> DeleteAsync(int sessionId, int userId)
     {
         await _lifecycleLock.WaitAsync();
         try
         {
             if (!_sessions.TryRemove(sessionId, out var session))
-                return DeleteSessionResult.SessionNotExists;
+                return ErrorCode.SessionNotFound;
 
             try
             {
@@ -132,12 +182,12 @@ public class HybridSessionManager : IHybridSessionManager
 
             _logger.LogTrace("Hybrid session \"{Name}\" (ID: {SessionId}) deleted", session.Model.Name, sessionId);
             await _coordinatorEventBus.PublishAsync(new HybridSessionDeletedEvent(sessionId, userId));
-            return DeleteSessionResult.NoError;
+            return null;
         }
         catch (Exception e)
         {
             _logger.LogError(e, "Failed to delete hybrid session {SessionId}.", sessionId);
-            return DeleteSessionResult.InternalError;
+            return ErrorCode.Internal;
         }
         finally
         {
@@ -145,24 +195,24 @@ public class HybridSessionManager : IHybridSessionManager
         }
     }
 
-    public async Task<ChangeSessionSettingsResult> ChangeSettingsAsync(int sessionId, string name, int capacity,
+    public async Task<ErrorCode?> ChangeSettingsAsync(int sessionId, string name, int capacity,
         bool isHostMustApprove, HybridMediaSettings media, int userId)
     {
         await _lifecycleLock.WaitAsync();
         try
         {
             if (!_sessions.TryGetValue(sessionId, out var session))
-                return ChangeSessionSettingsResult.SessionNotExists;
+                return ErrorCode.SessionNotFound;
 
             // Same rule as on creation, and the peers already inside must still fit
             if (capacity <= 1 || capacity < session.PeerManager.GetAllPeerSnapshots().Count)
-                return ChangeSessionSettingsResult.WrongCapacity;
+                return ErrorCode.InvalidValue;
 
             if (_sessions.Values.Any(s => s.Model.Id != sessionId && s.Model.Name == name))
             {
                 _logger.LogTrace("Failed to change hybrid session {SessionId}. Name \"{Name}\" already used",
                     sessionId, name);
-                return ChangeSessionSettingsResult.NameAlreadyUsed;
+                return ErrorCode.NameTaken;
             }
 
             var model = session.Model;
@@ -190,12 +240,12 @@ public class HybridSessionManager : IHybridSessionManager
 
             _logger.LogTrace("Hybrid session \"{Name}\" (ID: {SessionId}) reconfigured", model.Name, sessionId);
             await _coordinatorEventBus.PublishAsync(new HybridSessionReconfiguredEvent(model, userId));
-            return ChangeSessionSettingsResult.NoError;
+            return null;
         }
         catch (Exception e)
         {
             _logger.LogError(e, "Failed to change hybrid session {SessionId}.", sessionId);
-            return ChangeSessionSettingsResult.InternalError;
+            return ErrorCode.Internal;
         }
         finally
         {
@@ -206,10 +256,11 @@ public class HybridSessionManager : IHybridSessionManager
     public bool TryGetSession(int sessionId, [NotNullWhen(true)] out IHybridSession? session) =>
         _sessions.TryGetValue(sessionId, out session);
 
-    public IReadOnlyCollection<IHybridSession> GetAllSessions() => _sessions.Values.ToList();
+    public IReadOnlyCollection<IHybridSession> GetAllSessions() => _sessions.Values.Where(s => s.Model.CallDevices == null).ToList();
 
     public async Task RemoveUserFromAllSessionsAsync(int userId)
     {
+        await EndCallsForDeviceAsync(userId, null);
         foreach (var session in _sessions.Values)
         {
             if (!session.PeerManager.HasPeer(userId))
@@ -229,6 +280,7 @@ public class HybridSessionManager : IHybridSessionManager
 
     public async Task RemoveConnectionFromAllSessionsAsync(int userId, string connectionId)
     {
+        await EndCallsForDeviceAsync(userId, connectionId);
         foreach (var session in _sessions.Values)
         {
             if (!session.PeerManager.HasPeer(userId))
@@ -248,6 +300,7 @@ public class HybridSessionManager : IHybridSessionManager
 
     public async Task CloseAllSessionsAsync()
     {
+        await EndAllCallsAsync();
         foreach (var session in _sessions.Values)
         {
             try
@@ -303,6 +356,13 @@ public class HybridSessionManager : IHybridSessionManager
 
     public void Dispose()
     {
+        _callLifetime.Cancel();
+        _callLifetime.Dispose();
+        if (_permissions != null)
+            _permissions.PermissionsChanged -= OnPermissionsChanged;
+        if (_visibility != null)
+            _visibility.AudienceChanged -= OnSessionPermissionsChanged;
+
         _sfuNodeSelector.NodesChanged -= HandleSfuNodesChangedAsync;
 
         foreach (var session in _sessions.Values)

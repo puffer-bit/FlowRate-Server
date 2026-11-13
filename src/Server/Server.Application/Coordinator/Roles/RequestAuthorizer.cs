@@ -11,7 +11,7 @@ public sealed class RequestAuthorizer
 {
     /// <summary>What the host of a hybrid session may do in it, whatever their roles.</summary>
     public const Permission HostPermissions =
-        Permission.ManageSessions | Permission.KickMembers | Permission.BanMembers | Permission.ApproveMembers;
+        Permission.ManageSessions | Permission.KickMembers | Permission.ApproveMembers;
 
     private readonly ICoordinatorPermissions _permissions;
     private readonly IHybridSessionManager _hybridSessions;
@@ -33,12 +33,34 @@ public sealed class RequestAuthorizer
 
     public async Task<bool> IsAllowedAsync(BaseMessage message)
     {
+        if (message is Shared.Models.Requests.SessionActions.HybridSession.HybridSessionRequest
+            && RequestPolicies.Of(message)?.SessionId is { } mediaSessionId
+            && _hybridSessions.TryGetSession(mediaSessionId, out var callSession)
+            && callSession.Model.CallDevices is { } callDevices)
+        {
+            if (!callDevices.ContainsKey(message.SenderId)) return false;
+            return message is not (Shared.Models.Requests.SessionActions.HybridSession.HybridSessionStartVideoRequest
+                or Shared.Models.Requests.SessionActions.HybridSession.HybridSessionStartScreenShareRequest);
+        }
         if (RequestPolicies.Of(message) is not { } policy)
             return false;
 
         var senderId = message.SenderId;
         if (senderId == UserModel.SystemUserId || policy == RequestPolicy.Open)
             return true;
+
+        // Private membership is authoritative, including for server administrators.
+        if (policy.SessionId is { } privateId && _sessions.TryGetSessionModel(privateId, out var privateScope)
+            && privateScope is Server.Core.Models.TextChat.ChatSessionModel { IsPrivate: true } privateChat)
+        {
+            if (message is Shared.Models.Requests.SessionActions.Generic.ChangeSessionPermissionsRequest
+                || message is Shared.Models.Requests.SessionActions.Generic.MoveSessionRequest)
+                return false;
+            if (message is Shared.Models.Requests.SessionActions.ChatSession.SetMessagePinnedRequest
+                && privateChat.Kind == ChatKind.Direct)
+                return privateChat.MemberIds.Contains(senderId);
+            return privateChat.MemberIds.Contains(senderId) && _permissions.HasIn(senderId, privateChat, policy.Required);
+        }
 
         // A session that does not exist is the handler's to answer; the coordinator permissions decide until then
         var byRole = policy.SessionId is { } scopeId && _sessions.TryGetSessionModel(scopeId, out var scope)

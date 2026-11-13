@@ -1,4 +1,5 @@
 using Server.Core.Models.TextChat;
+using Server.Core.Models.TextChat.Messages;
 using Server.Application.Coordinator.Events;
 using Server.Application.Coordinator.Sessions.Hybrid;
 
@@ -10,6 +11,10 @@ public interface IChatSessionRepository
     Task<IReadOnlyCollection<ChatSessionModel>> GetAllAsync(CancellationToken cancellationToken = default);
     Task<int> AddAsync(ChatSessionModel instance, CancellationToken cancellationToken = default);
     Task UpdateAsync(ChatSessionModel instance, CancellationToken cancellationToken = default);
+    /// <summary>Commits membership and its system messages in the same transaction, in list order.</summary>
+    Task<IReadOnlyList<ChatMessageModel>> UpdateWithSystemMessagesAsync(
+        ChatSessionModel instance, IReadOnlyList<ChatMessageModel> messages,
+        CancellationToken cancellationToken = default);
     Task RemoveAsync(int chatId, CancellationToken cancellationToken = default);
     Task<List<ChatSessionModel>> GetByCoordinatorIdAsync(string coordinatorInstanceId,
         CancellationToken cancellationToken = default);

@@ -90,8 +90,11 @@ public sealed class SessionVisibility : IDisposable
     /// Sends the changed session to those who may see it; those who no longer may get it deleted, those who now
     /// may get it created.
     /// </summary>
+    public event Action? AudienceChanged;
+
     public void Reconfigured(SessionModel session)
     {
+        AudienceChanged?.Invoke();
         foreach (var userId in ConnectedUsers())
             Update(userId, session, ReconfiguredNotification(session));
     }
@@ -99,10 +102,14 @@ public sealed class SessionVisibility : IDisposable
     /// <summary>Tells everyone; a client that never had the session ignores it.</summary>
     public void Deleted(int sessionId, BaseMessage notification)
     {
+        AudienceChanged?.Invoke();
+        List<int> recipients;
         lock (_lock)
-            foreach (var shown in _shown.Values)
-                shown.Remove(sessionId);
-        _messageSender.BroadcastMessage(notification);
+        {
+            recipients = _shown.Where(pair => pair.Value.Contains(sessionId)).Select(pair => pair.Key).ToList();
+            foreach (var shown in _shown.Values) shown.Remove(sessionId);
+        }
+        _messageSender.BroadcastMessage(recipients, notification);
     }
 
     /// <summary>Brings the session lists of the users in step with what they may see now.</summary>

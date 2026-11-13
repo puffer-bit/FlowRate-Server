@@ -1,4 +1,5 @@
 using System.Diagnostics.CodeAnalysis;
+using Shared.Models.DataTransferObjects.ChatSession.Messages;
 using Server.Core.Models.TextChat;
 using Server.Core.Models.TextChat.Messages;
 using Shared.Enums;
@@ -15,18 +16,27 @@ namespace Server.Application.Coordinator.Sessions.Chat;
 public interface IChatSessionManager
 {
     Task LoadAsync();
+    Task<ErrorCode?> SetPinnedAsync(int sessionId, int messageId, bool pinned, int userId);
+    Task<(ErrorCode? result, ChatHistoryPage? page)> FetchPinnedAsync(int sessionId);
+    Task<(ErrorCode? result, ChatHistoryWindow? window)> FetchWindowAsync(int sessionId, int messageId,
+        Shared.Models.Requests.SessionActions.ChatSession.ChatHistoryDirection direction, int take);
 
-    Task<(CreateSessionResult result, ChatSessionModel? session)> CreateAsync(CreateSessionModel request, int userId);
-    Task<DeleteSessionResult> DeleteAsync(int sessionId, int userId);
+    Task<(ErrorCode? result, ChatSessionModel? session)> CreateAsync(CreateSessionModel request, int userId);
+    Task<ErrorCode?> DeleteAsync(int sessionId, int userId);
+    Task<ErrorCode?> ChangeGroupAsync(int sessionId, string name, int[] memberIds, int ownerId, int userId, bool leave);
+
     bool TryGetSession(int sessionId, [NotNullWhen(true)] out ChatSessionModel? session);
     IReadOnlyCollection<ChatSessionModel> GetAllSessions();
 
-    Task<(FetchMessagesResult result, List<ChatMessageModel>? messages)> FetchMessagesAsync(int sessionId, int take, int? skip);
-    Task<(FetchMessagesResult result, ChatHistoryPage? page)> FetchMessagesBeforeAsync(int sessionId, int? beforeMessageId, int take);
-    Task<(FetchMessagesResult result, ChatChanges? changes)> FetchChangesAsync(int sessionId, long afterRevision, int take);
-    Task<(FetchMessageResult result, ChatMessageModel? message)> FetchMessageAsync(int sessionId, int messageId);
-    Task<AddMessageResult> AddMessageAsync(int sessionId, NewChatMessageModel message, int senderUserId);
-    Task<EditMessageResult> EditMessageAsync(int sessionId, int messageId, string text, int userId);
+    Task<(ErrorCode? result, List<ChatMessageModel>? messages)> FetchMessagesAsync(int sessionId, int take, int? skip);
+    Task<(ErrorCode? result, ChatHistoryPage? page)> FetchMessagesBeforeAsync(int sessionId, int? beforeMessageId, int take);
+    Task<(ErrorCode? result, ChatChanges? changes)> FetchChangesAsync(int sessionId, long afterRevision, int take);
+    Task<(ErrorCode? result, ChatMessageModel? message)> FetchMessageAsync(int sessionId, int messageId);
+    Task<ErrorCode?> AddCallSystemMessageAsync(int sessionId,
+        ChatSystemContent content);
+    Task<ErrorCode?> AddMessageAsync(int sessionId, NewChatMessageModel message, int senderUserId);
+    Task<ErrorCode?> SetReactionAsync(int sessionId, int messageId, string emoji, bool isAdded, int userId);
+    Task<ErrorCode?> EditMessageAsync(int sessionId, int messageId, string text, int userId);
     /// <param name="mayDeleteAny">The user may delete messages of others, by their coordinator roles.</param>
-    Task<DeleteMessageResult> DeleteMessageAsync(int sessionId, int messageId, int userId, bool mayDeleteAny = false);
+    Task<ErrorCode?> DeleteMessageAsync(int sessionId, int messageId, int userId, bool mayDeleteAny = false);
 }

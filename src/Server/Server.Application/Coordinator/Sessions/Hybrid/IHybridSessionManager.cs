@@ -13,12 +13,22 @@ namespace Server.Application.Coordinator.Sessions.Hybrid;
 public interface IHybridSessionManager : IDisposable
 {
     Task LoadAsync();
+    bool HasDirectCall(int userId);
+    Task PublishCurrentCallAsync(int userId, string connectionId);
+    Task EndCallForSessionAsync(int sessionId, int userId, string connectionId);
+    Task<(ErrorCode? Error, Shared.Models.DataTransferObjects.DirectCallDTO? Call)> ChangeCallAsync(
+        Shared.Models.Requests.SessionActions.ChatSession.DirectCallRequest request, string connectionId);
+    /// <summary>
+    /// Declines a call that rings for <paramref name="userId"/> without a connection, from the button of a
+    /// push notification. A call that has already ended needs nothing and is no error.
+    /// </summary>
+    Task<ErrorCode?> DeclineCallFromPushAsync(Guid callId, int userId);
 
-    Task<(CreateSessionResult result, HybridSessionModel? session)> CreateAsync(CreateSessionModel request, int userId);
-    Task<DeleteSessionResult> DeleteAsync(int sessionId, int userId);
+    Task<(ErrorCode? result, HybridSessionModel? session)> CreateAsync(CreateSessionModel request, int userId);
+    Task<ErrorCode?> DeleteAsync(int sessionId, int userId);
 
     /// <summary>Replaces the settings of the session, saves them and tells every client.</summary>
-    Task<ChangeSessionSettingsResult> ChangeSettingsAsync(int sessionId, string name, int capacity,
+    Task<ErrorCode?> ChangeSettingsAsync(int sessionId, string name, int capacity,
         bool isHostMustApprove, HybridMediaSettings media, int userId);
     bool TryGetSession(int sessionId, [NotNullWhen(true)] out IHybridSession? session);
     IReadOnlyCollection<IHybridSession> GetAllSessions();

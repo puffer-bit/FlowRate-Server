@@ -16,6 +16,8 @@ public class ClientConnection : IClientConnection
         set => _webSocketGateway.UserId = value;
     }
 
+    public Guid? UserSessionId { get; set; }
+
     public string IpEndpoint => _webSocketGateway.IpAddress;
     public bool IsAvailable => _webSocketGateway.IsAvailable;
     public bool IsClosed => TokenSource.IsCancellationRequested;

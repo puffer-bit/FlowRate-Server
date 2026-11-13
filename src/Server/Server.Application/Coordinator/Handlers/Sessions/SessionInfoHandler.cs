@@ -14,47 +14,47 @@ namespace Server.Application.Coordinator.Handlers.Sessions;
 
 public class SessionInfoHandler : IMessageHandler<SessionInfoRequest>
 {
+    private readonly Server.Application.Coordinator.Sessions.Hybrid.IHybridSessionManager? _calls;
     private readonly SessionVisibility _visibility;
     private readonly ISessionLayoutService _layout;
     private readonly IMessageSender _messageSender;
 
-    public SessionInfoHandler(SessionVisibility visibility, ISessionLayoutService layout, IMessageSender messageSender)
+    public SessionInfoHandler(SessionVisibility visibility, ISessionLayoutService layout, IMessageSender messageSender, Server.Application.Coordinator.Sessions.Hybrid.IHybridSessionManager? calls = null)
     {
+        _calls = calls;
         _visibility = visibility;
         _layout = layout;
         _messageSender = messageSender;
     }
 
-    public Task<HandleMessageResult> HandleMessage(SessionInfoRequest? request, string connectionId)
+    public async Task<HandleMessageResult> HandleMessage(SessionInfoRequest? request, string connectionId)
     {
         if (request == null)
-            return Task.FromResult(HandleMessageResult.ForbiddenRequest);
+            return HandleMessageResult.ForbiddenRequest;
 
         _messageSender.SendMessageById(connectionId, request.SessionId is { } sessionId
             ? SingleSession(request, sessionId)
             : AllSessions(request));
 
-        return Task.FromResult(HandleMessageResult.NoError);
+        if (request.SessionId == null && _calls != null)
+            await _calls.PublishCurrentCallAsync(request.SenderId, connectionId);
+        return HandleMessageResult.NoError;
     }
-
-    public BaseMessage? CreateFailureResponse(SessionInfoRequest request) =>
-        request.ToResponse(new Dictionary<int, SessionDTO>(), SessionRequestResult.InternalError);
 
     private BaseMessage AllSessions(SessionInfoRequest request)
     {
         var layout = _layout.GetLayout();
         // The layout names sessions the user may not see too; the client places only those it has
         var sessions = _visibility.ShowAll(request.SenderId).ToDictionary(session => session.Id, session => session.ToDto());
-        return request.ToResponse(sessions, SessionRequestResult.NoError, layout);
+        return request.ToResponse(sessions, layout);
     }
 
     private BaseMessage SingleSession(SessionInfoRequest request, int sessionId)
     {
         // A session the user may not see is one that does not exist for it
         if (_visibility.Show(request.SenderId, sessionId) is not { } session)
-            return request.ToResponse(new Dictionary<int, SessionDTO>(), SessionRequestResult.SessionNotExists);
+            return request.ToError(ErrorCode.SessionNotFound);
 
-        return request.ToResponse(new Dictionary<int, SessionDTO> { [session.Id] = session.ToDto() },
-            SessionRequestResult.NoError);
+        return request.ToResponse(new Dictionary<int, SessionDTO> { [session.Id] = session.ToDto() });
     }
 }

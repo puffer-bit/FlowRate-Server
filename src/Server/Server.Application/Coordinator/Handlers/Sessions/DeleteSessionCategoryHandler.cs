@@ -23,11 +23,8 @@ public class DeleteSessionCategoryHandler : IMessageHandler<DeleteSessionCategor
             return HandleMessageResult.ForbiddenRequest;
 
         var result = await _layout.DeleteCategoryAsync(request.CategoryId);
-        _messageSender.SendMessageById(connectionId, request.ToResponse(result));
+        _messageSender.SendMessageById(connectionId, request.Answer(result, request.ToResponse));
 
         return HandleMessageResult.NoError;
     }
-
-    public BaseMessage? CreateFailureResponse(DeleteSessionCategoryRequest request) =>
-        request.ToResponse(SessionLayoutResult.InternalError);
 }

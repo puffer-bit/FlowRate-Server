@@ -21,9 +21,18 @@ concurrency:
   group: release
   cancel-in-progress: false
 
+defaults:
+  run:
+    shell: bash
+
 jobs:
+  validate:
+    name: Validate
+    uses: ./.github/workflows/tests.yml
+
   tag:
     name: Tag
+    needs: validate
     runs-on: ubuntu-24.04
     outputs:
       release: ${{ steps.tag.outputs.release }}

@@ -23,11 +23,8 @@ public class RenameSessionCategoryHandler : IMessageHandler<RenameSessionCategor
             return HandleMessageResult.ForbiddenRequest;
 
         var result = await _layout.RenameCategoryAsync(request.CategoryId, request.Name);
-        _messageSender.SendMessageById(connectionId, request.ToResponse(result));
+        _messageSender.SendMessageById(connectionId, request.Answer(result, request.ToResponse));
 
         return HandleMessageResult.NoError;
     }
-
-    public BaseMessage? CreateFailureResponse(RenameSessionCategoryRequest request) =>
-        request.ToResponse(SessionLayoutResult.InternalError);
 }

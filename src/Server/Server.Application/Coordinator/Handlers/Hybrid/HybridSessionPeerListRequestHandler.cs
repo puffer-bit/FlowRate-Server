@@ -25,12 +25,6 @@ public class HybridSessionPeerListRequestHandler : HybridSessionRequestHandler<H
         var peers = session.PeerManager.GetAllPeerSnapshots()
             .ToDictionary(peer => peer.Key, peer => peer.Value.ToDto());
 
-        return Task.FromResult<BaseMessage>(request.ToResponse(PeerListRequestResult.NoError, peers));
+        return Task.FromResult<BaseMessage>(request.ToResponse(peers));
     }
-
-    protected override BaseMessage SessionNotFound(HybridSessionPeerListRequest request) =>
-        request.ToResponse(PeerListRequestResult.SessionNotExists);
-
-    public override BaseMessage CreateFailureResponse(HybridSessionPeerListRequest request) =>
-        request.ToResponse(PeerListRequestResult.InternalError);
 }

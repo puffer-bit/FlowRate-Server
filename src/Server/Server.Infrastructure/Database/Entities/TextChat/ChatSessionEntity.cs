@@ -5,6 +5,9 @@ namespace Server.Infrastructure.Database.Entities.TextChat;
 [Table("ChatSessions")]
 public class ChatSessionEntity : SessionEntity
 {
+    public Shared.Enums.ChatKind Kind { get; set; }
+    public string? DirectKey { get; set; }
+
     public int CreatorUserId { get; set; }
     public int AdminUserId { get; set; }
     
@@ -19,6 +22,8 @@ public class ChatSessionEntity : SessionEntity
     public bool IsVoiceMessagesAllowed { get; set; }
     public bool IsVideoMessagesAllowed { get; set; }
     public bool IsDelayedMessagesAllowed { get; set; }
+
+    public ICollection<ChatSessionMemberEntity> Members { get; set; } = [];
 
     // Navigation fields
     public ICollection<ChatMessageEntity> Messages { get; set; } = null!;

@@ -42,8 +42,8 @@ const permissions: { value: Permission, label: string, hint: string }[] = [
   { value: 'ManageRoles', label: 'Manage roles', hint: 'Roles below their own highest role' },
   { value: 'CreateSessions', label: 'Create sessions', hint: 'Creators host their sessions' },
   { value: 'ManageSessions', label: 'Manage sessions', hint: 'Change and delete any session, arrange sessions' },
-  { value: 'KickMembers', label: 'Kick members', hint: 'From any session; hosts may in their own' },
-  { value: 'BanMembers', label: 'Ban members', hint: 'From any session; hosts may in their own' },
+  { value: 'KickMembers', label: 'Kick members', hint: 'Global account and IP bans, reasons and revocation' },
+  { value: 'BanMembers', label: 'Ban members', hint: 'Global account and IP bans, reasons and revocation' },
   { value: 'ApproveMembers', label: 'Approve members', hint: 'Let users waiting to enter in, or refuse them' },
   { value: 'ManageMessages', label: 'Manage messages', hint: 'Delete messages of others' },
   { value: 'ManageUsers', label: 'Manage users', hint: 'Change names and avatars of others' },
@@ -117,7 +117,7 @@ function RolesTable({ coordinatorId, roles }: { coordinatorId: string, roles: Ro
       {error && <Alert color="red" title="The change was not made">{error.message}</Alert>}
 
       <Table.ScrollContainer minWidth={560}>
-        <Table striped>
+        <Table>
           <Table.Thead>
             <Table.Tr>
               <Table.Th>Role</Table.Th>
@@ -286,7 +286,7 @@ function UsersTable({ coordinatorId, roles, users }: {
     <Stack>
       {setUserRole.error && <Alert color="red" title="The role was not changed">{setUserRole.error.message}</Alert>}
       <Table.ScrollContainer minWidth={640}>
-        <Table striped>
+        <Table>
           <Table.Thead>
             <Table.Tr>
               <Table.Th>ID</Table.Th>

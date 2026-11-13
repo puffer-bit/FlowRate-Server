@@ -35,17 +35,14 @@ public class UnregisterPushTokenHandler : IMessageHandler<UnregisterPushTokenReq
         {
             await _devices.RemoveAsync(_coordinatorInstanceId, request.SenderId, request.Token);
 
-            _messageSender.SendMessageById(connectionId, request.ToResponse(PushTokenResult.NoError));
+            _messageSender.SendMessageById(connectionId, request.ToResponse());
             return HandleMessageResult.NoError;
         }
         catch (Exception exception)
         {
             _logger.LogError(exception, "Removing a push device of user {UserId} failed.", request.SenderId);
-            _messageSender.SendMessageById(connectionId, request.ToResponse(PushTokenResult.InternalError));
+            _messageSender.SendMessageById(connectionId, request.ToError(ErrorCode.Internal));
             return HandleMessageResult.InternalError;
         }
     }
-
-    public BaseMessage? CreateFailureResponse(UnregisterPushTokenRequest request) =>
-        request.ToResponse(PushTokenResult.InternalError);
 }

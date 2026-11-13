@@ -42,6 +42,8 @@ using Server.Application.Coordinator.Handlers.Roles;
 using Server.Application.Coordinator.Roles;
 using Server.Application.Coordinator.Handlers.Users.Security;
 using Server.Application.Orchestrator.Security;
+using Server.Application.Coordinator.Moderation;
+using Server.Core.Models.Moderation;
 
 
 
@@ -103,8 +105,11 @@ public class CoordinatorInstanceFactory : ICoordinatorInstanceFactory
         panelEvents.Watch(userManager);
         pushNotifier.Watch(userManager, chatSessionManager, roles);
         visibility.Watch(roles, sessionManager, userManager);
+        hybridSessionManager.WatchPermissions(roles, visibility);
+        hybridSessionManager.ConfigureCalls(chatSessionManager, userManager, messageSender, connectionsContext, _provider.GetRequiredService<TimeProvider>(), pushNotifier.NotifyCallAsync);
         mediaService.Watch(roles);
         pushReplyService.Watch(roles);
+        pushReplyService.WatchCalls(hybridSessionManager);
         var authenticator = CreateAuthenticator(logger, coordinatorInstanceContext);
         var heartbeatManager = CreateHeartbeatManager(logger, connectionsContext, new HeartbeatSettings(
             coordinatorInstanceModel.Heartbeat.Interval,
@@ -112,15 +117,26 @@ public class CoordinatorInstanceFactory : ICoordinatorInstanceFactory
         var connectionManager = CreateConnectionManager(logger, connectionsContext, heartbeatManager,
             new ClientConnectionFactory(rateLimits));
 
+        var moderation = new ModerationService(coordinatorInstanceModel.Id,
+            _provider.GetRequiredService<IBanRepository>(), _provider.GetRequiredService<IUserRepository>(),
+            userManager, connectionManager, hybridSessionManager, roles, _provider.GetRequiredService<TimeProvider>(), logger);
+        gatewayService.CheckAddress = async address =>
+        {
+            if (!coordinatorInstanceContext.Model.AccessList.IsAllowed(address)) return "This IP address is not allowed.";
+            return (await moderation.CheckAddressAsync(address))?.Reason;
+        };
+
+        var chatViewers = new ChatViewersHandler(chatSessionManager, userManager, roles, messageSender,
+            connectionManager, visibility, logger);
         var messagesHandlers = CreateMessageHandlers(logger, 
             coordinatorInstanceContext, coordinatorInstanceModel.Id, userManager, sessionManager, sessionLayout,
             chatSessionManager, hybridSessionManager, messageSender, heartbeatManager, connectionManager, authenticator,
-            mediaService, readService, roles, visibility);
+            mediaService, readService, roles, visibility, moderation).Append(chatViewers);
         
         var messageRouter = CreateMessageRouter(logger, messagesHandlers, connectionManager, rateLimits,
             new RequestAuthorizer(roles, hybridSessionManager, sessionManager));
         var settingsApplier = new CoordinatorSettingsApplier(logger, coordinatorInstanceContext, heartbeatManager,
-            sfuPool, messageSender, userManager, rateLimits, mediaService);
+            sfuPool, messageSender, userManager, rateLimits, mediaService, connectionManager);
         
         var coordinatorInstance = ActivatorUtilities.CreateInstance<CoordinatorInstance>(_provider, 
             coordinatorInstanceContext,
@@ -136,7 +152,9 @@ public class CoordinatorInstanceFactory : ICoordinatorInstanceFactory
             pushNotifier,
             mediaService,
             settingsApplier,
-            roles);
+            roles,
+            chatViewers,
+            moderation);
 
         return coordinatorInstance;
     }
@@ -155,7 +173,7 @@ public class CoordinatorInstanceFactory : ICoordinatorInstanceFactory
     private IAuthenticator CreateAuthenticator(ILogger logger, ICoordinatorInstanceContext coordinatorInstanceContext) =>
         ActivatorUtilities.CreateInstance<Authenticator>(_provider, logger, coordinatorInstanceContext);
     
-    private IGatewayService CreateGatewayService(ILogger logger, CoordinatorInstanceModel coordinatorInstanceModel,
+    private GatewayService CreateGatewayService(ILogger logger, CoordinatorInstanceModel coordinatorInstanceModel,
         IMessageParser parser, IMediaHttpEndpoints mediaEndpoints, IPushHttpEndpoints pushEndpoints,
         RequestRateLimits rateLimits) =>
         ActivatorUtilities.CreateInstance<GatewayService>(
@@ -186,7 +204,7 @@ public class CoordinatorInstanceFactory : ICoordinatorInstanceFactory
         ActivatorUtilities.CreateInstance<ChatSessionManager>(_provider, logger, coordinatorEventBus, mediaStorage,
             coordinatorInstanceId);
 
-    private IHybridSessionManager CreateHybridSessionManager(ILogger logger, string coordinatorInstanceId,
+    private HybridSessionManager CreateHybridSessionManager(ILogger logger, string coordinatorInstanceId,
         ICoordinatorEventBus coordinatorEventBus, ISFUNodeSelector sfuPool) =>
         ActivatorUtilities.CreateInstance<HybridSessionManager>(_provider, logger, coordinatorEventBus, sfuPool,
             coordinatorInstanceId);
@@ -232,9 +250,11 @@ public class CoordinatorInstanceFactory : ICoordinatorInstanceFactory
         IMediaService mediaService,
         ChatReadService readService,
         ICoordinatorPermissions permissions,
-        SessionVisibility visibility)
+        SessionVisibility visibility, ModerationService moderation)
     {
-        var userLogin = new UserLogin(userManager);
+        var userSessions = new UserSessions(_provider.GetRequiredService<IUserSessionRepository>(), connectionManager,
+            coordinatorInstanceId, _provider.GetRequiredService<TimeProvider>());
+        var userLogin = new UserLogin(userManager, userSessions, moderation);
         var pendingLogins = new PendingLogins();
         var secondStage = new SecondStageAuthentication(logger, messageSender, connectionManager, userLogin, pendingLogins);
         yield return new AuthenticationActionHandler(logger, messageSender, authenticator, connectionManager, userLogin,
@@ -252,10 +272,15 @@ public class CoordinatorInstanceFactory : ICoordinatorInstanceFactory
         yield return new UserPasskeyOptionsHandler(messageSender, securityReplies);
         yield return new UserPasskeyRegisterHandler(messageSender, securityReplies);
         yield return new UserPasskeyDeleteHandler(messageSender, securityReplies);
+        yield return new UserSessionsHandler(messageSender, connectionManager, userSessions);
+        yield return new UserSessionRevokeHandler(messageSender, connectionManager, userSessions);
+        yield return new UserIdentityResetHandler(messageSender, connectionManager, securityReplies,
+            _provider.GetRequiredService<IUserRepository>(), userSessions);
         
-        yield return ActivatorUtilities.CreateInstance<CreateSessionHandler>(_provider, sessionManager, messageSender);
+        yield return ActivatorUtilities.CreateInstance<CreateSessionHandler>(_provider, sessionManager, messageSender, userManager);
         yield return ActivatorUtilities.CreateInstance<LeaveSessionHandler>(_provider, hybridSessionManager, messageSender);
         yield return ActivatorUtilities.CreateInstance<DeleteSessionHandler>(_provider, sessionManager, messageSender);
+        yield return new ChangeGroupHandler(chatSessionManager, userManager, messageSender);
         yield return new ChangeHybridSessionSettingsHandler(hybridSessionManager, messageSender);
         yield return new ChangeSessionPermissionsHandler(sessionManager, permissions, visibility, messageSender);
         yield return new CreateSessionCategoryHandler(sessionLayout, messageSender);
@@ -264,10 +289,10 @@ public class CoordinatorInstanceFactory : ICoordinatorInstanceFactory
         yield return new MoveSessionHandler(sessionLayout, messageSender);
         yield return new MoveSessionCategoryHandler(sessionLayout, messageSender);
         yield return ActivatorUtilities.CreateInstance<KickFromSessionHandler>(_provider, hybridSessionManager, messageSender);
-        yield return ActivatorUtilities.CreateInstance<BanInSessionHandler>(_provider, hybridSessionManager, messageSender);
         yield return ActivatorUtilities.CreateInstance<ApproveInSessionHandler>(_provider, hybridSessionManager, messageSender);
         yield return ActivatorUtilities.CreateInstance<RejectInSessionHandler>(_provider, hybridSessionManager, messageSender);
         
+        yield return new Server.Application.Coordinator.Handlers.Chat.DirectCallHandler(hybridSessionManager, messageSender);
         yield return ActivatorUtilities.CreateInstance<HybridSessionJoinHandler>(_provider, hybridSessionManager, messageSender);
         yield return ActivatorUtilities.CreateInstance<HybridSessionConnectHandler>(_provider, hybridSessionManager, messageSender);
         yield return ActivatorUtilities.CreateInstance<HybridSessionPeerListRequestHandler>(_provider, hybridSessionManager, messageSender);
@@ -285,23 +310,30 @@ public class CoordinatorInstanceFactory : ICoordinatorInstanceFactory
         yield return ActivatorUtilities.CreateInstance<HybridSessionPokeHandler>(_provider, hybridSessionManager, messageSender);
         
         yield return ActivatorUtilities.CreateInstance<SendMessageHandler>(_provider, chatSessionManager, messageSender, userManager);
+        yield return ActivatorUtilities.CreateInstance<SetMessageReactionHandler>(_provider, chatSessionManager, messageSender);
         yield return ActivatorUtilities.CreateInstance<EditTextMessageHandler>(_provider, chatSessionManager, messageSender);
         yield return new DeleteTextMessageHandler(chatSessionManager, messageSender, permissions);
         yield return ActivatorUtilities.CreateInstance<ChatSessionHistoryHandler>(_provider, chatSessionManager, messageSender);
         yield return ActivatorUtilities.CreateInstance<ChatSessionMessageHandler>(_provider, chatSessionManager, messageSender);
         yield return ActivatorUtilities.CreateInstance<ChatSessionHistoryPageHandler>(_provider, chatSessionManager, messageSender);
         yield return ActivatorUtilities.CreateInstance<ChatSessionChangesHandler>(_provider, chatSessionManager, messageSender);
+        yield return new SetMessagePinnedHandler(chatSessionManager, messageSender);
+        yield return new ChatPinnedMessagesHandler(chatSessionManager, messageSender);
+        yield return new ChatHistoryWindowHandler(chatSessionManager, messageSender);
         yield return new ChatReadStatesHandler(readService, messageSender);
         yield return new ChatMarkReadHandler(readService, messageSender);
+        yield return new ChatTypingHandler(chatSessionManager, userManager, visibility, messageSender);
 
-        yield return new SessionInfoHandler(visibility, sessionLayout, messageSender);
+        yield return new SessionInfoHandler(visibility, sessionLayout, messageSender, hybridSessionManager);
         yield return ActivatorUtilities.CreateInstance<UserActionHandler>(_provider, messageSender, userManager, logger);
         yield return new UserSearchHandler(messageSender, userManager);
         yield return new UserListHandler(messageSender, userManager);
         yield return ActivatorUtilities.CreateInstance<ChangeUserNameHandler>(_provider, messageSender, userManager, logger);
         yield return new SetAvatarHandler(logger, messageSender, userManager, mediaService);
         yield return new SetUserStatusHandler(logger, messageSender, userManager);
-        yield return new SetUserStateHandler(logger, messageSender, userManager, connectionManager, hybridSessionManager);
+        yield return new SetUserStateHandler(messageSender, userManager, moderation);
+        yield return new BansHandler(messageSender, moderation);
+        yield return new RevokeBanHandler(messageSender, moderation);
         yield return new DeleteUserHandler(logger, messageSender, userManager, connectionManager);
         yield return ActivatorUtilities.CreateInstance<RegisterPushTokenHandler>(_provider, logger, messageSender, coordinatorInstanceId);
         yield return ActivatorUtilities.CreateInstance<UnregisterPushTokenHandler>(_provider, logger, messageSender, coordinatorInstanceId);

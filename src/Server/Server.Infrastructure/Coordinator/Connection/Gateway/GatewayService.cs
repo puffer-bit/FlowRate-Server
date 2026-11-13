@@ -23,6 +23,7 @@ public class GatewayService : IGatewayService
     private static readonly TimeSpan StopTimeout = TimeSpan.FromSeconds(10);
 
     public bool IsGatewayReady { get; private set; }
+    public Func<string, Task<string?>>? CheckAddress { get; set; }
 
     private WebApplication? _app;
     private CancellationTokenSource? _stopping;
@@ -85,6 +86,18 @@ public class GatewayService : IGatewayService
         var app = builder.Build();
         var stopping = new CancellationTokenSource();
 
+        app.Use(async (context, next) =>
+        {
+            var ip = Server.Core.Models.Moderation.GlobalBan.NormalizeAddress(context.Connection.RemoteIpAddress?.ToString()) ?? "";
+            if (CheckAddress != null && await CheckAddress(ip) is { } reason)
+            {
+                context.Response.StatusCode = StatusCodes.Status403Forbidden;
+                context.Response.Headers["FlowRate-Ban-Reason"] = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(reason));
+                await context.Response.WriteAsJsonAsync(new { reason });
+                return;
+            }
+            await next(context);
+        });
         app.UseWebSockets(new WebSocketOptions { KeepAliveInterval = TimeSpan.Zero });
         _mediaEndpoints?.Map(app);
         _pushEndpoints?.Map(app);
@@ -164,7 +177,8 @@ public class GatewayService : IGatewayService
             {
                 GatewayMetrics.OpenConnections.Add(-1);
             }
-            context.Abort();
+            if (socket.State != System.Net.WebSockets.WebSocketState.Closed)
+                context.Abort();
         }
         finally
         {

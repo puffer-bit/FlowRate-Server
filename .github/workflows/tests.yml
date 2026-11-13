@@ -1,28 +1,34 @@
-# Runs the tests of the server on every push and pull request, and type-checks the SFU and the control panel.
+# Tests the server and SFU and builds the control panel, including before a release.
 #
-# The tests need neither Docker nor the SFU: the SFU is faked behind its gateway.
+# The .NET tests need neither Docker nor the SFU: it is faked behind its gateway.
 name: Tests
 
 on:
   push:
   pull_request:
   workflow_dispatch:
+  workflow_call:
 
 permissions:
   contents: read
 
 concurrency:
-  group: tests-${{ github.ref }}
+  group: tests-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
 
 jobs:
   test:
     name: Tests
     # Pinned so that a runner image migration does not change the build unannounced
     runs-on: ubuntu-24.04
-    env:
-      DOTNET_NOLOGO: true
-      DOTNET_CLI_TELEMETRY_OPTOUT: true
     steps:
       - uses: actions/checkout@v7
         with:
@@ -34,29 +40,27 @@ jobs:
 
       - name: Test
         working-directory: src
-        run: |
-          printf '### Tests\n\n' >> "$GITHUB_STEP_SUMMARY"
-          status=0
-          dotnet test FlowRateServer.sln -c Release --logger trx \
-              --results-directory "$GITHUB_WORKSPACE/TestResults" 2>&1 | tee "$RUNNER_TEMP/test.log" || status=1
-          # The "Passed!"/"Failed!" totals of each test assembly go to the run summary
-          grep -E '^(Passed|Failed)!' "$RUNNER_TEMP/test.log" | sed 's/^/    /' >> "$GITHUB_STEP_SUMMARY" || true
-          exit $status
+        run: bash ../.github/scripts/test-dotnet.sh FlowRateServer.sln
 
       - name: Upload test results
         if: failure()
         uses: actions/upload-artifact@v7
         with:
-          name: test-results
+          name: test-results-ubuntu-24.04
           path: TestResults
+          if-no-files-found: warn
 
-  typecheck:
-    name: Type check (${{ matrix.project }})
+  web:
+    name: Validate (${{ matrix.project }})
     runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
       matrix:
-        project: [src/Sfu/mediasoup, src/Web/admin-panel]
+        include:
+          - project: src/Sfu/mediasoup
+            command: npm test
+          - project: src/Web/admin-panel
+            command: npm run build
     steps:
       - uses: actions/checkout@v7
 
@@ -66,9 +70,8 @@ jobs:
           cache: npm
           cache-dependency-path: ${{ matrix.project }}/package-lock.json
 
-      # No install scripts: the mediasoup worker is not needed to type-check
-      - name: Type check
+      - name: Validate
         working-directory: ${{ matrix.project }}
         run: |
-          npm ci --ignore-scripts
-          npx tsc -b --noEmit
+          npm ci
+          ${{ matrix.command }}

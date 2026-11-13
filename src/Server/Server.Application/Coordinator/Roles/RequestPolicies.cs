@@ -7,7 +7,6 @@ using Shared.Models.Requests.Heartbeat;
 using Shared.Models.Requests.SessionActions.ChatSession;
 using Shared.Models.Requests.SessionActions.Generic;
 using Shared.Models.Requests.SessionActions.HybridSession;
-using Shared.Models.Requests.WebRTC;
 using static Server.Application.Coordinator.Roles.RequestPolicy;
 
 namespace Server.Application.Coordinator.Roles;
@@ -21,15 +20,17 @@ public static class RequestPolicies
     public static RequestPolicy? Of(BaseMessage message) => message switch
     {
         AuthRequest or HeartbeatRequest => Open,
+        DirectCallRequest => Open, // Call manager verifies membership and the selected device.
 
         CoordinatorInfoRequest or CoordinatorUserInfoRequest or CoordinatorUserSearchRequest
             or RegisterPushTokenRequest or UnregisterPushTokenRequest or MediaTokenRequest => Open,
-        CoordinatorChangeUsernameRequest request => OnUser(request.SenderId, request.UserId),
-        CoordinatorSetAvatarRequest request => OnUser(request.SenderId, request.UserId),
+        CoordinatorChangeUsernameRequest request => OnUser(request.SenderId, request.TargetUserId),
+        CoordinatorSetAvatarRequest request => OnUser(request.SenderId, request.TargetUserId),
         CoordinatorSetUserStatusRequest => Open,
         // Acting on oneself is refused by the handlers
-        CoordinatorSetUserStateRequest request => Require(Permission.BanMembers).Against(request.UserTargetId),
-        CoordinatorDeleteUserRequest request => Require(Permission.BanMembers).Against(request.UserTargetId),
+        CoordinatorSetUserStateRequest request => Require(Permission.BanMembers).Against(request.TargetUserId),
+        CoordinatorBansRequest or CoordinatorRevokeBanRequest => Require(Permission.BanMembers),
+        CoordinatorDeleteUserRequest request => Require(Permission.BanMembers).Against(request.TargetUserId),
         CoordinatorSettingsRequest or CoordinatorUserListRequest => Require(Permission.ViewCoordinatorSettings),
         CoordinatorUpdateSettingsRequest => Require(Permission.ManageCoordinatorSettings),
 
@@ -39,27 +40,30 @@ public static class RequestPolicies
             or CoordinatorReorderRolesRequest or CoordinatorAssignRoleRequest or CoordinatorUnassignRoleRequest
             => Require(Permission.ManageRoles),
 
+        CreateSessionRequest { CreateSessionModel.SessionData: Shared.Models.Requests.SessionActions.Generic.Models.SessionData.ChatSessionCreateData { Kind: not ChatKind.ServerChannel, SessionType: SessionType.Chat } } => Open,
         CreateSessionRequest => Require(Permission.CreateSessions),
+        ChangeGroupRequest request => InSession(request.SessionId, View),
         DeleteSessionRequest request => InSession(request.SessionId, Permission.ManageSessions),
         ChangeHybridSessionSettingsRequest request => InSession(request.SessionId, Permission.ManageSessions),
         // Which roles and permissions the sender may change, the handler checks
         ChangeSessionPermissionsRequest request =>
             InSession(request.SessionId, Permission.ManageSessions | Permission.ManageRoles),
         CreateSessionCategoryRequest or RenameSessionCategoryRequest or DeleteSessionCategoryRequest
-            or MoveSessionRequest or MoveSessionCategoryRequest => Require(Permission.ManageSessions),
+            or MoveSessionCategoryRequest => Require(Permission.ManageSessions),
         // A session the sender may not see shows only to roles that see it; leaving is never refused
+        MoveSessionRequest request => InSession(request.SessionId, Permission.ManageSessions),
         JoinSessionRequest request => InSession(request.SessionId, Permission.ViewSessions),
         LeaveSessionRequest or SessionInfoRequest => Open,
 
         KickFromSessionRequest request =>
-            InSession(request.SessionId, Permission.KickMembers).Against(request.UserTargetId),
-        BanInSessionRequest request =>
-            InSession(request.SessionId, Permission.BanMembers).Against(request.UserTargetId),
+            InSession(request.SessionId, Permission.KickMembers).Against(request.TargetUserId),
         ApproveUserRequest request => InSession(request.SessionId, Permission.ApproveMembers),
         RejectUserRequest request => InSession(request.SessionId, Permission.ApproveMembers),
 
         HybridSessionJoinRequest request => InSession(request.SessionId, View | Permission.JoinSessions),
         HybridSessionStartVoiceRequest request => InSession(request.SessionId, View | Permission.Speak),
+        HybridSessionSetMicrophoneMuteRequest { IsMuted: false } request =>
+            InSession(request.SessionId, View | Permission.Speak),
         HybridSessionStartVideoRequest request => InSession(request.SessionId, View | Permission.ShareVideo),
         HybridSessionStartScreenShareRequest request => InSession(request.SessionId, View | Permission.ShareVideo),
         HybridSessionConnectTransportRequest request => InSession(request.SessionId, View),
@@ -69,25 +73,33 @@ public static class RequestPolicies
         // Stopping and muting only take away, so they stay open to whoever is inside
         HybridSessionLeaveRequest or HybridSessionStopVideoRequest or HybridSessionStopScreenShareRequest
             or HybridSessionStopVoiceRequest or HybridSessionSetMicrophoneMuteRequest
-            or HybridSessionSetSoundMuteRequest or HybridSessionSetAfkRequest or WebRtcConnectRequest => Open,
+            or HybridSessionSetSoundMuteRequest or HybridSessionSetAfkRequest => Open,
         HybridSessionPokeRequest request => InSession(request.SessionId, View | Permission.PokeMembers),
 
-        SendTextMessageRequest request => InSession(request.ChatId, View | Permission.SendMessages
+        SendMessageRequest request => InSession(request.ChatId, View | Permission.SendMessages
             | (HasAttachments(request) ? Permission.AttachFiles : Permission.None)),
-        EditTextMessageRequest request => InSession(request.ChatId, View | Permission.SendMessages),
+        ChatTypingRequest request => InSession(request.ChatId, View | Permission.SendMessages),
+        SetMessagePinnedRequest request => InSession(request.ChatId, View | Permission.ManageMessages),
+        ChatPinnedMessagesRequest request => InSession(request.ChatId, View),
+        ChatHistoryWindowRequest request => InSession(request.ChatId, View),
+        SetMessageReactionRequest request => InSession(request.ChatId, View | Permission.SendMessages),
+        EditMessageRequest request => InSession(request.ChatId, View | Permission.SendMessages),
         // Deleting messages of others needs ManageMessages; the chat checks it, knowing the author
-        DeleteTextMessageRequest request => InSession(request.ChatId, View),
+        DeleteMessageRequest request => InSession(request.ChatId, View),
         ChatSessionHistoryRequest request => InSession(request.ChatId, View),
         ChatSessionMessageRequest request => InSession(request.ChatId, View),
         ChatSessionHistoryPageRequest request => InSession(request.ChatId, View),
         ChatSessionChangesRequest request => InSession(request.ChatId, View),
         ChatMarkReadRequest request => InSession(request.ChatId, View),
+        ChatViewersRequest { Subscribe: false } => Open,
+        ChatViewersRequest request => InSession(request.ChatId, View),
         ChatReadStatesRequest => Open,
 
         // The sender's own account; changes are proven with the current password and code by the handlers
         UserSecurityInfoRequest or UserSetPasswordRequest or UserTwoFactorSetupRequest or UserTwoFactorEnableRequest
             or UserTwoFactorDisableRequest or UserPasskeyOptionsRequest or UserPasskeyRegisterRequest
-            or UserPasskeyDeleteRequest => Open,
+            or UserPasskeyDeleteRequest or UserSessionsRequest or UserSessionRevokeRequest
+            or UserIdentityResetRequest => Open,
 
         _ => null
     };
@@ -98,19 +110,20 @@ public static class RequestPolicies
         AuthRequest or HeartbeatRequest => true,
 
         CoordinatorInfoRequest or CoordinatorUserInfoRequest or CoordinatorUserSearchRequest
-            or CoordinatorSettingsRequest or CoordinatorUserListRequest or CoordinatorRolesRequest
+            or CoordinatorSettingsRequest or CoordinatorUserListRequest or CoordinatorRolesRequest or CoordinatorBansRequest
             or RegisterPushTokenRequest or UnregisterPushTokenRequest or MediaTokenRequest => true,
 
         JoinSessionRequest request => request.SessionType == SessionType.Chat,
         LeaveSessionRequest or SessionInfoRequest or HybridSessionLeaveRequest => true,
 
-        ChatSessionHistoryRequest or ChatSessionMessageRequest or ChatSessionHistoryPageRequest
-            or ChatSessionChangesRequest or ChatReadStatesRequest or ChatMarkReadRequest => true,
+        ChatPinnedMessagesRequest or ChatHistoryWindowRequest or ChatSessionHistoryRequest or ChatSessionMessageRequest or ChatSessionHistoryPageRequest
+            or ChatSessionChangesRequest or ChatReadStatesRequest or ChatMarkReadRequest or ChatViewersRequest => true,
 
         // Securing one's own account is never held back
         UserSecurityInfoRequest or UserSetPasswordRequest or UserTwoFactorSetupRequest or UserTwoFactorEnableRequest
             or UserTwoFactorDisableRequest or UserPasskeyOptionsRequest or UserPasskeyRegisterRequest
-            or UserPasskeyDeleteRequest => true,
+            or UserPasskeyDeleteRequest or UserSessionsRequest or UserSessionRevokeRequest
+            or UserIdentityResetRequest => true,
 
         _ => false
     };
@@ -118,8 +131,8 @@ public static class RequestPolicies
     private const Permission View = Permission.ViewSessions;
 
     // An invalid request has no message, and is refused before it is handled
-    private static bool HasAttachments(SendTextMessageRequest request) =>
-        request.MessageModel is { } message
+    private static bool HasAttachments(SendMessageRequest request) =>
+        request.Message is { } message
         && (message.Images.Count > 0 || message.Video.Count > 0 || message.Files.Count > 0);
 
     private static RequestPolicy OnUser(int senderId, int? userId) =>

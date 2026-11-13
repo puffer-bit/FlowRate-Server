@@ -1,3 +1,4 @@
+using Server.Application.Abstractions.Sfu;
 using Shared.Models.Media;
 using Microsoft.Extensions.Logging.Abstractions;
 using Server.Application.Coordinator.Events;
@@ -18,9 +19,10 @@ public class HybridSessionPeerManagerTests
     private readonly FakeSfuGateway _gateway = new();
     private readonly RecordingEventBus _events = new();
 
-    private async Task<HybridSessionPeerManager> CreateManager(bool isHostMustApprove = false)
+    private async Task<HybridSessionPeerManager> CreateManager(bool isHostMustApprove = false,
+        HybridSessionModel? model = null)
     {
-        var model = HybridSessionModel.Create("coordinator", "room", 10, HostId, WebRTCEngine.Mediasoup, isHostMustApprove);
+        model ??= HybridSessionModel.Create("coordinator", "room", 10, HostId, WebRTCEngine.Mediasoup, isHostMustApprove);
         model.Id = 7;
 
         var manager = new HybridSessionPeerManager(NullLogger.Instance, _events, model);
@@ -32,8 +34,8 @@ public class HybridSessionPeerManagerTests
     {
         foreach (var userId in userIds)
         {
-            Assert.Equal(HybridSessionJoinResult.NoError, (await manager.AddPeerAsync(userId, "epoch")).result);
-            Assert.Equal(HybridSessionConnectTransportResult.NoError,
+            Assert.Equal(null, (await manager.AddPeerAsync(userId, "epoch")).result);
+            Assert.Equal(null,
                 await manager.ConnectPeerAsync(userId, FakeSfuGateway.Dtls()));
         }
     }
@@ -41,19 +43,214 @@ public class HybridSessionPeerManagerTests
     private static HybridSessionPeerState StateOf(HybridSessionPeerManager manager, int userId) =>
         manager.GetAllPeerSnapshots()[userId].State;
 
-    // Joining
+    [Fact]
+    public async Task Camera_AutoRoutesToConnectedPeers_AndLateJoiners_WithoutScreenAudio()
+    {
+        var manager = await CreateManager();
+        await JoinAndConnect(manager, HostId, GuestId);
+        var (error, camera) = await manager.StartVideoShareAsync(HostId);
+        Assert.Null(error);
+        Assert.Equal(MediaSourceType.Camera, camera!.SourceType);
+        var first = Assert.Single(_events.Of<HybridSessionPeerStartedVideoShareEvent>());
+        Assert.Equal(GuestId, first.ListenerUserId);
+        Assert.Equal(MediaType.Video, first.Inbound.MediaType);
+        Assert.Equal(MediaSourceType.Camera, first.Inbound.SourceType);
+        Assert.Equal(camera, (await manager.StartVideoShareAsync(HostId)).outbound);
+        Assert.Single(_events.Of<HybridSessionPeerStartedVideoShareEvent>());
+        await JoinAndConnect(manager, OtherGuestId);
+        Assert.Equal(2, _events.Of<HybridSessionPeerStartedVideoShareEvent>().Count);
+        Assert.Contains(_events.Of<HybridSessionPeerStartedVideoShareEvent>(), e => e.ListenerUserId == OtherGuestId);
+        Assert.Empty(_events.Of<HybridSessionPeerStartedVoiceShareEvent>());
+        Assert.False(manager.GetAllPeerSnapshots()[HostId].IsScreenShareActive);
+    }
 
     [Fact]
-    public async Task AddPeer_WhenSfuIsNotConnected_ReturnsSfuNotActive()
+    public async Task Camera_StopAndRestartAreIndependentOfScreen_AndLeaveReleasesCamera()
+    {
+        var manager = await CreateManager();
+        await JoinAndConnect(manager, HostId, GuestId);
+        var (_, camera) = await manager.StartVideoShareAsync(HostId);
+        var (_, screen, _) = await manager.StartScreenShareAsync(HostId, withAudio: false);
+        Assert.Null(await manager.StopVideoShareAsync(HostId, HostId));
+        Assert.Equal(1, _gateway.CallCount($"RemoveOutbound:{camera!.Id}"));
+        Assert.Equal(0, _gateway.CallCount($"RemoveOutbound:{screen!.Id}"));
+        Assert.Single(_events.Of<HybridSessionPeerStoppedVideoShareEvent>());
+        Assert.Null(await manager.StopVideoShareAsync(HostId, HostId));
+        Assert.Single(_events.Of<HybridSessionPeerStoppedVideoShareEvent>());
+        var (_, restarted) = await manager.StartVideoShareAsync(HostId);
+        Assert.NotEqual(camera.Id, restarted!.Id);
+        await manager.RemovePeerAsync(HostId);
+        Assert.Equal(1, _gateway.CallCount($"RemoveOutbound:{restarted.Id}"));
+    }
+
+    [Fact]
+    public async Task Camera_WaitingForAdmissionCannotPublish()
+    {
+        var manager = await CreateManager(isHostMustApprove: true);
+        await manager.AddPeerAsync(GuestId, "epoch");
+        Assert.Equal(ErrorCode.NotAdmitted, (await manager.StartVideoShareAsync(GuestId)).result);
+        Assert.Empty(_events.Of<HybridSessionPeerStartedVideoShareEvent>());
+    }
+
+    // Joining
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task AddPeer_AtCapacity_RejectsNewPeersButAllowsRejoiningAndReusesFreedSlots(bool ready)
+    {
+        var model = HybridSessionModel.Create("coordinator", "room", 2, HostId, WebRTCEngine.Mediasoup, true);
+        var manager = await CreateManager(model: model);
+        _gateway.IsConnected = ready;
+        Assert.Null((await manager.AddPeerAsync(HostId, "epoch", "host")).result);
+        Assert.Null((await manager.AddPeerAsync(GuestId, "epoch", "guest")).result);
+        var transports = _gateway.CallCount("CreatePeerTransport");
+        var joined = _events.Of<HybridSessionPeerJoinedEvent>().Count;
+
+        var (error, transport) = await manager.AddPeerAsync(OtherGuestId, "epoch");
+
+        Assert.Equal(ErrorCode.SessionFull, error);
+        Assert.Null(transport);
+        Assert.False(manager.HasPeer(OtherGuestId));
+        Assert.Equal(transports, _gateway.CallCount("CreatePeerTransport"));
+        Assert.Equal(joined, _events.Of<HybridSessionPeerJoinedEvent>().Count);
+        Assert.Null((await manager.AddPeerAsync(GuestId, "next", "other-device")).result);
+        Assert.Equal(2, manager.GetAllPeerSnapshots().Count);
+
+        Assert.Null(await manager.RemovePeerAsync(GuestId));
+        Assert.Null((await manager.AddPeerAsync(OtherGuestId, "epoch")).result);
+        Assert.Equal(2, manager.GetAllPeerSnapshots().Count);
+    }
+
+    [Fact]
+    public async Task AddPeer_ConcurrentJoins_CannotExceedCapacity()
+    {
+        var model = HybridSessionModel.Create("coordinator", "room", 2, HostId, WebRTCEngine.Mediasoup);
+        var manager = await CreateManager(model: model);
+        await manager.AddPeerAsync(HostId, "epoch");
+
+        var results = await Task.WhenAll(Enumerable.Range(10, 20)
+            .Select(id => manager.AddPeerAsync(id, "epoch")));
+
+        Assert.Single(results, result => result.result == null);
+        Assert.Equal(19, results.Count(result => result.result == ErrorCode.SessionFull));
+        Assert.Equal(2, manager.GetAllPeerSnapshots().Count);
+    }
+
+    [Fact]
+    public async Task AddPeer_UsesUpdatedCapacity()
+    {
+        var model = HybridSessionModel.Create("coordinator", "room", 2, HostId, WebRTCEngine.Mediasoup);
+        var manager = await CreateManager(model: model);
+        await JoinAndConnect(manager, HostId, GuestId);
+        model.ChangeCapacity(1);
+        Assert.Equal(ErrorCode.SessionFull, (await manager.AddPeerAsync(OtherGuestId, "epoch")).result);
+        Assert.Null((await manager.AddPeerAsync(HostId, "epoch")).result);
+        model.ChangeCapacity(3);
+        Assert.Null((await manager.AddPeerAsync(OtherGuestId, "epoch")).result);
+    }
+
+    [Fact]
+    public async Task RemovePeer_AnnouncesLeaveBeforeSfuCleanup_AndReleasesResourcesInParallel()
+    {
+        var manager = await CreateManager();
+        await JoinAndConnect(manager, HostId, GuestId);
+        await manager.StartVoiceShareAsync(GuestId);
+        await manager.StartVoiceShareAsync(HostId);
+        await manager.StartScreenShareAsync(HostId, withAudio: true);
+        _gateway.MediaRemovalGate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        var removal = manager.RemovePeerAsync(HostId);
+        try
+        {
+            Assert.False(removal.IsCompleted);
+            Assert.False(manager.HasPeer(HostId));
+            Assert.Equal(HostId, Assert.Single(_events.Of<HybridSessionPeerLeftEvent>()).UserId);
+            Assert.Equal(3, _gateway.Calls.Count(c => c.StartsWith("RemoveOutbound:")));
+            Assert.Single(_gateway.Calls, c => c.StartsWith($"RemoveInbound:in-{HostId}-"));
+            Assert.Empty(_events.Of<HybridSessionPeerStoppedVoiceShareEvent>());
+            Assert.Empty(_events.Of<HybridSessionPeerStoppedScreenShareEvent>());
+        }
+        finally
+        {
+            _gateway.MediaRemovalGate.TrySetResult();
+            await removal;
+        }
+        Assert.Equal(1, _gateway.CallCount($"ClosePeerTransport:{HostId}"));
+    }
+
+    [Fact]
+    public async Task Rejoin_WhenOneResourceCleanupFails_ReleasesTheOthersAndForgetsOldRoutes()
+    {
+        var manager = await CreateManager();
+        await JoinAndConnect(manager, HostId, GuestId);
+        var (_, guestVoice) = await manager.StartVoiceShareAsync(GuestId);
+        var (_, voice) = await manager.StartVoiceShareAsync(HostId);
+        var (_, screen, audio) = await manager.StartScreenShareAsync(HostId, withAudio: true);
+        var failedInbound = $"RemoveInbound:in-{HostId}-{guestVoice!.Id}";
+        _gateway.FailRemovalFor.Add(failedInbound);
+
+        Assert.Null((await manager.AddPeerAsync(HostId, "new-epoch")).result);
+
+        Assert.Equal(1, _gateway.CallCount(failedInbound));
+        foreach (var outbound in new[] { voice!, screen!, audio! })
+            Assert.Equal(1, _gateway.CallCount($"RemoveOutbound:{outbound.Id}"));
+        Assert.True(manager.GetAllPeerSnapshots()[HostId].IsMicrophoneMuted);
+        Assert.False(manager.GetAllPeerSnapshots()[HostId].IsScreenShareActive);
+        var (_, nextVoice) = await manager.StartVoiceShareAsync(HostId);
+        Assert.NotEqual(voice!.Id, nextVoice!.Id);
+    }
+
+    [Fact]
+    public async Task RemovePeer_ReleasesVoiceWithoutAnnouncingAnIntermediateMute()
+    {
+        var manager = await CreateManager();
+        await JoinAndConnect(manager, HostId, GuestId);
+        var (_, outbound) = await manager.StartVoiceShareAsync(HostId);
+
+        await manager.RemovePeerAsync(HostId);
+
+        Assert.Equal(1, _gateway.CallCount($"RemoveOutbound:{outbound!.Id}"));
+        Assert.Empty(_events.Of<HybridSessionPeerStoppedVoiceShareEvent>());
+        Assert.Empty(_events.Of<HybridSessionPeerMuteMicrophoneEvent>());
+        Assert.Equal(HostId, Assert.Single(_events.Of<HybridSessionPeerLeftEvent>()).UserId);
+    }
+
+    [Fact]
+    public async Task Microphone_StaysMutedUntilVoiceStarts_AndMuteStateIsAnnounced()
+    {
+        var manager = await CreateManager();
+        await JoinAndConnect(manager, HostId);
+
+        Assert.True(manager.GetAllPeerSnapshots()[HostId].IsMicrophoneMuted);
+        Assert.True(Assert.Single(_events.Of<HybridSessionPeerJoinedEvent>()).Peer.IsMicrophoneMuted);
+
+        await manager.StartVoiceShareAsync(HostId);
+
+        Assert.False(manager.GetAllPeerSnapshots()[HostId].IsMicrophoneMuted);
+        Assert.Equal(HostId, Assert.Single(_events.Of<HybridSessionPeerUnmuteMicrophoneEvent>()).UserId);
+
+        await manager.StopVoiceShareAsync(HostId, HostId);
+
+        Assert.True(manager.GetAllPeerSnapshots()[HostId].IsMicrophoneMuted);
+        Assert.Equal(HostId, Assert.Single(_events.Of<HybridSessionPeerMuteMicrophoneEvent>()).UserId);
+    }
+
+    [Fact]
+    public async Task AddPeer_WhenSfuIsNotConnected_JoinsWhileWaitingForServer()
     {
         var manager = await CreateManager();
         _gateway.IsConnected = false;
 
         var (result, transport) = await manager.AddPeerAsync(HostId, "epoch");
 
-        Assert.Equal(HybridSessionJoinResult.SFUNotActive, result);
+        Assert.Null(result);
         Assert.Null(transport);
-        Assert.False(manager.HasPeer(HostId));
+        Assert.True(manager.HasPeer(HostId));
+        Assert.Equal(HybridSessionPeerState.WaitingForServer, StateOf(manager, HostId));
+        Assert.Empty(_gateway.Calls);
+        Assert.Equal(HybridSessionPeerState.WaitingForServer,
+            Assert.Single(_events.Of<HybridSessionPeerJoinedEvent>()).Peer.State);
     }
 
     [Fact]
@@ -64,7 +261,7 @@ public class HybridSessionPeerManagerTests
         var (result, transport) = await manager.AddPeerAsync(HostId, "epoch");
         await manager.AddPeerAsync(GuestId, "epoch");
 
-        Assert.Equal(HybridSessionJoinResult.NoError, result);
+        Assert.Equal(null, result);
         Assert.NotNull(transport);
         Assert.Equal(1, _gateway.CallCount("LoadSession"));
         Assert.Equal(2, _events.Of<HybridSessionPeerJoinedEvent>().Count);
@@ -78,7 +275,7 @@ public class HybridSessionPeerManagerTests
 
         var (result, _) = await manager.AddPeerAsync(HostId, "epoch");
 
-        Assert.Equal(HybridSessionJoinResult.SFUError, result);
+        Assert.Equal(ErrorCode.SFUError, result);
         Assert.False(manager.HasPeer(HostId));
         Assert.Equal(1, _gateway.CallCount("UnloadSession"));
         Assert.Empty(_events.Of<HybridSessionPeerJoinedEvent>());
@@ -96,7 +293,7 @@ public class HybridSessionPeerManagerTests
 
         var (result, _) = await manager.AddPeerAsync(HostId, "epoch");
 
-        Assert.Equal(HybridSessionJoinResult.NoError, result);
+        Assert.Equal(null, result);
         Assert.Equal(1, newNode.CallCount("LoadSession"));
         Assert.Single(_events.Of<HybridSessionSFUNodeChangedEvent>());
     }
@@ -126,9 +323,11 @@ public class HybridSessionPeerManagerTests
         Assert.Equal(HybridSessionPeerState.WaitingForServer, StateOf(manager, GuestId));
         Assert.Empty(_events.Of<HybridSessionPeerKickedEvent>());
         var changed = Assert.Single(_events.Of<HybridSessionStateChangedEvent>());
-        Assert.Equal(HybridSessionNodeState.WaitingForSfuNode, changed.State);
+        Assert.Equal(HybridSessionNodeState.WaitingForSFUNode, changed.State);
         Assert.Equal(1, _gateway.CallCount("UnloadSession"));
-        Assert.Equal(HybridSessionJoinResult.SFUNotActive, (await manager.AddPeerAsync(HostId, "epoch")).result);
+        var (result, transport) = await manager.AddPeerAsync(HostId, "epoch");
+        Assert.Null(result);
+        Assert.Null(transport);
 
         // The detached node is not followed any more
         await _gateway.RaiseConnectionLost();
@@ -159,11 +358,11 @@ public class HybridSessionPeerManagerTests
         var newNode = new FakeSfuGateway { NodeId = 2 };
         await manager.ChangeGatewayAsync(newNode);
 
-        Assert.Equal([HybridSessionNodeState.WaitingForSfuNode, HybridSessionNodeState.Active],
+        Assert.Equal([HybridSessionNodeState.WaitingForSFUNode, HybridSessionNodeState.Active],
             _events.Of<HybridSessionStateChangedEvent>().Select(changed => changed.State));
         Assert.Single(_events.Of<HybridSessionSFUNodeChangedEvent>());
         Assert.Equal(HybridSessionPeerState.WaitingForServer, StateOf(manager, HostId));
-        Assert.Equal(HybridSessionJoinResult.NoError, (await manager.AddPeerAsync(HostId, "epoch")).result);
+        Assert.Equal(null, (await manager.AddPeerAsync(HostId, "epoch")).result);
         Assert.Equal(1, newNode.CallCount("LoadSession"));
     }
 
@@ -186,7 +385,7 @@ public class HybridSessionPeerManagerTests
         await _gateway.RaiseConnectionLost();
         var callsBefore = _gateway.Calls.Count;
 
-        Assert.Equal(LeaveSessionResult.NoError, await manager.RemovePeerAsync(HostId));
+        Assert.Equal(null, await manager.RemovePeerAsync(HostId));
 
         Assert.False(manager.HasPeer(HostId));
         Assert.Equal(callsBefore, _gateway.Calls.Count);
@@ -218,11 +417,142 @@ public class HybridSessionPeerManagerTests
 
         var (result, _) = await manager.AddPeerAsync(GuestId, "epoch");
 
-        Assert.Equal(HybridSessionJoinResult.NoError, result);
+        Assert.Equal(null, result);
         Assert.Equal(HybridSessionPeerState.WaitingForApprove, StateOf(manager, GuestId));
     }
 
     // Devices
+
+    [Fact]
+    public async Task AddPeer_WithoutAnAssignedNode_JoinsAndCanLeave()
+    {
+        var manager = await CreateManager();
+        await manager.ChangeGatewayAsync(null);
+
+        var (result, transport) = await manager.AddPeerAsync(GuestId, "epoch", "device");
+
+        Assert.Null(result);
+        Assert.Null(transport);
+        Assert.True(manager.IsPeerOf(GuestId, "device"));
+        Assert.Equal(HybridSessionPeerState.WaitingForServer, StateOf(manager, GuestId));
+        Assert.Equal(ErrorCode.SFUUnavailable, await manager.ConnectPeerAsync(GuestId, FakeSfuGateway.Dtls()));
+        Assert.Null(await manager.RemovePeerAsync(GuestId));
+        Assert.False(manager.HasPeer(GuestId));
+        Assert.Empty(_gateway.Calls);
+    }
+
+    [Fact]
+    public async Task AddPeer_WhileWaitingForNode_CanTakeOverFromAnotherDevice()
+    {
+        var manager = await CreateManager();
+        await manager.ChangeGatewayAsync(null);
+        await manager.AddPeerAsync(GuestId, "epoch", "old");
+
+        var (result, transport) = await manager.AddPeerAsync(GuestId, "epoch", "new");
+
+        Assert.Null(result);
+        Assert.Null(transport);
+        Assert.True(manager.IsPeerOf(GuestId, "new"));
+        Assert.False(manager.IsPeerOf(GuestId, "old"));
+        Assert.Single(manager.GetAllPeerSnapshots());
+        Assert.Single(_events.Of<HybridSessionPeerReplacedEvent>());
+        Assert.Empty(_gateway.Calls);
+    }
+
+    [Fact]
+    public async Task AddPeer_JoinedWithoutANode_CreatesTransportOnceANodeIsAssigned()
+    {
+        var manager = await CreateManager();
+        await manager.ChangeGatewayAsync(null);
+        await manager.AddPeerAsync(GuestId, "epoch");
+        var replacement = new FakeSfuGateway { NodeId = 2 };
+
+        await manager.ChangeGatewayAsync(replacement);
+        var (result, transport) = await manager.AddPeerAsync(GuestId, "new-epoch");
+
+        Assert.Null(result);
+        Assert.NotNull(transport);
+        Assert.Single(manager.GetAllPeerSnapshots());
+        Assert.Equal(1, replacement.CallCount("LoadSession"));
+        Assert.Null(await manager.ConnectPeerAsync(GuestId, FakeSfuGateway.Dtls()));
+        Assert.Equal(HybridSessionPeerState.Connected, StateOf(manager, GuestId));
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task WaitingForNode_DoesNotBypassHostAdmission(bool approve)
+    {
+        var manager = await CreateManager(isHostMustApprove: true);
+        await manager.ChangeGatewayAsync(null);
+        await manager.AddPeerAsync(GuestId, "epoch");
+
+        var result = approve
+            ? await manager.ApprovePeerAsync(HostId, GuestId)
+            : await manager.RejectPeerAsync(HostId, GuestId);
+
+        Assert.Null(result);
+        if (approve)
+        {
+            Assert.True(manager.GetAllPeerSnapshots()[GuestId].IsApproved);
+            Assert.Equal(HybridSessionPeerState.WaitingForServer, StateOf(manager, GuestId));
+        }
+        else
+            Assert.False(manager.HasPeer(GuestId));
+        Assert.Empty(_gateway.Calls);
+    }
+
+    [Fact]
+    public async Task GatewayEvents_UpdateTheSessionAvailability()
+    {
+        var manager = await CreateManager();
+
+        await _gateway.RaiseConnectionLost();
+        await _gateway.RaiseConnected();
+
+        Assert.Equal([HybridSessionNodeState.WaitingForSFUNode, HybridSessionNodeState.Active],
+            _events.Of<HybridSessionStateChangedEvent>().Select(e => e.State));
+        Assert.True(manager.IsReady);
+    }
+
+    [Fact]
+    public async Task ChangeGateway_ToAnUnavailableNode_WaitsUntilItConnects()
+    {
+        var manager = await CreateManager();
+        var replacement = new FakeSfuGateway { NodeId = 2, IsConnected = false };
+
+        await manager.ChangeGatewayAsync(replacement);
+        Assert.False(manager.IsReady);
+        Assert.Equal(HybridSessionNodeState.WaitingForSFUNode,
+            Assert.Single(_events.Of<HybridSessionStateChangedEvent>()).State);
+
+        await replacement.RaiseConnected();
+        Assert.True(manager.IsReady);
+        Assert.Equal(HybridSessionNodeState.Active, _events.Of<HybridSessionStateChangedEvent>().Last().State);
+    }
+
+    [Fact]
+    public async Task ChangeGateway_IgnoresAlreadyQueuedEventsFromTheOldNode()
+    {
+        var manager = await CreateManager();
+        var lost = _gateway.CaptureConnectionLostHandlers()!;
+        var connected = _gateway.CaptureConnectedHandlers()!;
+        var replacement = new FakeSfuGateway { NodeId = 2 };
+        await manager.ChangeGatewayAsync(replacement);
+        await JoinAndConnect(manager, HostId);
+
+        _gateway.IsConnected = false;
+        await lost();
+        _gateway.IsConnected = true;
+        await connected();
+
+        Assert.Same(replacement, manager.CurrentGateway);
+        Assert.Empty(_events.Of<HybridSessionSFUNodeDisconnectedEvent>());
+        Assert.Empty(_events.Of<HybridSessionSFUNodeConnectedEvent>());
+        Assert.NotEqual(HybridSessionPeerState.WaitingForServer, StateOf(manager, HostId));
+        Assert.Null(await manager.ConnectPeerAsync(HostId, FakeSfuGateway.Dtls()));
+        Assert.Equal(1, replacement.CallCount("LoadSession"));
+    }
 
     [Fact]
     public async Task AddPeer_FromAnotherConnection_TakesThePeerOverAndReportsTheOldOne()
@@ -233,7 +563,7 @@ public class HybridSessionPeerManagerTests
 
         var (result, transport) = await manager.AddPeerAsync(GuestId, "epoch", "desktop");
 
-        Assert.Equal(HybridSessionJoinResult.NoError, result);
+        Assert.Equal(null, result);
         Assert.NotNull(transport);
         var replaced = Assert.Single(_events.Of<HybridSessionPeerReplacedEvent>());
         Assert.Equal(new HybridSessionPeerReplacedEvent(7, GuestId, "phone"), replaced);
@@ -268,10 +598,10 @@ public class HybridSessionPeerManagerTests
         await manager.AddPeerAsync(GuestId, "epoch", "phone");
         await manager.AddPeerAsync(GuestId, "epoch", "desktop");
 
-        Assert.Equal(LeaveSessionResult.PeerNotExists, await manager.RemovePeerOfConnectionAsync(GuestId, "phone"));
+        Assert.Equal(ErrorCode.PeerNotFound, await manager.RemovePeerOfConnectionAsync(GuestId, "phone"));
         Assert.True(manager.HasPeer(GuestId));
 
-        Assert.Equal(LeaveSessionResult.NoError, await manager.RemovePeerOfConnectionAsync(GuestId, "desktop"));
+        Assert.Equal(null, await manager.RemovePeerOfConnectionAsync(GuestId, "desktop"));
         Assert.False(manager.HasPeer(GuestId));
         Assert.Single(_events.Of<HybridSessionPeerLeftEvent>());
     }
@@ -315,8 +645,8 @@ public class HybridSessionPeerManagerTests
         await manager.ConnectPeerAsync(GuestId, FakeSfuGateway.Dtls());
         Assert.Equal(HybridSessionPeerState.WaitingForApprove, StateOf(manager, GuestId));
 
-        Assert.Equal(ApproveUserSessionResult.NoError, await manager.ApprovePeerAsync(HostId, GuestId));
-        Assert.Equal(ApproveUserSessionResult.NoError, await manager.ApprovePeerAsync(HostId, GuestId));
+        Assert.Equal(null, await manager.ApprovePeerAsync(HostId, GuestId));
+        Assert.Equal(null, await manager.ApprovePeerAsync(HostId, GuestId));
 
         Assert.Equal(HybridSessionPeerState.Connected, StateOf(manager, GuestId));
         var approved = Assert.Single(_events.Of<HybridSessionPeerApprovedEvent>());
@@ -329,7 +659,7 @@ public class HybridSessionPeerManagerTests
         var manager = await CreateManager(isHostMustApprove: false);
         await JoinAndConnect(manager, HostId, GuestId);
 
-        Assert.Equal(ApproveUserSessionResult.NoError, await manager.ApprovePeerAsync(HostId, GuestId));
+        Assert.Equal(null, await manager.ApprovePeerAsync(HostId, GuestId));
 
         Assert.Empty(_events.Of<HybridSessionPeerApprovedEvent>());
     }
@@ -341,7 +671,7 @@ public class HybridSessionPeerManagerTests
         await manager.AddPeerAsync(HostId, "epoch");
         await manager.AddPeerAsync(GuestId, "epoch");
 
-        Assert.Equal(RejectUserSessionResult.NoError, await manager.RejectPeerAsync(HostId, GuestId, "no"));
+        Assert.Equal(null, await manager.RejectPeerAsync(HostId, GuestId, "no"));
 
         Assert.False(manager.HasPeer(GuestId));
         Assert.Equal(1, _gateway.CallCount($"ClosePeerTransport:{GuestId}"));
@@ -356,14 +686,14 @@ public class HybridSessionPeerManagerTests
         await manager.AddPeerAsync(GuestId, "epoch");
         await manager.ConnectPeerAsync(GuestId, FakeSfuGateway.Dtls());
 
-        Assert.Equal(StartVoiceShareResult.Rejected, (await manager.StartVoiceShareAsync(GuestId)).result);
-        Assert.Equal(StartVideoShareResult.Rejected, (await manager.StartVideoShareAsync(GuestId)).result);
-        Assert.Equal(StartScreenShareResult.Rejected, (await manager.StartScreenShareAsync(GuestId, true)).result);
+        Assert.Equal(ErrorCode.NotAdmitted, (await manager.StartVoiceShareAsync(GuestId)).result);
+        Assert.Equal(ErrorCode.NotAdmitted, (await manager.StartVideoShareAsync(GuestId)).result);
+        Assert.Equal(ErrorCode.NotAdmitted, (await manager.StartScreenShareAsync(GuestId, true)).result);
         Assert.Equal(0, _gateway.CallCount($"AddOutbound:{GuestId}"));
 
         await manager.ApprovePeerAsync(HostId, GuestId);
 
-        Assert.Equal(StartVoiceShareResult.NoError, (await manager.StartVoiceShareAsync(GuestId)).result);
+        Assert.Equal(null, (await manager.StartVoiceShareAsync(GuestId)).result);
     }
 
     // Leaving
@@ -376,7 +706,7 @@ public class HybridSessionPeerManagerTests
 
         var result = await manager.KickPeerAsync(HostId, GuestId, "bye");
 
-        Assert.Equal(LeaveSessionResult.NoError, result);
+        Assert.Equal(null, result);
         Assert.True(manager.HasPeer(HostId));
         Assert.False(manager.HasPeer(GuestId));
         var kicked = Assert.Single(_events.Of<HybridSessionPeerKickedEvent>());
@@ -391,7 +721,7 @@ public class HybridSessionPeerManagerTests
 
         var result = await manager.KickPeerAsync(HostId, HostId);
 
-        Assert.Equal(LeaveSessionResult.CannotKickSelf, result);
+        Assert.Equal(ErrorCode.CannotTargetSelf, result);
         Assert.True(manager.HasPeer(HostId));
         Assert.Empty(_events.Of<HybridSessionPeerKickedEvent>());
     }
@@ -416,7 +746,7 @@ public class HybridSessionPeerManagerTests
     {
         var manager = await CreateManager();
 
-        Assert.Equal(LeaveSessionResult.PeerNotExists, await manager.RemovePeerAsync(GuestId));
+        Assert.Equal(ErrorCode.PeerNotFound, await manager.RemovePeerAsync(GuestId));
     }
 
     [Fact]
@@ -445,7 +775,7 @@ public class HybridSessionPeerManagerTests
 
         var (result, outbound) = await manager.StartVoiceShareAsync(HostId);
 
-        Assert.Equal(StartVoiceShareResult.NoError, result);
+        Assert.Equal(null, result);
         Assert.NotNull(outbound);
         var started = Assert.Single(_events.Of<HybridSessionPeerStartedVoiceShareEvent>());
         Assert.Equal((HostId, GuestId), (started.UserId, started.ListenerUserId));
@@ -491,7 +821,7 @@ public class HybridSessionPeerManagerTests
         _gateway.InboundGate.SetResult();
         var (result, _) = await start;
 
-        Assert.Equal(StartVoiceShareResult.NoError, result);
+        Assert.Equal(null, result);
         Assert.Equal(3, _gateway.MaxInboundsInFlight);
         Assert.Equal(3, _events.Of<HybridSessionPeerStartedVoiceShareEvent>().Count);
     }
@@ -505,7 +835,7 @@ public class HybridSessionPeerManagerTests
 
         var (result, _) = await manager.StartVoiceShareAsync(HostId);
 
-        Assert.Equal(StartVoiceShareResult.NoError, result);
+        Assert.Equal(null, result);
         var started = Assert.Single(_events.Of<HybridSessionPeerStartedVoiceShareEvent>());
         Assert.Equal(OtherGuestId, started.ListenerUserId);
     }
@@ -519,7 +849,7 @@ public class HybridSessionPeerManagerTests
 
         var result = await manager.StopVoiceShareAsync(HostId, HostId);
 
-        Assert.Equal(StopVoiceShareResult.NoError, result);
+        Assert.Equal(null, result);
         Assert.Equal(1, _gateway.CallCount($"RemoveOutbound:{outbound!.Id}"));
         var stopped = Assert.Single(_events.Of<HybridSessionPeerStoppedVoiceShareEvent>());
         Assert.Null(stopped.InitiatorUserId);
@@ -533,7 +863,7 @@ public class HybridSessionPeerManagerTests
 
         var (result, outbound, _) = await manager.StartScreenShareAsync(HostId, withAudio: false);
 
-        Assert.Equal(StartScreenShareResult.NoError, result);
+        Assert.Equal(null, result);
         Assert.Equal((MediaSourceType.Screen, MediaType.Video), (outbound!.SourceType, outbound.MediaType));
         var started = Assert.Single(_events.Of<HybridSessionPeerStartedScreenShareEvent>());
         Assert.Equal((HostId, null, null), (started.UserId, started.ListenerUserId, started.Inbound));
@@ -553,9 +883,9 @@ public class HybridSessionPeerManagerTests
         var (result, inbound, _) = await manager.SetScreenShareWatchAsync(GuestId, HostId, true);
         var (againResult, again, _) = await manager.SetScreenShareWatchAsync(GuestId, HostId, true);
 
-        Assert.Equal(SetScreenShareWatchResult.NoError, result);
+        Assert.Equal(null, result);
         Assert.NotNull(inbound);
-        Assert.Equal(SetScreenShareWatchResult.NoError, againResult);
+        Assert.Equal(null, againResult);
         Assert.Equal(inbound, again);
         Assert.Equal(1, _gateway.CallCount($"AddInbound:{GuestId}"));
         Assert.Equal(0, _gateway.CallCount($"AddInbound:{OtherGuestId}"));
@@ -573,8 +903,8 @@ public class HybridSessionPeerManagerTests
         await manager.StopScreenShareAsync(HostId, HostId);
         var (stopped, _, _) = await manager.SetScreenShareWatchAsync(GuestId, HostId, true);
 
-        Assert.Equal(SetScreenShareWatchResult.ScreenShareNotActive, neverShared);
-        Assert.Equal(SetScreenShareWatchResult.ScreenShareNotActive, stopped);
+        Assert.Equal(ErrorCode.MediaNotActive, neverShared);
+        Assert.Equal(ErrorCode.MediaNotActive, stopped);
         Assert.Equal(0, _gateway.CallCount($"AddInbound:{GuestId}"));
     }
 
@@ -591,8 +921,8 @@ public class HybridSessionPeerManagerTests
         await manager.SetScreenShareWatchAsync(GuestId, HostId, false);
         var (rewatchResult, resumed, _) = await manager.SetScreenShareWatchAsync(GuestId, HostId, true);
 
-        Assert.Equal(SetScreenShareWatchResult.NoError, unwatchResult);
-        Assert.Equal(SetScreenShareWatchResult.NoError, rewatchResult);
+        Assert.Equal(null, unwatchResult);
+        Assert.Equal(null, rewatchResult);
         Assert.Equal(inbound, resumed);
         Assert.Equal(1, _gateway.CallCount($"PauseInbound:{inbound.Id}"));
         Assert.Equal(2, _gateway.CallCount($"ResumeInbound:{inbound.Id}"));
@@ -613,8 +943,8 @@ public class HybridSessionPeerManagerTests
         var result = await manager.ResumeInboundsAsync(GuestId, [inbound.Id]);
         var repeated = await manager.ResumeInboundsAsync(GuestId, [inbound.Id]);
 
-        Assert.Equal(ResumeInboundsResult.NoError, result);
-        Assert.Equal(ResumeInboundsResult.NoError, repeated);
+        Assert.Equal(null, result);
+        Assert.Equal(null, repeated);
         Assert.Equal(1, _gateway.CallCount($"ResumeInbound:{inbound.Id}"));
     }
 
@@ -630,8 +960,8 @@ public class HybridSessionPeerManagerTests
         var result = await manager.ResumeInboundsAsync(OtherGuestId, [inbound.Id, "unknown"]);
         var notPeer = await manager.ResumeInboundsAsync(99, [inbound.Id]);
 
-        Assert.Equal(ResumeInboundsResult.NoError, result);
-        Assert.Equal(ResumeInboundsResult.PeerNotExists, notPeer);
+        Assert.Equal(null, result);
+        Assert.Equal(ErrorCode.PeerNotFound, notPeer);
         Assert.Equal(0, _gateway.CallCount($"ResumeInbound:{inbound.Id}"));
     }
 
@@ -710,13 +1040,63 @@ public class HybridSessionPeerManagerTests
 
         var result = await manager.StopScreenShareAsync(HostId, HostId);
 
-        Assert.Equal(StopScreenShareResult.NoError, result);
+        Assert.Equal(null, result);
         Assert.Equal(1, _gateway.CallCount($"PauseOutbound:{screen!.Id}"));
         Assert.Equal(0, _gateway.CallCount($"RemoveOutbound:{screen.Id}"));
         Assert.Equal(0, _gateway.CallCount($"RemoveOutbound:{voice!.Id}"));
         Assert.Null(Assert.Single(_events.Of<HybridSessionPeerStoppedScreenShareEvent>()).InitiatorUserId);
         Assert.False(manager.GetAllPeerSnapshots()[HostId].IsScreenShareActive);
         Assert.Empty(_events.Of<HybridSessionPeerStoppedVoiceShareEvent>());
+    }
+
+    [Fact]
+    public async Task WatchScreenShare_TellsTheSessionWhoWatches_OnceEachWay()
+    {
+        var manager = await CreateManager();
+        await JoinAndConnect(manager, HostId, GuestId);
+        await manager.StartScreenShareAsync(HostId, withAudio: false);
+
+        await manager.SetScreenShareWatchAsync(GuestId, HostId, true);
+        await manager.SetScreenShareWatchAsync(GuestId, HostId, true);
+
+        var started = Assert.Single(_events.Of<HybridSessionPeerStartedWatchingScreenShareEvent>());
+        Assert.Equal((GuestId, HostId), (started.UserId, started.SharerUserId));
+        Assert.Equal([HostId], manager.GetAllPeerSnapshots()[GuestId].WatchedScreenShares!);
+
+        await manager.SetScreenShareWatchAsync(GuestId, HostId, false);
+        await manager.SetScreenShareWatchAsync(GuestId, HostId, false);
+
+        var stopped = Assert.Single(_events.Of<HybridSessionPeerStoppedWatchingScreenShareEvent>());
+        Assert.Equal((GuestId, HostId), (stopped.UserId, stopped.SharerUserId));
+        Assert.Empty(manager.GetAllPeerSnapshots()[GuestId].WatchedScreenShares!);
+    }
+
+    [Fact]
+    public async Task StopScreenShare_TellsTheSessionItsWatchersStoppedWatching()
+    {
+        var manager = await CreateManager();
+        await JoinAndConnect(manager, HostId, GuestId, OtherGuestId);
+        await manager.StartScreenShareAsync(HostId, withAudio: false);
+        await manager.SetScreenShareWatchAsync(GuestId, HostId, true);
+
+        await manager.StopScreenShareAsync(HostId, HostId);
+
+        var stopped = Assert.Single(_events.Of<HybridSessionPeerStoppedWatchingScreenShareEvent>());
+        Assert.Equal((GuestId, HostId), (stopped.UserId, stopped.SharerUserId));
+        Assert.Empty(manager.GetAllPeerSnapshots()[GuestId].WatchedScreenShares!);
+    }
+
+    [Fact]
+    public async Task WatcherLeaving_IsNotToldAsStoppedWatching()
+    {
+        var manager = await CreateManager();
+        await JoinAndConnect(manager, HostId, GuestId);
+        await manager.StartScreenShareAsync(HostId, withAudio: false);
+        await manager.SetScreenShareWatchAsync(GuestId, HostId, true);
+
+        await manager.RemovePeerAsync(GuestId);
+
+        Assert.Empty(_events.Of<HybridSessionPeerStoppedWatchingScreenShareEvent>());
     }
 
     [Fact]
@@ -731,7 +1111,7 @@ public class HybridSessionPeerManagerTests
 
         var (result, second, _) = await manager.StartScreenShareAsync(HostId, withAudio: false);
 
-        Assert.Equal(StartScreenShareResult.NoError, result);
+        Assert.Equal(null, result);
         Assert.Equal(first!.Id, second!.Id);
         Assert.Equal(1, _gateway.CallCount($"AddOutbound:{HostId}"));
         Assert.Equal(1, _gateway.CallCount($"ResumeOutbound:{first.Id}"));
@@ -747,6 +1127,62 @@ public class HybridSessionPeerManagerTests
     }
 
     [Fact]
+    public async Task RestartScreenShare_AfterMediaSettingsChange_ReplacesTracksInsideTheSameTransport()
+    {
+        var model = HybridSessionModel.Create("coordinator", "room", 10, HostId, WebRTCEngine.Mediasoup);
+        var manager = await CreateManager(model: model);
+        await JoinAndConnect(manager, HostId, GuestId);
+        var (_, firstVideo, firstAudio) = await manager.StartScreenShareAsync(HostId, withAudio: true);
+        var (_, firstInbound, _) = await manager.SetScreenShareWatchAsync(GuestId, HostId, true);
+        await manager.StopScreenShareAsync(HostId, HostId);
+
+        var media = model.Media with
+        {
+            ScreenCodec = WebRTCVideoCodecs.AV1, IsVideoNackEnabled = false, IsVideoRtxEnabled = false,
+            IsAudioNackEnabled = true, IsOpusFecEnabled = false, OpusPacketLossPercent = 0,
+            VoiceJitterBufferMs = 40, VideoJitterBufferMs = 80, KeyFrameRequestDelayMs = 500
+        };
+        model.SetMedia(media);
+        var (result, video, audio) = await manager.StartScreenShareAsync(HostId, withAudio: true);
+        var (watchResult, inbound, _) = await manager.SetScreenShareWatchAsync(GuestId, HostId, true);
+
+        Assert.Null(result);
+        Assert.Null(watchResult);
+        Assert.NotEqual(firstVideo!.Id, video!.Id);
+        Assert.NotEqual(firstAudio!.Id, audio!.Id);
+        Assert.NotEqual(firstInbound!.Id, inbound!.Id);
+        Assert.Equal(1, _gateway.CallCount($"RemoveOutbound:{firstVideo.Id}"));
+        Assert.Equal(1, _gateway.CallCount($"RemoveOutbound:{firstAudio.Id}"));
+        Assert.Equal(0, _gateway.CallCount($"ResumeOutbound:{firstVideo.Id}"));
+        Assert.Equal(2, _gateway.CallCount("CreatePeerTransport"));
+        Assert.Equal(0, _gateway.CallCount("ClosePeerTransport"));
+        Assert.Equal(HybridSessionPeerState.Connected, StateOf(manager, HostId));
+        Assert.Equal(media.ForOutbound(MediaSourceType.Screen, MediaType.Video), _gateway.OutboundSettings.ToArray()[2]);
+        Assert.Equal(media.ForOutbound(MediaSourceType.Screen, MediaType.Audio), _gateway.OutboundSettings.Last());
+        Assert.Equal(media.ForInbound(MediaType.Video), _gateway.InboundSettings.ToArray()[2]);
+        Assert.Equal(media.ForInbound(MediaType.Audio), _gateway.InboundSettings.Last());
+    }
+
+    [Fact]
+    public async Task RestartScreenShare_AfterOnlyBufferingChanges_ReplacesPausedConsumers()
+    {
+        var model = HybridSessionModel.Create("coordinator", "room", 10, HostId, WebRTCEngine.Mediasoup);
+        var manager = await CreateManager(model: model);
+        await JoinAndConnect(manager, HostId, GuestId);
+        await manager.StartScreenShareAsync(HostId, withAudio: false);
+        var (_, first, _) = await manager.SetScreenShareWatchAsync(GuestId, HostId, true);
+        await manager.StopScreenShareAsync(HostId, HostId);
+
+        model.SetMedia(model.Media with { VideoJitterBufferMs = 80 });
+        await manager.StartScreenShareAsync(HostId, withAudio: false);
+        var (_, replacement, _) = await manager.SetScreenShareWatchAsync(GuestId, HostId, true);
+
+        Assert.NotEqual(first!.Id, replacement!.Id);
+        Assert.Equal(80, _gateway.InboundSettings.Last().JitterBufferMs);
+        Assert.Equal(0, _gateway.CallCount("ClosePeerTransport"));
+    }
+
+    [Fact]
     public async Task StartScreenShare_WithAudio_PublishesThePictureAndTheSound()
     {
         var manager = await CreateManager();
@@ -754,7 +1190,7 @@ public class HybridSessionPeerManagerTests
 
         var (result, outbound, audioOutbound) = await manager.StartScreenShareAsync(HostId, withAudio: true);
 
-        Assert.Equal(StartScreenShareResult.NoError, result);
+        Assert.Equal(null, result);
         Assert.Equal((MediaSourceType.Screen, MediaType.Video), (outbound!.SourceType, outbound.MediaType));
         Assert.Equal((MediaSourceType.Screen, MediaType.Audio), (audioOutbound!.SourceType, audioOutbound.MediaType));
         Assert.True(Assert.Single(_events.Of<HybridSessionPeerStartedScreenShareEvent>()).HasAudio);
@@ -787,7 +1223,7 @@ public class HybridSessionPeerManagerTests
 
         var (result, inbound, audioInbound) = await manager.SetScreenShareWatchAsync(GuestId, HostId, true);
 
-        Assert.Equal(SetScreenShareWatchResult.NoError, result);
+        Assert.Equal(null, result);
         Assert.Equal(outbound!.SSRC, inbound!.SSRC);
         Assert.Equal(audioOutbound!.SSRC, audioInbound!.SSRC);
         Assert.Equal(2, _gateway.CallCount($"AddInbound:{GuestId}"));
@@ -806,7 +1242,7 @@ public class HybridSessionPeerManagerTests
         var (result, watched, heard) = await manager.SetScreenShareWatchAsync(GuestId, HostId, false);
         await manager.SetScreenShareWatchAsync(GuestId, HostId, true);
 
-        Assert.Equal(SetScreenShareWatchResult.NoError, result);
+        Assert.Equal(null, result);
         Assert.Equal((inbound, audioInbound), (watched, heard));
         Assert.Equal(1, _gateway.CallCount($"PauseInbound:{audioInbound.Id}"));
         Assert.Equal(2, _gateway.CallCount($"ResumeInbound:{audioInbound.Id}"));
@@ -837,7 +1273,7 @@ public class HybridSessionPeerManagerTests
 
         var result = await manager.StopScreenShareAsync(HostId, HostId);
 
-        Assert.Equal(StopScreenShareResult.NoError, result);
+        Assert.Equal(null, result);
         Assert.Equal(1, _gateway.CallCount($"PauseOutbound:{outbound!.Id}"));
         Assert.Equal(1, _gateway.CallCount($"PauseOutbound:{audioOutbound!.Id}"));
         Assert.Equal(1, _gateway.CallCount($"PauseInbound:{audioInbound!.Id}"));
@@ -910,7 +1346,7 @@ public class HybridSessionPeerManagerTests
         var manager = await CreateManager();
         await JoinAndConnect(manager, HostId);
 
-        Assert.Equal(SetMicrophoneMuteResult.VoiceNotStarted, await manager.SetMicrophoneMutedAsync(HostId, HostId, true));
+        Assert.Equal(ErrorCode.MediaNotActive, await manager.SetMicrophoneMutedAsync(HostId, HostId, true));
     }
 
     [Fact]
@@ -920,8 +1356,8 @@ public class HybridSessionPeerManagerTests
         await JoinAndConnect(manager, HostId);
         var (_, outbound) = await manager.StartVoiceShareAsync(HostId);
 
-        Assert.Equal(SetMicrophoneMuteResult.NoError, await manager.SetMicrophoneMutedAsync(GuestId, HostId, true));
-        Assert.Equal(SetMicrophoneMuteResult.NoError, await manager.SetMicrophoneMutedAsync(GuestId, HostId, true));
+        Assert.Equal(null, await manager.SetMicrophoneMutedAsync(GuestId, HostId, true));
+        Assert.Equal(null, await manager.SetMicrophoneMutedAsync(GuestId, HostId, true));
 
         Assert.Equal(1, _gateway.CallCount($"PauseOutbound:{outbound!.Id}"));
         Assert.True(manager.GetAllPeerSnapshots()[HostId].IsMicrophoneMuted);
@@ -935,13 +1371,13 @@ public class HybridSessionPeerManagerTests
         var manager = await CreateManager();
         await JoinAndConnect(manager, HostId);
 
-        Assert.Equal(SetSoundMuteResult.NoError, await manager.SetSoundMutedAsync(HostId, HostId, true));
-        Assert.Equal(SetSoundMuteResult.NoError, await manager.SetSoundMutedAsync(HostId, HostId, true));
+        Assert.Equal(null, await manager.SetSoundMutedAsync(HostId, HostId, true));
+        Assert.Equal(null, await manager.SetSoundMutedAsync(HostId, HostId, true));
 
         Assert.True(manager.GetAllPeerSnapshots()[HostId].IsSoundMuted);
         Assert.Single(_events.Of<HybridSessionPeerMuteSoundEvent>());
 
-        Assert.Equal(SetSoundMuteResult.NoError, await manager.SetSoundMutedAsync(HostId, HostId, false));
+        Assert.Equal(null, await manager.SetSoundMutedAsync(HostId, HostId, false));
 
         Assert.False(manager.GetAllPeerSnapshots()[HostId].IsSoundMuted);
         Assert.Single(_events.Of<HybridSessionPeerUnmuteSoundEvent>());
@@ -953,15 +1389,15 @@ public class HybridSessionPeerManagerTests
         var manager = await CreateManager();
         await JoinAndConnect(manager, HostId);
 
-        Assert.Equal(SetAfkResult.NoError, await manager.SetAfkAsync(HostId, true, "  lunch "));
-        Assert.Equal(SetAfkResult.NoError, await manager.SetAfkAsync(HostId, true, "lunch"));
+        Assert.Equal(null, await manager.SetAfkAsync(HostId, true, "  lunch "));
+        Assert.Equal(null, await manager.SetAfkAsync(HostId, true, "lunch"));
 
         var peer = manager.GetAllPeerSnapshots()[HostId];
         Assert.True(peer.IsAfk);
         Assert.Equal("lunch", peer.AfkReason);
         Assert.Equal("lunch", Assert.Single(_events.Of<HybridSessionPeerAfkEvent>()).Reason);
 
-        Assert.Equal(SetAfkResult.NoError, await manager.SetAfkAsync(HostId, false, "ignored"));
+        Assert.Equal(null, await manager.SetAfkAsync(HostId, false, "ignored"));
 
         peer = manager.GetAllPeerSnapshots()[HostId];
         Assert.False(peer.IsAfk);
@@ -974,7 +1410,7 @@ public class HybridSessionPeerManagerTests
     {
         var manager = await CreateManager();
 
-        Assert.Equal(SetAfkResult.PeerNotExists, await manager.SetAfkAsync(HostId, true, null));
+        Assert.Equal(ErrorCode.PeerNotFound, await manager.SetAfkAsync(HostId, true, null));
     }
 
     [Fact]
@@ -984,7 +1420,7 @@ public class HybridSessionPeerManagerTests
         await JoinAndConnect(manager, HostId);
         await JoinAndConnect(manager, GuestId);
 
-        Assert.Equal(PokeResult.NoError, await manager.PokeAsync(GuestId, HostId, " wake up "));
+        Assert.Equal(null, await manager.PokeAsync(GuestId, HostId, " wake up "));
 
         var poked = Assert.Single(_events.Of<HybridSessionPeerPokedEvent>());
         Assert.Equal(HostId, poked.UserId);
@@ -998,9 +1434,9 @@ public class HybridSessionPeerManagerTests
         var manager = await CreateManager();
         await JoinAndConnect(manager, HostId);
 
-        Assert.Equal(PokeResult.CannotPokeSelf, await manager.PokeAsync(HostId, HostId, null));
-        Assert.Equal(PokeResult.PeerNotExists, await manager.PokeAsync(HostId, GuestId, null));
-        Assert.Equal(PokeResult.PeerNotExists, await manager.PokeAsync(GuestId, HostId, null));
+        Assert.Equal(ErrorCode.CannotTargetSelf, await manager.PokeAsync(HostId, HostId, null));
+        Assert.Equal(ErrorCode.PeerNotFound, await manager.PokeAsync(HostId, GuestId, null));
+        Assert.Equal(ErrorCode.PeerNotFound, await manager.PokeAsync(GuestId, HostId, null));
         Assert.Empty(_events.Of<HybridSessionPeerPokedEvent>());
     }
 
@@ -1013,14 +1449,14 @@ public class HybridSessionPeerManagerTests
         _gateway.TimesOut = true;
 
         var (result, _) = await manager.AddPeerAsync(HostId, "epoch");
-        Assert.Equal(HybridSessionJoinResult.TimedOut, result);
+        Assert.Equal(ErrorCode.TimedOut, result);
         Assert.False(manager.HasPeer(HostId));
 
         _gateway.TimesOut = false;
         var joinAgain = manager.AddPeerAsync(HostId, "epoch");
 
         Assert.Same(joinAgain, await Task.WhenAny(joinAgain, Task.Delay(TimeSpan.FromSeconds(5))));
-        Assert.Equal(HybridSessionJoinResult.NoError, (await joinAgain).result);
+        Assert.Equal(null, (await joinAgain).result);
     }
 
     [Fact]
@@ -1032,7 +1468,7 @@ public class HybridSessionPeerManagerTests
 
         var (result, outbound) = await manager.StartVoiceShareAsync(HostId);
 
-        Assert.Equal(StartVoiceShareResult.TimedOut, result);
+        Assert.Equal(ErrorCode.TimedOut, result);
         Assert.Null(outbound);
     }
 

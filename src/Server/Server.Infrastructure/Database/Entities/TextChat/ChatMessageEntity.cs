@@ -19,6 +19,8 @@ public class ChatMessageEntity
     public DateTime? DelayedSentTime { get; set; }
     public DateTime? DisposeTime { get; set; }
     public DateTime? EditTime { get; set; }
+    public DateTime? PinnedAt { get; set; }
+    public int? PinnedByUserId { get; set; }
 
     public ChatTextContentEntity? TextContent { get; set; }
     public int? ReplyToMessageId { get; set; }
@@ -46,6 +48,12 @@ public class ChatMessageEntity
     public bool IsDeleted { get; set; }
     public bool IsReadOnly { get; set; }
     public bool IsSystem { get; set; }
+    public int? SystemEventKind { get; set; }
+    public int? SystemActorUserId { get; set; }
+    public int? SystemSubjectUserId { get; set; }
+    public Guid? SystemCallId { get; set; }
+    public int? SystemCallEndReason { get; set; }
+    public int? SystemCallDurationSeconds { get; set; }
     public bool IsDisposable { get; set; }
     
     // Navigation fields

@@ -72,6 +72,23 @@ public sealed class GatewayServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task AddressBan_RejectsBeforeUpgrade_WithUnicodeReason_AndLiftingItAllowsConnection()
+    {
+        const string reason = "Спам и оскорбления";
+        _service.CheckAddress = _ => Task.FromResult<string?>(reason);
+        using var socket = new ClientWebSocket();
+        socket.Options.RemoteCertificateValidationCallback = (_, _, _, _) => true;
+        socket.Options.CollectHttpResponseDetails = true;
+        socket.Options.SetRequestHeader(ProtocolVersion.Header, ProtocolVersion.Format(ProtocolVersion.Current));
+        await Assert.ThrowsAsync<WebSocketException>(() => socket.ConnectAsync(new Uri($"wss://127.0.0.1:{_port}/"), CancellationToken.None));
+        Assert.Equal(HttpStatusCode.Forbidden, socket.HttpStatusCode);
+        Assert.Equal(reason, System.Text.Encoding.UTF8.GetString(Convert.FromBase64String(socket.HttpResponseHeaders!["FlowRate-Ban-Reason"].Single())));
+        _service.CheckAddress = _ => Task.FromResult<string?>(null);
+        var (client, _) = await ConnectAsync();
+        await client.DisposeAsync();
+    }
+
+    [Fact]
     public async Task Request_GetsResponse()
     {
         _router.OnMessage = (message, gateway) =>
@@ -85,6 +102,29 @@ public sealed class GatewayServiceTests : IDisposable
         var response = JsonSerializer.Deserialize<BaseMessage>((await client.ReceiveTextAsync(Timeout))!, Json);
         Assert.Equal(request.RequestId, Assert.IsType<HeartbeatPingResponse>(response).RequestId);
         Assert.Equal("127.0.0.1", gateway.IpAddress);
+    }
+
+    [Fact]
+    public async Task FragmentedRequest_FollowedByCompleteRequest_PreservesBoundaries()
+    {
+        _router.OnMessage = (message, gateway) =>
+            gateway.Send(new HeartbeatPingResponse(((HeartbeatPingRequest)message).RequestId, 42));
+        var (client, _) = await ConnectAsync();
+        await using var connection = client;
+        var fragmented = new HeartbeatPingRequest();
+        var bytes = JsonSerializer.SerializeToUtf8Bytes<BaseMessage>(fragmented, Json);
+        await client.Socket.SendAsync(Array.Empty<byte>(), WebSocketMessageType.Text, false, CancellationToken.None);
+        await client.Socket.SendAsync(bytes.AsMemory(0, 5), WebSocketMessageType.Text, false, CancellationToken.None);
+        await client.Socket.SendAsync(bytes.AsMemory(5), WebSocketMessageType.Text, false, CancellationToken.None);
+        await client.Socket.SendAsync(Array.Empty<byte>(), WebSocketMessageType.Text, true, CancellationToken.None);
+        var complete = new HeartbeatPingRequest();
+        await client.SendTextAsync(JsonSerializer.Serialize<BaseMessage>(complete, Json));
+
+        foreach (var request in new[] { fragmented, complete })
+        {
+            var response = JsonSerializer.Deserialize<BaseMessage>((await client.ReceiveTextAsync(Timeout))!, Json);
+            Assert.Equal(request.RequestId, Assert.IsType<HeartbeatPingResponse>(response).RequestId);
+        }
     }
 
     [Fact]

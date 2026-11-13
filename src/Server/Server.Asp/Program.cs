@@ -162,6 +162,7 @@ namespace Server.Asp
             
             services.AddSingleton<IOrchestratorInstanceRepository, OrchestratorInstanceRepository>();
             services.AddSingleton<IUserRepository, UserRepository>();
+            services.AddSingleton<IBanRepository, BanRepository>();
             services.AddSingleton<ICoordinatorInstanceRepository, CoordinatorInstanceRepository>();
             services.AddSingleton<IVideoSessionRepository, VideoSessionRepository>();
             services.AddSingleton<IMessagesRepository, MessagesRepository>();
@@ -183,6 +184,7 @@ namespace Server.Asp
             services.AddSingleton<IPasskeyService, PasskeyService>();
             services.AddSingleton<IUserSecurityDataRepository, UserSecurityDataRepository>();
             services.AddSingleton<IUserPasskeyRepository, UserPasskeyRepository>();
+            services.AddSingleton<IUserSessionRepository, UserSessionRepository>();
         }
 
         private static void ConfigureMiddleware(WebApplication app)
