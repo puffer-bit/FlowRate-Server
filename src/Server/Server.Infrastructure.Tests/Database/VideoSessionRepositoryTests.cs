@@ -1,6 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Server.Core.Models.HybridSession;
-using Server.Infrastructure.Database;
+using Server.Database;
 using Server.Infrastructure.Database.Repositories;
 using Shared.Enums.WebRTC;
 using Xunit;

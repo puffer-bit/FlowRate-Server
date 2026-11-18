@@ -1,13 +1,15 @@
 using System.ComponentModel.DataAnnotations;
 using Microsoft.EntityFrameworkCore;
+using Server.Database;
+using Server.Database.PostgreSql;
+using Server.Database.Sqlite;
 using Server.Infrastructure.Options;
 
 namespace Server.Infrastructure.Database;
 
+/// <summary>Picks the database provider of <see cref="ServerDbContext"/> from the "Database" section.</summary>
 public static class DatabaseConfiguration
 {
-    public const string PostgreSqlMigrationsAssembly = "Server.Migrations.PostgreSql";
-
     public static DbContextOptionsBuilder UseServerDatabase(this DbContextOptionsBuilder builder,
         DatabaseOptions database, StorageOptions storage)
     {
@@ -15,10 +17,8 @@ public static class DatabaseConfiguration
         var connectionString = database.GetConnectionString(storage);
         return database.Provider switch
         {
-            DatabaseProvider.Sqlite => builder.UseSqlite(connectionString)
-                .AddInterceptors(new SqliteSynchronousInterceptor()),
-            DatabaseProvider.PostgreSql => builder.UseNpgsql(connectionString,
-                options => options.MigrationsAssembly(PostgreSqlMigrationsAssembly)),
+            DatabaseProvider.Sqlite => builder.UseServerSqlite(connectionString),
+            DatabaseProvider.PostgreSql => builder.UseServerPostgreSql(connectionString),
             _ => throw new InvalidOperationException("Unsupported database provider.")
         };
     }

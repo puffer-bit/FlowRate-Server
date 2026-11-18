@@ -18,11 +18,12 @@ using Server.Core.Models.TextChat;
 using Server.Core.Models.TextChat.Messages;
 using Server.Core.Models.TextChat.Messages.Content;
 using Server.Core.Models.User;
+using Server.Database.Sqlite;
+using Server.Database;
 using Server.Infrastructure.Coordinator.Connection.Gateway;
 using Server.Infrastructure.Coordinator.Media;
 using Server.Infrastructure.Coordinator.Services;
-using Server.Infrastructure.Database;
-using Server.Infrastructure.Database.Entities.TextChat;
+using Server.Database.Entities.TextChat;
 using Server.Infrastructure.Database.Repositories;
 using Server.Infrastructure.Options;
 using Server.Infrastructure.Security;
@@ -67,7 +68,7 @@ public sealed class MediaEndpointsTests : IDisposable
         }
 
         var factory = new TestContextFactory(new DbContextOptionsBuilder<ServerDbContext>()
-            .UseSqlite($"Data Source={Path.Combine(_root, "server.db")}")
+            .UseServerSqlite($"Data Source={Path.Combine(_root, "server.db")}")
             .Options);
         using (var context = factory.CreateDbContext())
         {
@@ -455,7 +456,7 @@ public sealed class MediaEndpointsTests : IDisposable
             Assert.Equal(HttpStatusCode.TooManyRequests, fifth.StatusCode);
 
         await using (var context = new TestContextFactory(new DbContextOptionsBuilder<ServerDbContext>()
-                         .UseSqlite($"Data Source={Path.Combine(_root, "server.db")}").Options).CreateDbContext())
+                         .UseServerSqlite($"Data Source={Path.Combine(_root, "server.db")}").Options).CreateDbContext())
         {
             await context.MediaUploads.ExecuteUpdateAsync(s => s.SetProperty(x => x.CreatedAt, DateTime.UtcNow.AddDays(-2)));
         }

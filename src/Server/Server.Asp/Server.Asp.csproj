@@ -22,7 +22,6 @@
       <ProjectReference Include="..\..\Shared\Shared.Core\Shared.Core.csproj" />
       <ProjectReference Include="..\Server.Api\Server.Api.csproj" />
       <ProjectReference Include="..\Server.Infrastructure\Server.Infrastructure.csproj" />
-      <ProjectReference Include="..\Server.Migrations.PostgreSql\Server.Migrations.PostgreSql.csproj" />
     </ItemGroup>
 
     <ItemGroup>

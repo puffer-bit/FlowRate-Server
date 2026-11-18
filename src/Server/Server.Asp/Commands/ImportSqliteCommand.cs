@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
+using Server.Database;
 using Server.Infrastructure.Database;
-using Server.Infrastructure.Database.Import;
+using Server.Database.PostgreSql.Import;
 using Server.Infrastructure.Options;
 
 namespace Server.Asp.Commands;

@@ -5,7 +5,8 @@ using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.Extensions.DependencyInjection;
 using Server.Application.Coordinator.Authentication;
 using Server.Core.Models.User;
-using Server.Infrastructure.Database;
+using Server.Database.Sqlite;
+using Server.Database;
 using Server.Infrastructure.Database.Repositories;
 using Xunit;
 
@@ -22,7 +23,7 @@ public sealed class UserSessionRepositoryTests : IDisposable
     public UserSessionRepositoryTests()
     {
         _factory = new TestContextFactory(new DbContextOptionsBuilder<ServerDbContext>()
-            .UseSqlite($"Data Source={_databasePath}")
+            .UseServerSqlite($"Data Source={_databasePath}")
             .Options);
     }
 
@@ -96,8 +97,7 @@ public sealed class UserSessionRepositoryTests : IDisposable
 
         // As Program registers them: a pooled context must not change its options
         var services = new ServiceCollection()
-            .AddPooledDbContextFactory<ServerDbContext>(options => options.UseSqlite($"Data Source={_databasePath}")
-                .AddInterceptors(new SqliteSynchronousInterceptor()))
+            .AddPooledDbContextFactory<ServerDbContext>(options => options.UseServerSqlite($"Data Source={_databasePath}"))
             .BuildServiceProvider();
         var pooled = services.GetRequiredService<IDbContextFactory<ServerDbContext>>();
         await using (var context = await pooled.CreateDbContextAsync())

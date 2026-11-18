@@ -1,6 +1,6 @@
 using Server.Core.Models.Coordinator;
 using Server.Core.Models.Coordinator.Settings;
-using Server.Infrastructure.Database.Entities;
+using Server.Database.Entities;
 
 namespace Server.Infrastructure.Mappers;
 

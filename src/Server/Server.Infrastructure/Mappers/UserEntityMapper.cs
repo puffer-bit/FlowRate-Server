@@ -1,5 +1,5 @@
 using Server.Core.Models.User;
-using Server.Infrastructure.Database.Entities;
+using Server.Database.Entities;
 
 namespace Server.Infrastructure.Mappers;
 

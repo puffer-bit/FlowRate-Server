@@ -5,10 +5,11 @@ using Npgsql;
 using Server.Application.Coordinator.Authentication;
 using Server.Core.Models.Coordinator.Settings;
 using Server.Core.Models.Media;
-using Server.Infrastructure.Database;
-using Server.Infrastructure.Database.Entities;
-using Server.Infrastructure.Database.Entities.TextChat;
-using Server.Infrastructure.Database.Import;
+using Server.Database.Sqlite;
+using Server.Database;
+using Server.Database.Entities;
+using Server.Database.Entities.TextChat;
+using Server.Database.PostgreSql.Import;
 using Server.Infrastructure.Database.Repositories;
 using Shared.Enums;
 using Shared.Enums.User;
@@ -45,7 +46,7 @@ public sealed class SqlitePostgreSqlImportTests : IDisposable
     }
 
     private ServerDbContext Source() => new(new DbContextOptionsBuilder<ServerDbContext>()
-        .UseSqlite(new SqliteConnectionStringBuilder { DataSource = _path, Pooling = false }.ConnectionString).Options);
+        .UseServerSqlite(new SqliteConnectionStringBuilder { DataSource = _path, Pooling = false }.ConnectionString).Options);
 
     public void Dispose()
     {
@@ -65,7 +66,7 @@ public sealed class SqlitePostgreSqlImportTests : IDisposable
         Assert.All(result.Tables, table => Assert.True(table.Rows > 0, table.Name));
         Assert.Equal(target.Model.GetRelationalModel().Tables.Count(), result.Tables.Count);
         Assert.Equal(before, SHA256.HashData(await File.ReadAllBytesAsync(_path)));
-        Assert.Single(await target.Database.GetAppliedMigrationsAsync());
+        Assert.Equal(target.Database.GetMigrations(), await target.Database.GetAppliedMigrationsAsync());
         Assert.Equal(Permission.All, (await target.Roles.SingleAsync()).Permissions);
         Assert.Equal(["192.0.2.1", "::1"], (await target.CoordinatorInstances.SingleAsync()).AllowedIPs);
         Assert.Equal(["passkey"], (await target.Set<UserSecurityDataEntity>().SingleAsync()).UserPasskeyIds);

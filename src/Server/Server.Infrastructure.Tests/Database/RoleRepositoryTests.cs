@@ -1,7 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Server.Core.Models.Roles;
 using Server.Core.Models.User;
-using Server.Infrastructure.Database;
+using Server.Database;
 using Server.Infrastructure.Database.Repositories;
 using Shared.Enums;
 using Xunit;

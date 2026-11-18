@@ -1,6 +1,7 @@
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
+using Server.Database;
 using Server.Infrastructure.Database;
 using Server.Infrastructure.Options;
 

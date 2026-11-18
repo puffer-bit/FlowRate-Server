@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Server.Database;
 using Server.Infrastructure.Mappers;
 using Server.Core.Models.HybridSession;
 using Server.Application.Abstractions.Persistence;

@@ -3,7 +3,7 @@ using Shared.Models.DataTransferObjects.ChatSession.Messages.Commands;
 using Server.Core.Models.TextChat.Messages;
 using Server.Core.Models.TextChat.Messages.Content;
 using Server.Core.Models.TextChat.Messages.Reactions;
-using Server.Infrastructure.Database.Entities.TextChat;
+using Server.Database.Entities.TextChat;
 
 namespace Server.Infrastructure.Mappers;
 
