@@ -40,6 +40,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Server.PushRelay.Tests", "S
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Server.Core", "Server\Server.Core\Server.Core.csproj", "{39508103-5DF6-4A17-9D6A-DDF483120389}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Server.Migrations.PostgreSql", "Server\Server.Migrations.PostgreSql\Server.Migrations.PostgreSql.csproj", "{CE0CAE82-8061-4690-BBDA-941814107E2B}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -254,6 +256,18 @@ Global
 		{39508103-5DF6-4A17-9D6A-DDF483120389}.Release|x64.Build.0 = Release|Any CPU
 		{39508103-5DF6-4A17-9D6A-DDF483120389}.Release|x86.ActiveCfg = Release|Any CPU
 		{39508103-5DF6-4A17-9D6A-DDF483120389}.Release|x86.Build.0 = Release|Any CPU
+		{CE0CAE82-8061-4690-BBDA-941814107E2B}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{CE0CAE82-8061-4690-BBDA-941814107E2B}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{CE0CAE82-8061-4690-BBDA-941814107E2B}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{CE0CAE82-8061-4690-BBDA-941814107E2B}.Debug|x64.Build.0 = Debug|Any CPU
+		{CE0CAE82-8061-4690-BBDA-941814107E2B}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{CE0CAE82-8061-4690-BBDA-941814107E2B}.Debug|x86.Build.0 = Debug|Any CPU
+		{CE0CAE82-8061-4690-BBDA-941814107E2B}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{CE0CAE82-8061-4690-BBDA-941814107E2B}.Release|Any CPU.Build.0 = Release|Any CPU
+		{CE0CAE82-8061-4690-BBDA-941814107E2B}.Release|x64.ActiveCfg = Release|Any CPU
+		{CE0CAE82-8061-4690-BBDA-941814107E2B}.Release|x64.Build.0 = Release|Any CPU
+		{CE0CAE82-8061-4690-BBDA-941814107E2B}.Release|x86.ActiveCfg = Release|Any CPU
+		{CE0CAE82-8061-4690-BBDA-941814107E2B}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -276,5 +290,6 @@ Global
 		{A4616796-9A6E-4EFC-8375-D0ADCAA3A8BD} = {0C4A4A3A-3E52-4D9C-A7E2-6BBD5AF7A96B}
 		{1C4175A4-68C0-40C4-A9D9-E1A014424DA4} = {0C4A4A3A-3E52-4D9C-A7E2-6BBD5AF7A96B}
 		{39508103-5DF6-4A17-9D6A-DDF483120389} = {0C4A4A3A-3E52-4D9C-A7E2-6BBD5AF7A96B}
+		{CE0CAE82-8061-4690-BBDA-941814107E2B} = {0C4A4A3A-3E52-4D9C-A7E2-6BBD5AF7A96B}
 	EndGlobalSection
 EndGlobal

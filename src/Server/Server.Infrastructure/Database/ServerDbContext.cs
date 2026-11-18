@@ -36,6 +36,33 @@ public class ServerDbContext : DbContext
     public ServerDbContext(DbContextOptions<ServerDbContext> options) : base(options) =>
         SqliteFunctions.Register(Database.GetDbConnection());
 
+    public override int SaveChanges(bool acceptAllChangesOnSuccess)
+    {
+        NormalizePostgreSqlTimestamps();
+        return base.SaveChanges(acceptAllChangesOnSuccess);
+    }
+
+    public override Task<int> SaveChangesAsync(bool acceptAllChangesOnSuccess, CancellationToken cancellationToken = default)
+    {
+        NormalizePostgreSqlTimestamps();
+        return base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
+    }
+
+    private void NormalizePostgreSqlTimestamps()
+    {
+        if (!Database.IsNpgsql())
+            return;
+
+        // PostgreSQL timestamps have microsecond precision. Keep tracked values identical to what a
+        // later read returns, including entities returned directly after saving without a reload.
+        foreach (var entry in ChangeTracker.Entries().Where(e => e.State is EntityState.Added or EntityState.Modified))
+        foreach (var property in entry.Properties)
+        {
+            if (property.CurrentValue is DateTime time && time != DateTime.MaxValue && time.Ticks % 10 != 0)
+                property.CurrentValue = new DateTime(time.Ticks - time.Ticks % 10, time.Kind);
+        }
+    }
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);

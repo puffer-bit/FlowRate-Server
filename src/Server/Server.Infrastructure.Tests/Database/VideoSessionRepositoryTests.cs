@@ -1,4 +1,3 @@
-using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Server.Core.Models.HybridSession;
 using Server.Infrastructure.Database;
@@ -8,17 +7,16 @@ using Xunit;
 
 namespace Server.Infrastructure.Tests.Database;
 
+[Trait("Category", "DatabaseProvider")]
 public sealed class VideoSessionRepositoryTests : IDisposable
 {
-    private readonly string _databasePath = Path.Combine(Path.GetTempPath(), $"sessions-{Guid.NewGuid():N}.db");
+    private readonly RepositoryTestDatabase _database = new();
     private readonly TestContextFactory _factory;
     private readonly VideoSessionRepository _repository;
 
     public VideoSessionRepositoryTests()
     {
-        _factory = new TestContextFactory(new DbContextOptionsBuilder<ServerDbContext>()
-            .UseSqlite($"Data Source={_databasePath}")
-            .Options);
+        _factory = new TestContextFactory(_database.Options);
         _repository = new VideoSessionRepository(_factory);
 
         using var context = _factory.CreateDbContext();
@@ -27,8 +25,7 @@ public sealed class VideoSessionRepositoryTests : IDisposable
 
     public void Dispose()
     {
-        SqliteConnection.ClearAllPools();
-        File.Delete(_databasePath);
+        _database.Dispose();
     }
 
     private sealed class TestContextFactory(DbContextOptions<ServerDbContext> options) : IDbContextFactory<ServerDbContext>

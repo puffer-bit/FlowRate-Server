@@ -1,6 +1,5 @@
 using Shared.Models.DataTransferObjects.ChatSession.Messages;
 using Shared.Models.DataTransferObjects.ChatSession.Messages.Commands;
-using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Server.Core.Models.TextChat.Messages;
 using Server.Core.Models.TextChat.Messages.Content;
@@ -11,20 +10,19 @@ using Xunit;
 
 namespace Server.Infrastructure.Tests.Database;
 
+[Trait("Category", "DatabaseProvider")]
 public sealed class MessagesRepositoryTests : IDisposable
 {
     private const int AuthorId = 1;
 
-    private readonly string _databasePath = Path.Combine(Path.GetTempPath(), $"messages-{Guid.NewGuid():N}.db");
+    private readonly RepositoryTestDatabase _database = new();
     private readonly TestContextFactory _factory;
     private readonly MessagesRepository _repository;
     private readonly int _chatId;
 
     public MessagesRepositoryTests()
     {
-        _factory = new TestContextFactory(new DbContextOptionsBuilder<ServerDbContext>()
-            .UseSqlite($"Data Source={_databasePath}")
-            .Options);
+        _factory = new TestContextFactory(_database.Options);
         _repository = new MessagesRepository(_factory);
 
         using var context = _factory.CreateDbContext();
@@ -38,8 +36,7 @@ public sealed class MessagesRepositoryTests : IDisposable
 
     public void Dispose()
     {
-        SqliteConnection.ClearAllPools();
-        File.Delete(_databasePath);
+        _database.Dispose();
     }
 
     private ChatMessageModel NewMessage(string text) => ChatMessageModel.Create(
@@ -134,7 +131,9 @@ public sealed class MessagesRepositoryTests : IDisposable
         message.SetPinned(true, 42, now);
         var revision = await _repository.UpdateAsync(message);
         var stored = Assert.Single(await _repository.GetPinnedAsync(_chatId));
-        Assert.Equal(now, stored.PinnedAt);
+        // PostgreSQL stores microseconds; SQLite also retains the remaining .NET tick.
+        Assert.NotNull(stored.PinnedAt);
+        Assert.Equal(now.Ticks / 10, stored.PinnedAt.Value.Ticks / 10);
         Assert.Equal(42, stored.PinnedByUserId);
         Assert.Null(stored.EditTime);
         await Edit(id, "new preview");

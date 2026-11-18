@@ -2,7 +2,7 @@ using System.ComponentModel.DataAnnotations;
 
 namespace Server.Infrastructure.Options;
 
-/// <summary>"Storage" section. Everything the server keeps lives in one directory.</summary>
+/// <summary>"Storage" section. Local files and the default SQLite database live in this directory.</summary>
 public class StorageOptions
 {
     public const string SectionName = "Storage";

@@ -1,8 +1,6 @@
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Options;
-using Server.Infrastructure.Options;
 
 namespace Server.Infrastructure.Database;
 
@@ -14,15 +12,19 @@ public static class DatabaseInitializer
     /// <summary>Creates the database directory if needed and applies pending migrations.</summary>
     public static async Task InitializeDatabaseAsync(this IServiceProvider services, CancellationToken ct = default)
     {
-        var options = services.GetRequiredService<IOptions<StorageOptions>>().Value;
+        var factory = services.GetRequiredService<IDbContextFactory<ServerDbContext>>();
+        await using var context = await factory.CreateDbContextAsync(ct);
+        if (!context.Database.IsSqlite())
+        {
+            await context.Database.MigrateAsync(ct);
+            return;
+        }
 
-        var dataSource = new SqliteConnectionStringBuilder(options.DatabaseConnectionString).DataSource;
+        var dataSource = new SqliteConnectionStringBuilder(context.Database.GetConnectionString()).DataSource;
         var directory = Path.GetDirectoryName(Path.GetFullPath(dataSource));
         if (!string.IsNullOrEmpty(directory))
             Directory.CreateDirectory(directory);
 
-        var factory = services.GetRequiredService<IDbContextFactory<ServerDbContext>>();
-        await using var context = await factory.CreateDbContextAsync(ct);
         try
         {
             await context.Database.ExecuteSqlRawAsync("PRAGMA journal_mode = WAL;", ct);
