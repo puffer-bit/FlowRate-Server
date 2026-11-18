@@ -150,6 +150,9 @@ namespace Server.Migrations.PostgreSql.Migrations
                     b.Property<bool>("MediaAllowOriginalImages")
                         .HasColumnType("boolean");
 
+                    b.Property<bool>("MediaAllowOriginalVideos")
+                        .HasColumnType("boolean");
+
                     b.Property<int>("MediaImageMaxSide")
                         .HasColumnType("integer");
 
@@ -163,6 +166,9 @@ namespace Server.Migrations.PostgreSql.Migrations
                         .HasColumnType("bigint");
 
                     b.Property<int>("MediaTokenLifetimeMinutes")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("MediaVideoMaxSide")
                         .HasColumnType("integer");
 
                     b.Property<string>("MotdText")
