@@ -29,6 +29,9 @@ namespace Server.Infrastructure.Database.Entities
 
         public long MediaMaxFileSizeBytes { get; set; }
         public long MediaStorageQuotaBytes { get; set; }
+        public int MediaImageMaxSide { get; set; }
+        public int MediaImageQuality { get; set; }
+        public bool MediaAllowOriginalImages { get; set; }
 
         public int MaxUnattachedUploadsPerUser { get; set; }
         public int UnattachedUploadLifetimeHours { get; set; }

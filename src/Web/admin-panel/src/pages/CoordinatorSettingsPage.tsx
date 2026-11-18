@@ -81,6 +81,9 @@ interface Form {
   heartbeatTimeout: number | string
   maxFileSizeMb: number | string
   storageQuotaMb: number | string
+  imageMaxSide: number | string
+  imageQuality: number | string
+  allowOriginalImages: boolean
   maxUnattachedUploads: number | string
   unattachedLifetimeHours: number | string
   tokenLifetimeMinutes: number | string
@@ -108,6 +111,9 @@ function toForm(settings: CoordinatorSettings): Form {
     heartbeatTimeout: settings.heartbeat.timeoutSeconds ?? '',
     maxFileSizeMb: Math.round((settings.media.maxFileSizeBytes ?? 0) / megabyte),
     storageQuotaMb: Math.round((settings.media.storageQuotaBytes ?? 0) / megabyte),
+    imageMaxSide: settings.media.imageMaxSide ?? '',
+    imageQuality: settings.media.imageQuality ?? '',
+    allowOriginalImages: settings.media.allowOriginalImages ?? true,
     maxUnattachedUploads: settings.uploads.maxUnattachedPerUser ?? '',
     unattachedLifetimeHours: settings.uploads.unattachedLifetimeHours ?? '',
     tokenLifetimeMinutes: settings.uploads.tokenLifetimeMinutes ?? '',
@@ -142,6 +148,9 @@ function toUpdate(form: Form, expectedRevision: number): UpdateCoordinatorSettin
     media: {
       maxFileSizeBytes: toNumber(form.maxFileSizeMb) * megabyte,
       storageQuotaBytes: toNumber(form.storageQuotaMb) * megabyte,
+      imageMaxSide: toNumber(form.imageMaxSide),
+      imageQuality: toNumber(form.imageQuality),
+      allowOriginalImages: form.allowOriginalImages,
     },
     uploads: {
       maxUnattachedPerUser: toNumber(form.maxUnattachedUploads),
@@ -350,7 +359,18 @@ function SettingsForm({ id, saved: latest }: { id: string, saved: CoordinatorSet
           <NumberInput label="Storage quota, MB" description="0 leaves the storage unlimited" required min={0}
             allowDecimal={false} thousandSeparator=" " value={form.storageQuotaMb} onChange={set('storageQuotaMb')}
             error={fieldErrors.take('Media.StorageQuotaBytes')} />
+          <NumberInput label="Compressed image side, px"
+            description="Clients reduce images to this longest side when they compress them" required min={320}
+            max={16384} allowDecimal={false} value={form.imageMaxSide} onChange={set('imageMaxSide')}
+            error={fieldErrors.take('Media.ImageMaxSide')} />
+          <NumberInput label="Compressed image quality" description="JPEG or WebP quality, from 30 to 100" required
+            min={30} max={100} allowDecimal={false} value={form.imageQuality} onChange={set('imageQuality')}
+            error={fieldErrors.take('Media.ImageQuality')} />
         </SimpleGrid>
+        <Switch mt="md" label="Allow uncompressed images"
+          description="Off: images larger than the compressed side are refused, so users can only send them compressed"
+          checked={form.allowOriginalImages}
+          onChange={event => set('allowOriginalImages')(event.currentTarget.checked)} />
       </Fieldset>
 
       <Fieldset legend="Uploads" id="settings-uploads" className="settings-section">

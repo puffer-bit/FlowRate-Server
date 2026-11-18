@@ -6,6 +6,8 @@ using Microsoft.Extensions.Logging;
 using Server.Application.Coordinator.Events;
 using Server.Application.Mappers;
 using Server.Core.Models.Media;
+using Server.Core.Models.Coordinator.Settings;
+using Server.Application.Coordinator.Media;
 using Server.Core.Models.User;
 using Server.Core.Models.TextChat;
 using Server.Core.Models.TextChat.Messages.Content;
@@ -32,6 +34,9 @@ public class ChatSessionManager : IChatSessionManager
     private readonly IMediaStorage _mediaStorage;
     private readonly string _coordinatorInstanceId;
 
+    // The current media settings of the coordinator, which say whether images may go uncompressed
+    private readonly Func<CoordinatorMediaSettings> _mediaSettings;
+
     private readonly ConcurrentDictionary<int, ChatSessionModel> _sessions = new();
 
     // Serializes creation and deletion, so that two chats cannot take the same name
@@ -49,8 +54,10 @@ public class ChatSessionManager : IChatSessionManager
         IMessagesRepository messagesRepository,
         IMediaUploadRepository mediaUploads,
         IMediaStorage mediaStorage,
-        string coordinatorInstanceId)
+        string coordinatorInstanceId,
+        Func<CoordinatorMediaSettings>? mediaSettings = null)
     {
+        _mediaSettings = mediaSettings ?? (() => CoordinatorMediaSettings.Default);
         _mediaUploads = mediaUploads;
         _mediaStorage = mediaStorage;
         _logger = logger;
@@ -660,6 +667,9 @@ public class ChatSessionManager : IChatSessionManager
                     ? ErrorCode.AttachmentInvalid
                     : ErrorCode.AttachmentNotReady, [], []);
 
+            if (await CheckImageSizeAsync(original) is { } rejection)
+                return (rejection, [], []);
+
             images.Add(new ChatImageContentModel
             {
                 Id = 0,
@@ -694,6 +704,22 @@ public class ChatSessionManager : IChatSessionManager
         }
 
         return (null, images, files);
+    }
+
+    /// <summary>
+    /// Refuses an image larger than the coordinator takes uncompressed, by the sides in its header.
+    /// </summary>
+    private async Task<ErrorCode?> CheckImageSizeAsync(MediaUploadModel upload)
+    {
+        var settings = _mediaSettings();
+        if (settings.AllowOriginalImages)
+            return null;
+
+        await using var content = await _mediaStorage.OpenReadAsync(upload.Id);
+        if (content == null || await ImageDimensions.ReadAsync(content, upload.MimeType) is not var (width, height))
+            return ErrorCode.AttachmentInvalid;
+
+        return Math.Max(width, height) > settings.ImageMaxSide ? ErrorCode.ImageNotCompressed : null;
     }
 
     private async Task<MediaUploadModel?> GetUploadAsync(string id, int chatId, int ownerUserId, MediaUploadKind kind)

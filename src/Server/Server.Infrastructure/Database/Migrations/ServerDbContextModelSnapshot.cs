@@ -141,6 +141,15 @@ namespace Server.Infrastructure.Database.Migrations
                     b.Property<int>("MaxUsers")
                         .HasColumnType("INTEGER");
 
+                    b.Property<bool>("MediaAllowOriginalImages")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("MediaImageMaxSide")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("MediaImageQuality")
+                        .HasColumnType("INTEGER");
+
                     b.Property<long>("MediaMaxFileSizeBytes")
                         .HasColumnType("INTEGER");
 

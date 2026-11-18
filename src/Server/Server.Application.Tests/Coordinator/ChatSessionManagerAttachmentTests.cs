@@ -5,6 +5,7 @@ using Server.Application.Abstractions.Persistence;
 using Server.Application.Coordinator.Events;
 using Server.Application.Coordinator.Sessions.Chat;
 using Server.Application.Tests.Fakes;
+using Server.Core.Models.Coordinator.Settings;
 using Server.Core.Models.Media;
 using Server.Core.Models.TextChat.Messages;
 using Server.Core.Models.User;
@@ -32,6 +33,7 @@ public class ChatSessionManagerAttachmentTests
     private readonly Dictionary<string, MediaUploadModel> _storedUploads = new();
     private readonly List<ChatMessageModel> _added = [];
     private readonly ChatSessionManager _manager;
+    private CoordinatorMediaSettings _media = CoordinatorMediaSettings.Default;
 
     public ChatSessionManagerAttachmentTests()
     {
@@ -49,7 +51,7 @@ public class ChatSessionManagerAttachmentTests
             });
 
         _manager = new ChatSessionManager(NullLogger.Instance, _events, _chats.Object, _messages.Object,
-            _uploads.Object, _storage.Object, Coordinator);
+            _uploads.Object, _storage.Object, Coordinator, () => _media);
     }
 
     private async Task<int> CreateChat(bool attachmentsAllowed = true)
@@ -273,5 +275,65 @@ public class ChatSessionManagerAttachmentTests
 
         _storage.Verify(s => s.DeleteAsync(OriginalId, It.IsAny<CancellationToken>()), Times.Once);
         _storage.Verify(s => s.DeleteAsync(PreviewId, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    private void StorePng(int width, int height)
+    {
+        var header = new byte[24];
+        new byte[] { 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0, 0, 0, 13 }.CopyTo(header, 0);
+        "IHDR"u8.CopyTo(header.AsSpan(12));
+        System.Buffers.Binary.BinaryPrimitives.WriteUInt32BigEndian(header.AsSpan(16), (uint)width);
+        System.Buffers.Binary.BinaryPrimitives.WriteUInt32BigEndian(header.AsSpan(20), (uint)height);
+        _storage.Setup(s => s.OpenReadAsync(OriginalId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(() => new MemoryStream(header));
+    }
+
+    [Fact]
+    public async Task LargeImage_IsTaken_WhileOriginalsAreAllowed()
+    {
+        var chatId = await CreateChat();
+        StoreUploads(chatId);
+        StorePng(8000, 6000);
+
+        Assert.Null(await _manager.AddMessageAsync(chatId, MessageWithImage(chatId), AuthorId));
+        Assert.Single(_added);
+    }
+
+    [Fact]
+    public async Task LargeImage_IsRefused_WhenOnlyCompressedOnesAreTaken()
+    {
+        _media = new CoordinatorMediaSettings(1000, 0, imageMaxSide: 2560, allowOriginalImages: false);
+        var chatId = await CreateChat();
+        StoreUploads(chatId);
+        StorePng(2561, 100);
+
+        Assert.Equal(ErrorCode.ImageNotCompressed,
+            await _manager.AddMessageAsync(chatId, MessageWithImage(chatId), AuthorId));
+        Assert.Empty(_added);
+    }
+
+    [Fact]
+    public async Task ImageWithinTheSide_IsTaken_WhenOnlyCompressedOnesAreTaken()
+    {
+        _media = new CoordinatorMediaSettings(1000, 0, imageMaxSide: 2560, allowOriginalImages: false);
+        var chatId = await CreateChat();
+        StoreUploads(chatId);
+        StorePng(1440, 2560);
+
+        Assert.Null(await _manager.AddMessageAsync(chatId, MessageWithImage(chatId), AuthorId));
+        Assert.Single(_added);
+    }
+
+    [Fact]
+    public async Task ImageWithAnUnreadableHeader_IsRefused_WhenOnlyCompressedOnesAreTaken()
+    {
+        _media = new CoordinatorMediaSettings(1000, 0, allowOriginalImages: false);
+        var chatId = await CreateChat();
+        StoreUploads(chatId);
+        _storage.Setup(s => s.OpenReadAsync(OriginalId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(() => new MemoryStream([1, 2, 3]));
+
+        Assert.Equal(ErrorCode.AttachmentInvalid,
+            await _manager.AddMessageAsync(chatId, MessageWithImage(chatId), AuthorId));
     }
 }

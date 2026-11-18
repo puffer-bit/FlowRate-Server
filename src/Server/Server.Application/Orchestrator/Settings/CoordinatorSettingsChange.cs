@@ -36,6 +36,10 @@ public sealed record CoordinatorSettingsChange
     /// <summary>0 leaves the storage unlimited.</summary>
     public long StorageQuotaBytes { get; init; }
 
+    public int ImageMaxSide { get; init; } = CoordinatorMediaSettings.DefaultImageMaxSide;
+    public int ImageQuality { get; init; } = CoordinatorMediaSettings.DefaultImageQuality;
+    public bool AllowOriginalImages { get; init; } = true;
+
     public int MaxUnattachedUploadsPerUser { get; init; }
     public int UnattachedUploadLifetimeHours { get; init; }
     public int MediaTokenLifetimeMinutes { get; init; }
