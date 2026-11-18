@@ -166,6 +166,7 @@ namespace Server.Asp
             services.AddSingleton<ICoordinatorInstanceRepository, CoordinatorInstanceRepository>();
             services.AddSingleton<IVideoSessionRepository, VideoSessionRepository>();
             services.AddSingleton<IMessagesRepository, MessagesRepository>();
+            services.AddSingleton<ILinkPreviewRepository, LinkPreviewRepository>();
             services.AddSingleton<IChatReadStateRepository, ChatReadStateRepository>();
             services.AddSingleton<IChatSessionRepository, ChatSessionRepository>();
             services.AddSingleton<ISessionsRepository, SessionsRepository>();

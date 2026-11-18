@@ -561,6 +561,55 @@ public class ChatSessionManagerTests
     }
 
     [Fact]
+    public async Task LinkPreview_IsPutIntoTheMessageAsAChange()
+    {
+        var chatId = await CreateChat("general");
+        var message = ChatMessageModel.Create(chatId, AuthorId, DateTime.UtcNow,
+            new ChatTextContentModel { Text = "https://example.com/a" });
+        message.Id = 5;
+        _storedMessages[5] = message;
+        _messages.Setup(r => r.UpdateAsync(It.IsAny<ChatMessageModel>(), It.IsAny<CancellationToken>())).ReturnsAsync(11);
+        var preview = new ChatLinkPreviewModel
+        {
+            Id = 3, CoordinatorInstanceId = "coordinator", Url = "https://example.com/a", Title = "T", FetchedAt = DateTime.UtcNow
+        };
+
+        await _manager.SetLinkPreviewAsync(chatId, 5, preview);
+
+        var edited = Assert.Single(_events.Of<ChatSessionMessageEditedEvent>()).Message;
+        Assert.Equal((3, 11L), (edited.LinkPreview?.Id, edited.Revision));
+        // A preview is not an edit of the author
+        Assert.False(edited.IsEdited);
+    }
+
+    [Fact]
+    public async Task LinkPreview_OfAnAddressTheMessageNoLongerHas_IsDropped()
+    {
+        var chatId = await CreateChat("general");
+        StoreMessage(messageId: 5, chatId: chatId);
+
+        await _manager.SetLinkPreviewAsync(chatId, 5, new ChatLinkPreviewModel
+        {
+            Id = 3, CoordinatorInstanceId = "coordinator", Url = "https://example.com/a", FetchedAt = DateTime.UtcNow
+        });
+
+        Assert.Empty(_events.Of<ChatSessionMessageEditedEvent>());
+        _messages.Verify(r => r.UpdateAsync(It.IsAny<ChatMessageModel>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task EditMessage_TurnsThePreviewOff()
+    {
+        var chatId = await CreateChat("general");
+        StoreMessage(messageId: 5, chatId: chatId);
+        _messages.Setup(r => r.UpdateAsync(It.IsAny<ChatMessageModel>(), It.IsAny<CancellationToken>())).ReturnsAsync(9);
+
+        Assert.Null(await _manager.EditMessageAsync(chatId, 5, "https://example.com", AuthorId, isLinkPreviewDisabled: true));
+
+        Assert.True(Assert.Single(_events.Of<ChatSessionMessageEditedEvent>()).Message.IsLinkPreviewDisabled);
+    }
+
+    [Fact]
     public async Task FetchMessagesBefore_ReturnsThePageWithTheChatRevision()
     {
         var chatId = await CreateChat("general");

@@ -55,6 +55,10 @@ public class ChatMessageEntity
     public int? SystemCallEndReason { get; set; }
     public int? SystemCallDurationSeconds { get; set; }
     public bool IsDisposable { get; set; }
+
+    public int? LinkPreviewId { get; set; }
+    public LinkPreviewEntity? LinkPreview { get; set; }
+    public bool IsLinkPreviewDisabled { get; set; }
     
     // Navigation fields
     public ChatSessionEntity ChatSession { get; set; } = null!;

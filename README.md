@@ -25,6 +25,12 @@ column; existing participants receive the migration time as their joining date. 
 its membership rows, while deleting an account retains its historical participant id and clears the
 nullable account reference so that private chat history remains loadable.
 
+Messages show a preview of their first link. The server fetches the page itself, so it needs outbound
+HTTPS access to the sites people link; it never contacts private, loopback or link-local addresses, nor
+ports other than 80 and 443, and it ignores proxy environment variables. Previews are kept in the
+`LinkPreviews` table for a day per address and their images next to the uploads, in
+`<media>/<coordinator id>-link-previews`; ones no message shows are removed after two days.
+
 ## First launch
 
 You need a Linux machine (x64 or arm64), SSH access, and an IP address that your clients can reach.

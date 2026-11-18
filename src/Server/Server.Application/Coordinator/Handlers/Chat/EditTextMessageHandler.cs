@@ -24,7 +24,8 @@ public class EditTextMessageHandler : IMessageHandler<EditMessageRequest>
     {
         if (request == null) return HandleMessageResult.ForbiddenRequest;
 
-        var result = await _chatSessionManager.EditMessageAsync(request.ChatId, request.MessageId, request.Text, request.SenderId);
+        var result = await _chatSessionManager.EditMessageAsync(request.ChatId, request.MessageId, request.Text, request.SenderId,
+            request.IsLinkPreviewDisabled);
         var responseData = request.Answer(result, request.ToResponse);
         
         _messageSender.SendMessageById(connectionId, 

@@ -519,7 +519,8 @@ public class ChatSessionManager : IChatSessionManager
         }
     }
 
-    public async Task<ErrorCode?> EditMessageAsync(int sessionId, int messageId, string text, int userId)
+    public async Task<ErrorCode?> EditMessageAsync(int sessionId, int messageId, string text, int userId,
+        bool? isLinkPreviewDisabled = null)
     {
         try
         {
@@ -534,7 +535,7 @@ public class ChatSessionManager : IChatSessionManager
                 if (message == null)
                     return ErrorCode.MessageNotFound;
 
-                var result = message.Edit(userId, text, DateTime.UtcNow);
+                var result = message.Edit(userId, text, DateTime.UtcNow, isLinkPreviewDisabled);
                 if (result != null)
                     return result;
 
@@ -556,6 +557,35 @@ public class ChatSessionManager : IChatSessionManager
         {
             _logger.LogError(e, "Error while editing chat message.");
             return ErrorCode.Internal;
+        }
+    }
+
+    public async Task SetLinkPreviewAsync(int sessionId, int messageId, ChatLinkPreviewModel preview)
+    {
+        if (!_sessions.ContainsKey(sessionId))
+            return;
+
+        var writeLock = MessageWriteLockOf(sessionId);
+        await writeLock.WaitAsync();
+        try
+        {
+            var message = await GetMessageAsync(sessionId, messageId);
+            if (message == null || !message.SetLinkPreview(preview))
+                return;
+
+            message.MarkChanged(await _messagesRepository.UpdateAsync(message));
+            if (_sessions.TryGetValue(sessionId, out var changedChat) && changedChat.LastMessage?.Id == message.Id)
+                changedChat.SetLastMessage(message);
+            // Not a change of the chat itself: its last message is only shown by its text
+            await _coordinatorEventBus.PublishAsync(new ChatSessionMessageEditedEvent(sessionId, message));
+        }
+        catch (Exception e)
+        {
+            _logger.LogError(e, "Error while adding a link preview to a chat message.");
+        }
+        finally
+        {
+            writeLock.Release();
         }
     }
 

@@ -48,6 +48,8 @@ public static class ChatMessageMapperExtensions
             Images = model.Images.Select(i => i.ToDto()).ToList(),
             Video = model.Videos.Select(v => v.ToDto()).ToList(),
             Files = model.Files.Select(f => f.ToDto()).ToList(),
+            LinkPreview = model.LinkPreview?.ToDto(),
+            IsLinkPreviewDisabled = model.IsLinkPreviewDisabled,
             Reactions = model.Reactions.Select(r => r.ToDto()).ToList(),
             UsersIds = model.UsersIds.ToList(),
             MentionedUserIds = ChatMentions.UserIdsOf(mentions),
@@ -55,6 +57,19 @@ public static class ChatMessageMapperExtensions
             MentionsHere = mentions.Any(m => m.Kind == ChatMentionKind.Here)
         };
     }
+
+    public static ChatLinkPreviewDTO ToDto(this ChatLinkPreviewModel model) => new()
+    {
+        Id = model.Id,
+        Url = model.Url,
+        SiteName = model.SiteName,
+        Title = model.Title,
+        Description = model.Description,
+        HasImage = model.HasImage,
+        ImageWidth = model.ImageWidth,
+        ImageHeight = model.ImageHeight,
+        IsLargeImage = model.IsLargeImage
+    };
 
     public static ChatSystemContentModel ToModel(this ChatSystemContent dto) => new()
     {
@@ -187,7 +202,8 @@ public static class ChatMessageMapperExtensions
             newChatMessageModel.Video.Select(v => v.ToModel()),
             files,
             newChatMessageModel.DelayedSentTime,
-            newChatMessageModel.DisposeTime);
+            newChatMessageModel.DisposeTime,
+            newChatMessageModel.IsLinkPreviewDisabled);
     }
 
     private static ChatTextContentModel ToModel(this ChatTextContentDTO dto) => new() { Text = dto.Text };
