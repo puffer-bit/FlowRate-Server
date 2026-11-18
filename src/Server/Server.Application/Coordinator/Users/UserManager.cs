@@ -30,6 +30,8 @@ public class UserManager : IUserManager
     private readonly SemaphoreSlim _admissionLock = new(1, 1);
     private readonly SemaphoreSlim _createUserLock = new(1, 1);
     private readonly SemaphoreSlim _renameLock = new(1, 1);
+    // The roles of users not connected are read and announced one after another
+    private readonly SemaphoreSlim _offlineRolesLock = new(1, 1);
     // The online limit, the user and the connection they use change under one lock, so two logins cannot take the
     // last place and a connection closing during a login cannot leave its user attached
     private readonly Lock _attachLock = new();
@@ -305,13 +307,38 @@ public class UserManager : IUserManager
         }
     }
 
-    public void SetRoles(int userId, IEnumerable<int> roleIds)
+    public async Task SetRolesAsync(int userId, IEnumerable<int> roleIds)
     {
-        if (!_context.AttachedUsers.TryGetValue(userId, out var user) || user.IsSystem)
-            return;
+        // Connected: taken at once, in the order the changes come
+        if (_context.AttachedUsers.TryGetValue(userId, out var attached))
+        {
+            if (attached.IsSystem)
+                return;
 
-        user.SetRoles(roleIds);
-        UserUpdated?.Invoke(user);
+            attached.SetRoles(roleIds);
+            UserUpdated?.Invoke(attached);
+            return;
+        }
+
+        // Not connected: the roles are saved already. Read one after another, so the last one announced was read
+        // after every change before it
+        await _offlineRolesLock.WaitAsync();
+        try
+        {
+            var user = await _userRepository.GetByIdAsync(userId);
+            if (user == null || user.IsSystem || user.CoordinatorInstanceId != _coordinatorInstanceId)
+                return;
+
+            // Connected meanwhile, with the roles as saved
+            if (_context.AttachedUsers.TryGetValue(userId, out attached))
+                user = attached;
+
+            UserUpdated?.Invoke(user);
+        }
+        finally
+        {
+            _offlineRolesLock.Release();
+        }
     }
 
     public void DetachUser(int userId, string reason)
