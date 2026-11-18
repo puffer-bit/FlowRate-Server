@@ -84,6 +84,8 @@ interface Form {
   imageMaxSide: number | string
   imageQuality: number | string
   allowOriginalImages: boolean
+  videoMaxSide: number | string
+  allowOriginalVideos: boolean
   maxUnattachedUploads: number | string
   unattachedLifetimeHours: number | string
   tokenLifetimeMinutes: number | string
@@ -114,6 +116,8 @@ function toForm(settings: CoordinatorSettings): Form {
     imageMaxSide: settings.media.imageMaxSide ?? '',
     imageQuality: settings.media.imageQuality ?? '',
     allowOriginalImages: settings.media.allowOriginalImages ?? true,
+    videoMaxSide: settings.media.videoMaxSide ?? '',
+    allowOriginalVideos: settings.media.allowOriginalVideos ?? true,
     maxUnattachedUploads: settings.uploads.maxUnattachedPerUser ?? '',
     unattachedLifetimeHours: settings.uploads.unattachedLifetimeHours ?? '',
     tokenLifetimeMinutes: settings.uploads.tokenLifetimeMinutes ?? '',
@@ -151,6 +155,8 @@ function toUpdate(form: Form, expectedRevision: number): UpdateCoordinatorSettin
       imageMaxSide: toNumber(form.imageMaxSide),
       imageQuality: toNumber(form.imageQuality),
       allowOriginalImages: form.allowOriginalImages,
+      videoMaxSide: toNumber(form.videoMaxSide),
+      allowOriginalVideos: form.allowOriginalVideos,
     },
     uploads: {
       maxUnattachedPerUser: toNumber(form.maxUnattachedUploads),
@@ -371,6 +377,16 @@ function SettingsForm({ id, saved: latest }: { id: string, saved: CoordinatorSet
           description="Off: images larger than the compressed side are refused, so users can only send them compressed"
           checked={form.allowOriginalImages}
           onChange={event => set('allowOriginalImages')(event.currentTarget.checked)} />
+        <SimpleGrid cols={{ base: 1, sm: 2 }} mt="md">
+          <NumberInput label="Compressed video side, px"
+            description="Clients reduce videos to this shorter side when they compress them, like 720 for 720p"
+            required min={240} max={2160} allowDecimal={false} value={form.videoMaxSide}
+            onChange={set('videoMaxSide')} error={fieldErrors.take('Media.VideoMaxSide')} />
+        </SimpleGrid>
+        <Switch mt="md" label="Allow uncompressed videos"
+          description="Off: only MP4 videos within the compressed side and its bitrate are taken, so users can only send them compressed"
+          checked={form.allowOriginalVideos}
+          onChange={event => set('allowOriginalVideos')(event.currentTarget.checked)} />
       </Fieldset>
 
       <Fieldset legend="Uploads" id="settings-uploads" className="settings-section">

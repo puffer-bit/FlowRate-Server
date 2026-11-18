@@ -18,7 +18,8 @@ public static class CoordinatorEntityMapper
             new AccessListSettings(entity.AllowedIPs, entity.BannedIPs),
             new CoordinatorHeartbeatSettings(entity.HeartbeatIntervalSeconds, entity.HeartbeatTimeoutSeconds),
             new CoordinatorMediaSettings(entity.MediaMaxFileSizeBytes, entity.MediaStorageQuotaBytes,
-                entity.MediaImageMaxSide, entity.MediaImageQuality, entity.MediaAllowOriginalImages),
+                entity.MediaImageMaxSide, entity.MediaImageQuality, entity.MediaAllowOriginalImages,
+                entity.MediaVideoMaxSide, entity.MediaAllowOriginalVideos),
             new CoordinatorUploadSettings(entity.MaxUnattachedUploadsPerUser, entity.UnattachedUploadLifetimeHours,
                 entity.MediaTokenLifetimeMinutes),
             entity.RateLimits,
@@ -58,6 +59,8 @@ public static class CoordinatorEntityMapper
             MediaImageMaxSide = model.Media.ImageMaxSide,
             MediaImageQuality = model.Media.ImageQuality,
             MediaAllowOriginalImages = model.Media.AllowOriginalImages,
+            MediaVideoMaxSide = model.Media.VideoMaxSide,
+            MediaAllowOriginalVideos = model.Media.AllowOriginalVideos,
 
             MaxUnattachedUploadsPerUser = model.Uploads.MaxUnattachedUploadsPerUser,
             UnattachedUploadLifetimeHours = model.Uploads.UnattachedLifetimeHours,
