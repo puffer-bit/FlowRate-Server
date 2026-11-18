@@ -118,7 +118,7 @@ public sealed class RequestRateLimits
             or HybridSessionPokeRequest => RequestRateGroup.ChatWrite,
         ChatPinnedMessagesRequest or ChatHistoryWindowRequest or ChatSessionHistoryRequest or ChatSessionMessageRequest or ChatSessionHistoryPageRequest
             or ChatSessionChangesRequest or ChatReadStatesRequest or ChatMarkReadRequest or ChatViewersRequest
-            or ChatMessageReadersRequest => RequestRateGroup.ChatRead,
+            or ChatMessageReadersRequest or ChatLinkPreviewRequest => RequestRateGroup.ChatRead,
         RegisterPushTokenRequest or UnregisterPushTokenRequest => RequestRateGroup.PushRegistration,
         MediaTokenRequest => RequestRateGroup.MediaToken,
         HeartbeatRequest => RequestRateGroup.Heartbeat,

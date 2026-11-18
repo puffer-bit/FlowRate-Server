@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.Logging;
 using Microsoft.Net.Http.Headers;
+using Server.Application.Coordinator.LinkPreviews;
 using Server.Application.Coordinator.Media;
 using Server.Core.Models.Media;
 using Shared.Models.Media;
@@ -32,12 +33,15 @@ public sealed class MediaHttpEndpoints : IMediaHttpEndpoints
     private readonly ILogger _logger;
     private readonly IMediaService _media;
     private readonly TusDiskMediaStorage _storage;
+    private readonly LinkPreviewService? _linkPreviews;
 
-    public MediaHttpEndpoints(ILogger logger, IMediaService media, TusDiskMediaStorage storage)
+    public MediaHttpEndpoints(ILogger logger, IMediaService media, TusDiskMediaStorage storage,
+        LinkPreviewService? linkPreviews = null)
     {
         _logger = logger;
         _media = media;
         _storage = storage;
+        _linkPreviews = linkPreviews;
     }
 
     public void Map(IEndpointRouteBuilder endpoints)
@@ -46,6 +50,7 @@ public sealed class MediaHttpEndpoints : IMediaHttpEndpoints
         endpoints.MapGet(MediaEndpoints.Images + "/{id:int}", (RequestDelegate)GetImageAsync);
         endpoints.MapGet(MediaEndpoints.Files + "/{id:int}", (RequestDelegate)GetFileAsync);
         endpoints.MapGet(MediaEndpoints.Avatars + "/{id}", (RequestDelegate)GetAvatarAsync);
+        endpoints.MapGet(MediaEndpoints.LinkPreviewImages + "/{id:int}", (RequestDelegate)GetLinkPreviewImageAsync);
     }
 
     private DefaultTusConfiguration CreateTusConfiguration() => new()
@@ -192,6 +197,30 @@ public sealed class MediaHttpEndpoints : IMediaHttpEndpoints
         }
 
         var file = await _media.OpenAvatarAsync(uploadId.ToLowerInvariant(), context.RequestAborted);
+        if (file == null)
+        {
+            context.Response.StatusCode = StatusCodes.Status404NotFound;
+            return;
+        }
+
+        await SendFileAsync(context, file);
+    }
+
+    // The image of a page anyone could open: every user with media access may have it
+    private async Task GetLinkPreviewImageAsync(HttpContext context)
+    {
+        if (!await TryAuthorizeReadAsync(context))
+            return;
+
+        if (_linkPreviews == null
+            || !int.TryParse(context.Request.RouteValues["id"]?.ToString(), NumberStyles.None,
+                CultureInfo.InvariantCulture, out var previewId))
+        {
+            context.Response.StatusCode = StatusCodes.Status404NotFound;
+            return;
+        }
+
+        var file = await _linkPreviews.OpenImageAsync(previewId, context.RequestAborted);
         if (file == null)
         {
             context.Response.StatusCode = StatusCodes.Status404NotFound;

@@ -44,6 +44,36 @@ public sealed class ChatMessageModel
 
     public IReadOnlyList<string> UsersIds { get; init; } = [];
 
+    private ChatLinkPreviewModel? _linkPreview;
+    private bool _isLinkPreviewDisabled;
+
+    /// <summary>The preview of <see cref="LinkPreviewTarget"/>, once the page has been fetched.</summary>
+    public ChatLinkPreviewModel? LinkPreview { get => _linkPreview; init => _linkPreview = value; }
+
+    /// <summary>The author sent or edited the message without a preview of its link.</summary>
+    public bool IsLinkPreviewDisabled { get => _isLinkPreviewDisabled; init => _isLinkPreviewDisabled = value; }
+
+    /// <summary>
+    /// The address the message should show a preview of, in its key form; null when it shows none.
+    /// </summary>
+    public string? LinkPreviewTarget => IsLinkPreviewDisabled || IsDeleted || IsSystem
+        ? null
+        : LinkPreviewAddress.TargetOf(TextContent?.Text);
+
+    /// <summary>
+    /// Whether the message waits for a preview: it has an address and no preview of that address yet.
+    /// </summary>
+    public bool NeedsLinkPreview => LinkPreviewTarget is { } target && LinkPreview?.Url != target;
+
+    /// <returns>False when the preview is not of the address the message shows now, or is there already.</returns>
+    public bool SetLinkPreview(ChatLinkPreviewModel preview)
+    {
+        if (LinkPreviewTarget != preview.Url || LinkPreview?.Id == preview.Id)
+            return false;
+        _linkPreview = preview;
+        return true;
+    }
+
     private DateTime? _pinnedAt;
     private int? _pinnedByUserId;
     public DateTime? PinnedAt { get => _pinnedAt; init => _pinnedAt = value; }
@@ -75,7 +105,8 @@ public sealed class ChatMessageModel
         IEnumerable<ChatVideoContentModel>? videos = null,
         IEnumerable<ChatFileContentModel>? files = null,
         DateTime? delayedSentTime = null,
-        DateTime? disposeTime = null)
+        DateTime? disposeTime = null,
+        bool isLinkPreviewDisabled = false)
     {
         var message = new ChatMessageModel
         {
@@ -87,7 +118,8 @@ public sealed class ChatMessageModel
             Videos = videos?.ToList() ?? [],
             Files = files?.ToList() ?? [],
             DelayedSentTime = delayedSentTime,
-            DisposeTime = disposeTime
+            DisposeTime = disposeTime,
+            IsLinkPreviewDisabled = isLinkPreviewDisabled
         };
 
         if (message.TextContent == null && !message.HasAttachments)
@@ -136,13 +168,20 @@ public sealed class ChatMessageModel
         _textContent = new ChatTextContentModel { Text = result.ToFallbackText(), CommandResult = result };
     }
 
-    public ErrorCode? Edit(int userId, string text, DateTime now)
+    /// <param name="isLinkPreviewDisabled">Turns the preview off or on again; null leaves it as it was.</param>
+    public ErrorCode? Edit(int userId, string text, DateTime now, bool? isLinkPreviewDisabled = null)
     {
         if (!IsSentBy(userId) || IsDeleted || IsReadOnly || IsSystem || TextContent?.CommandResult != null)
             return ErrorCode.InsufficientPermissions;
 
         _textContent = new ChatTextContentModel { Text = text };
         _editTime = now;
+        if (isLinkPreviewDisabled is { } disabled)
+            _isLinkPreviewDisabled = disabled;
+
+        // A preview of an address the text no longer has, or one turned off, goes away at once
+        if (_linkPreview != null && _linkPreview.Url != LinkPreviewTarget)
+            _linkPreview = null;
         return null;
     }
 

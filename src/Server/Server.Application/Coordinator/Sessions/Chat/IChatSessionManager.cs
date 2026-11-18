@@ -1,3 +1,4 @@
+using Server.Core.Models.TextChat.Messages.Content;
 using System.Diagnostics.CodeAnalysis;
 using Shared.Models.DataTransferObjects.ChatSession.Messages;
 using Server.Core.Models.TextChat;
@@ -36,7 +37,15 @@ public interface IChatSessionManager
         ChatSystemContent content);
     Task<ErrorCode?> AddMessageAsync(int sessionId, NewChatMessageModel message, int senderUserId);
     Task<ErrorCode?> SetReactionAsync(int sessionId, int messageId, string emoji, bool isAdded, int userId);
-    Task<ErrorCode?> EditMessageAsync(int sessionId, int messageId, string text, int userId);
+    /// <param name="isLinkPreviewDisabled">Turns the preview of the link off or on again; null leaves it as it was.</param>
+    Task<ErrorCode?> EditMessageAsync(int sessionId, int messageId, string text, int userId,
+        bool? isLinkPreviewDisabled = null);
+
+    /// <summary>
+    /// Puts a fetched preview into a message, as a change of it. Nothing happens when the message has been
+    /// deleted or no longer shows that address meanwhile.
+    /// </summary>
+    Task SetLinkPreviewAsync(int sessionId, int messageId, ChatLinkPreviewModel preview);
     /// <param name="mayDeleteAny">The user may delete messages of others, by their coordinator roles.</param>
     Task<ErrorCode?> DeleteMessageAsync(int sessionId, int messageId, int userId, bool mayDeleteAny = false);
 }
