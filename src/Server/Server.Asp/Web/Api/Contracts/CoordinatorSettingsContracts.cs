@@ -1,3 +1,4 @@
+using Server.Core.Models.Coordinator.Settings;
 using Shared.Enums;
 using System.ComponentModel.DataAnnotations;
 
@@ -151,6 +152,15 @@ public sealed class MediaSettingsDto
 
     /// <summary>0 leaves the storage unlimited.</summary>
     public long StorageQuotaBytes { get; init; }
+
+    /// <summary>The longest side clients reduce images to when they compress them.</summary>
+    public int ImageMaxSide { get; init; } = CoordinatorMediaSettings.DefaultImageMaxSide;
+
+    /// <summary>The JPEG or WebP quality of compressed images.</summary>
+    public int ImageQuality { get; init; } = CoordinatorMediaSettings.DefaultImageQuality;
+
+    /// <summary>Images may go uncompressed; otherwise none larger than <see cref="ImageMaxSide"/> is taken.</summary>
+    public bool AllowOriginalImages { get; init; } = true;
 }
 
 /// <summary>Uploads not attached to a message yet, and the tokens media requests carry.</summary>

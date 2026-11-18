@@ -63,6 +63,12 @@ public static class CoordinatorSettingsValidator
             errors.Add(CoordinatorSettingsFields.MaxFileSize, "The largest file must be at least one byte.");
         if (change.StorageQuotaBytes < 0)
             errors.Add(CoordinatorSettingsFields.StorageQuota, "The quota cannot be negative; 0 leaves it unlimited.");
+        if (change.ImageMaxSide is < Limits.ChatImageCompressedSideMin or > Limits.ChatImageMaxSide)
+            errors.Add(CoordinatorSettingsFields.ImageMaxSide,
+                $"The side of compressed images must be from {Limits.ChatImageCompressedSideMin} to {Limits.ChatImageMaxSide} pixels.");
+        if (change.ImageQuality is < Limits.ChatImageQualityMin or > Limits.ChatImageQualityMax)
+            errors.Add(CoordinatorSettingsFields.ImageQuality,
+                $"The quality of compressed images must be from {Limits.ChatImageQualityMin} to {Limits.ChatImageQualityMax}.");
 
         ValidateUploads(errors, change);
         ValidateRateLimits(errors, change.RateLimits);
@@ -159,6 +165,8 @@ public static class CoordinatorSettingsFields
     public const string HeartbeatTimeout = "Heartbeat.TimeoutSeconds";
     public const string MaxFileSize = "Media.MaxFileSizeBytes";
     public const string StorageQuota = "Media.StorageQuotaBytes";
+    public const string ImageMaxSide = "Media.ImageMaxSide";
+    public const string ImageQuality = "Media.ImageQuality";
     public const string MaxUnattachedUploads = "Uploads.MaxUnattachedPerUser";
     public const string UnattachedUploadLifetime = "Uploads.UnattachedLifetimeHours";
     public const string MediaTokenLifetime = "Uploads.TokenLifetimeMinutes";
