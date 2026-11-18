@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Server.Application.Abstractions.Persistence;
-using Server.Infrastructure.Database.Entities;
+using Server.Database.Entities;
+using Server.Database;
 using Shared.Permissions;
 
 namespace Server.Infrastructure.Database.Repositories;

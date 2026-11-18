@@ -1,7 +1,8 @@
 using Microsoft.EntityFrameworkCore;
 using Server.Application.Abstractions.Persistence;
 using Server.Core.Models.User;
-using Server.Infrastructure.Database.Entities;
+using Server.Database.Entities;
+using Server.Database;
 using Server.Infrastructure.Mappers;
 
 namespace Server.Infrastructure.Database.Repositories;

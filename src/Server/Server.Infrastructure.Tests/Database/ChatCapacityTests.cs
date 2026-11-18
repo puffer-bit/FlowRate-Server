@@ -1,5 +1,5 @@
 using Server.Core.Models;
-using Server.Infrastructure.Database.Entities.TextChat;
+using Server.Database.Entities.TextChat;
 using Server.Infrastructure.Mappers;
 using Xunit;
 

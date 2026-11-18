@@ -1,27 +1,25 @@
-using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Server.Core.Models.Roles;
 using Server.Core.Models.User;
-using Server.Infrastructure.Database;
+using Server.Database;
 using Server.Infrastructure.Database.Repositories;
 using Shared.Enums;
 using Xunit;
 
 namespace Server.Infrastructure.Tests.Database;
 
+[Trait("Category", "DatabaseProvider")]
 public sealed class RoleRepositoryTests : IDisposable
 {
     private const string CoordinatorId = "coordinator";
 
-    private readonly string _databasePath = Path.Combine(Path.GetTempPath(), $"roles-{Guid.NewGuid():N}.db");
+    private readonly RepositoryTestDatabase _database = new();
     private readonly RoleRepository _repository;
     private readonly UserRepository _users;
 
     public RoleRepositoryTests()
     {
-        var factory = new TestContextFactory(new DbContextOptionsBuilder<ServerDbContext>()
-            .UseSqlite($"Data Source={_databasePath}")
-            .Options);
+        var factory = new TestContextFactory(_database.Options);
         _repository = new RoleRepository(factory);
         _users = new UserRepository(factory);
 
@@ -31,8 +29,7 @@ public sealed class RoleRepositoryTests : IDisposable
 
     public void Dispose()
     {
-        SqliteConnection.ClearAllPools();
-        File.Delete(_databasePath);
+        _database.Dispose();
     }
 
     private Task<int> AddUserAsync(string name, string coordinatorId = CoordinatorId) =>

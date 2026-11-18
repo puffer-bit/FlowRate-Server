@@ -1,29 +1,27 @@
-using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Server.Core.Models.TextChat.Messages;
 using Server.Core.Models.TextChat.Messages.Content;
-using Server.Infrastructure.Database;
-using Server.Infrastructure.Database.Entities.TextChat;
+using Server.Database;
+using Server.Database.Entities.TextChat;
 using Server.Infrastructure.Database.Repositories;
 using Xunit;
 
 namespace Server.Infrastructure.Tests.Database;
 
+[Trait("Category", "DatabaseProvider")]
 public sealed class LinkPreviewRepositoryTests : IDisposable
 {
     private const string Coordinator = "coordinator";
     private static readonly DateTime Now = new(2026, 11, 18, 12, 0, 0, DateTimeKind.Utc);
 
-    private readonly string _databasePath = Path.Combine(Path.GetTempPath(), $"previews-{Guid.NewGuid():N}.db");
+    private readonly RepositoryTestDatabase _database = new();
     private readonly LinkPreviewRepository _previews;
     private readonly MessagesRepository _messages;
     private readonly int _chatId;
 
     public LinkPreviewRepositoryTests()
     {
-        var factory = new TestContextFactory(new DbContextOptionsBuilder<ServerDbContext>()
-            .UseSqlite($"Data Source={_databasePath}")
-            .Options);
+        var factory = new TestContextFactory(_database.Options);
         _previews = new LinkPreviewRepository(factory);
         _messages = new MessagesRepository(factory);
 
@@ -42,8 +40,7 @@ public sealed class LinkPreviewRepositoryTests : IDisposable
 
     public void Dispose()
     {
-        SqliteConnection.ClearAllPools();
-        File.Delete(_databasePath);
+        _database.Dispose();
     }
 
     private Task<ChatLinkPreviewModel> AddPreview(string url, DateTime fetchedAt) => _previews.AddAsync(new ChatLinkPreviewModel

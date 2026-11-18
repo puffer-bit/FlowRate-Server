@@ -92,6 +92,38 @@ It stores COMPOSE_FILE in .env, so plain docker compose commands keep using the 
 WebRTC then goes through Docker NAT, and a host firewall has to let the traffic of the compose bridge
 through: on OpenWrt that is a forward rule from wan to the zone of the bridge.
 
+PostgreSQL (optional)
+---------------------
+SQLite is the default. For a new PostgreSQL database, set POSTGRES_PASSWORD in .env
+and add this line (host networking):
+
+    COMPOSE_FILE=docker-compose.yml:docker-compose.postgresql.yml
+
+For bridge networking:
+
+    COMPOSE_FILE=docker-compose.yml:docker-compose.bridge.yml:docker-compose.postgresql.yml:docker-compose.postgresql.bridge.yml
+
+Then run docker compose up -d. PostgreSQL uses a separate postgres-data volume.
+Host mode publishes the database only on 127.0.0.1:${POSTGRES_PORT:-5432}; bridge mode
+publishes no database port. The installer preserves this selection during updates.
+The password initializes a new volume; changing .env later does not change an existing
+PostgreSQL user's password. Selecting PostgreSQL does not import existing SQLite data automatically. To transfer it,
+stop the SQLite server before enabling these overrides and back up server-data. Start
+only PostgreSQL, then run the offline command before starting the regular server:
+
+    docker compose up -d --wait postgres
+    docker compose run --rm --no-deps server import-sqlite --source /data/server.db --dry-run
+    docker compose run --rm --no-deps server import-sqlite --source /data/server.db
+    docker compose up -d server
+
+Keep the original Compose project name and server-data volume. The importer requires
+SQLite at the same server schema version and an empty PostgreSQL target. Dry run
+initializes the PostgreSQL schema, verifies the complete import, and rolls back rows
+and sequences. The source is read-only. IDs, links, and credentials are preserved;
+media/certificates remain in server-data. Do not start the normal PostgreSQL server
+before importing, as it seeds a new installation and the import will refuse it.
+Include both the PostgreSQL volume and server-data (media/certificates) in backups.
+
 Push notifications
 ------------------
 Off unless the first run of the installer was given a key or a relay. To send them to FCM directly, with
@@ -110,5 +142,7 @@ PUSH_SERVICE_ACCOUNT_FILE=<its name> in .env, or set PUSH_RELAY_URL, then docker
 
 Data
 ----
-The database, the generated certificate and the uploaded media live in the volume flowrate_server-data,
-the logs in flowrate_server-logs. Updates keep them, docker compose down -v in /opt/flowrate deletes them.
+The SQLite database, generated certificate and uploaded media live in flowrate_server-data;
+logs live in flowrate_server-logs. With PostgreSQL, the database uses flowrate_postgres-data
+and media/certificates still use server-data. Updates keep the volumes; docker compose down -v
+deletes the volumes selected by COMPOSE_FILE.

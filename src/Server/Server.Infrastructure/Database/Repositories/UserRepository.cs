@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Server.Core.Models.User;
-using Server.Infrastructure.Database.Entities;
+using Server.Database.Entities;
+using Server.Database;
 using Server.Infrastructure.Mappers;
 using Server.Application.Abstractions.Persistence;
 using Server.Application.Coordinator.Authentication;

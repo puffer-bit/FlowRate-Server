@@ -1,4 +1,6 @@
 using Server.Core.Models.TextChat.Messages.Content;
+using Server.Database.Sqlite;
+using Server.Database;
 using Shared.Models.DataTransferObjects.ChatSession.Messages;
 using Server.Core.Models.TextChat.Messages;
 using System.Text.Json;
@@ -32,9 +34,8 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
 using Server.Core.Models.TextChat;
-using Server.Infrastructure.Database;
-using Server.Infrastructure.Database.Entities;
-using Server.Infrastructure.Database.Entities.TextChat;
+using Server.Database.Entities;
+using Server.Database.Entities.TextChat;
 using Server.Infrastructure.Database.Repositories;
 using Shared.Enums;
 using Xunit;
@@ -49,7 +50,7 @@ public sealed class PrivateChatRepositoryTests : IDisposable
 
     public PrivateChatRepositoryTests()
     {
-        _factory = new Factory(new DbContextOptionsBuilder<ServerDbContext>().UseSqlite($"Data Source={_path}").Options);
+        _factory = new Factory(new DbContextOptionsBuilder<ServerDbContext>().UseServerSqlite($"Data Source={_path}").Options);
         _repository = new ChatSessionRepository(_factory);
         using var context = _factory.CreateDbContext();
         context.Database.Migrate();
@@ -169,7 +170,7 @@ public sealed class PrivateChatRepositoryTests : IDisposable
         }
         var counter = new QueryCounter();
         var factory = new Factory(new DbContextOptionsBuilder<ServerDbContext>()
-            .UseSqlite($"Data Source={_path}").AddInterceptors(counter).Options);
+            .UseServerSqlite($"Data Source={_path}").AddInterceptors(counter).Options);
         var repository = new ChatSessionRepository(factory);
         var chats = await repository.GetByCoordinatorIdAsync("coordinator");
         Assert.Equal(1, counter.Reads);

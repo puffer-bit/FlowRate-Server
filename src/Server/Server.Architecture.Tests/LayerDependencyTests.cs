@@ -1,6 +1,10 @@
 using System.Reflection;
 using Server.Core.Models.User;
+using Server.Database;
+using Server.Database.PostgreSql;
+using Server.Database.Sqlite;
 using Server.Infrastructure.Database;
+using Server.Database;
 using Xunit;
 using Server.Application.Coordinator;
 
@@ -10,7 +14,10 @@ public class LayerDependencyTests
 {
     private static readonly Assembly Core = typeof(UserModel).Assembly;
     private static readonly Assembly Application = typeof(CoordinatorInstance).Assembly;
-    private static readonly Assembly Infrastructure = typeof(ServerDbContext).Assembly;
+    private static readonly Assembly Infrastructure = typeof(DatabaseConfiguration).Assembly;
+    private static readonly Assembly Database = typeof(ServerDbContext).Assembly;
+    private static readonly Assembly Sqlite = typeof(SqliteDatabase).Assembly;
+    private static readonly Assembly PostgreSql = typeof(PostgreSqlDatabase).Assembly;
 
     // Frameworks that belong to the outer layers only
     private static readonly string[] InfrastructureFrameworks =
@@ -21,19 +28,23 @@ public class LayerDependencyTests
     // Generated from the Sfu/mediasoup *.proto files (csharp_namespace option)
     private static readonly string[] GeneratedNamespaces = ["Server.Api.Grpc", "Server.Infrastructure.Mediasoup"];
 
-    public static TheoryData<string> LayerAssemblies => new() { "Server.Core", "Server.Application", "Server.Infrastructure" };
+    public static TheoryData<string> LayerAssemblies => new()
+    {
+        "Server.Core", "Server.Application", "Server.Infrastructure",
+        "Server.Database", "Server.Database.Sqlite", "Server.Database.PostgreSql"
+    };
 
     [Fact]
     public void Core_DoesNotDependOnOuterLayers()
     {
-        AssertNoReferences(Core, ["Server.Application", "Server.Infrastructure", "Server.Asp", "Server.Api"]);
+        AssertNoReferences(Core, ["Server.Application", "Server.Infrastructure", "Server.Database", "Server.Asp", "Server.Api"]);
         AssertNoReferences(Core, InfrastructureFrameworks);
     }
 
     [Fact]
     public void Application_DoesNotDependOnInfrastructureOrPresentation()
     {
-        AssertNoReferences(Application, ["Server.Infrastructure", "Server.Asp", "Server.Api"]);
+        AssertNoReferences(Application, ["Server.Infrastructure", "Server.Database", "Server.Asp", "Server.Api"]);
         AssertNoReferences(Application, InfrastructureFrameworks);
     }
 
@@ -43,11 +54,28 @@ public class LayerDependencyTests
         AssertNoReferences(Infrastructure, ["Server.Asp"]);
     }
 
+    [Fact]
+    public void Database_DependsOnlyOnTheDomain()
+    {
+        // The model of the database knows no provider and no layer above the domain
+        AssertNoReferences(Database, ["Server.Application", "Server.Infrastructure", "Server.Asp", "Server.Api",
+            "Microsoft.EntityFrameworkCore.Sqlite", "Microsoft.Data.Sqlite", "Npgsql", "Server.Database.Sqlite",
+            "Server.Database.PostgreSql"]);
+    }
+
+    [Fact]
+    public void DatabaseProviders_DoNotDependOnOuterLayers()
+    {
+        foreach (var provider in new[] { Sqlite, PostgreSql })
+            AssertNoReferences(provider, ["Server.Application", "Server.Infrastructure", "Server.Asp", "Server.Api"]);
+        AssertNoReferences(Sqlite, ["Npgsql", "Server.Database.PostgreSql"]);
+    }
+
     [Theory]
     [MemberData(nameof(LayerAssemblies))]
     public void Namespaces_MatchProject(string assemblyName)
     {
-        var assembly = new[] { Core, Application, Infrastructure }.Single(a => a.GetName().Name == assemblyName);
+        var assembly = new[] { Core, Application, Infrastructure, Database, Sqlite, PostgreSql }.Single(a => a.GetName().Name == assemblyName);
 
         var offenders = assembly.GetTypes()
             .Where(t => !IsCompilerGenerated(t))
