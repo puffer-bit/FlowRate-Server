@@ -1,8 +1,8 @@
 using Server.Core.Models;
 using Server.Core.Models.HybridSession;
 using Server.Core.Models.TextChat;
-using Server.Infrastructure.Database.Entities;
-using Server.Infrastructure.Database.Entities.TextChat;
+using Server.Database.Entities;
+using Server.Database.Entities.TextChat;
 
 namespace Server.Infrastructure.Mappers;
 

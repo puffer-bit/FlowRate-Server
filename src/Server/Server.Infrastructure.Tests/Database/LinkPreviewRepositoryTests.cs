@@ -1,8 +1,8 @@
 using Microsoft.EntityFrameworkCore;
 using Server.Core.Models.TextChat.Messages;
 using Server.Core.Models.TextChat.Messages.Content;
-using Server.Infrastructure.Database;
-using Server.Infrastructure.Database.Entities.TextChat;
+using Server.Database;
+using Server.Database.Entities.TextChat;
 using Server.Infrastructure.Database.Repositories;
 using Xunit;
 

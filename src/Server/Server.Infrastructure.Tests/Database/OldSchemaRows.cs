@@ -1,7 +1,7 @@
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata;
-using Server.Infrastructure.Database;
+using Server.Database;
 
 namespace Server.Infrastructure.Tests.Database;
 

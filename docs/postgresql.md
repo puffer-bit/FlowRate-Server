@@ -25,30 +25,25 @@ Media files remain in local storage.
 
 ## Maintaining migrations
 
-Run from `src/`. Runtime and EF tooling share the provider configuration.
-Environment variables override `appsettings.json` in the current working directory;
-arguments after `--` override both.
+The database lives in `src/Server/Database`:
 
-For PostgreSQL:
+| Project | Contents |
+|---|---|
+| `Server.Database` | `ServerDbContext`, entities and their configurations; no provider |
+| `Server.Database.Sqlite` | SQLite options, functions and pragmas, its migrations |
+| `Server.Database.PostgreSql` | PostgreSQL options, timestamp trimming, its migrations, the SQLite import |
 
-```bash
-dotnet ef migrations add ChangeName \
-  --project Server/Server.Migrations.PostgreSql \
-  --startup-project Server/Server.Asp \
-  --context ServerDbContext \
-  -- --Database:Provider PostgreSql \
-  --Database:ConnectionString 'Host=localhost;Database=flowrate;Username=flowrate'
-```
-
-For SQLite:
+`Server.Infrastructure` picks the provider from `Database:Provider`. Each provider project
+has its own design-time factory, so `dotnet ef` needs no server settings. Run from
+`src/Server/Database`:
 
 ```bash
-dotnet ef migrations add ChangeName \
-  --project Server/Server.Infrastructure \
-  --startup-project Server/Server.Asp \
-  --context ServerDbContext --output-dir Database/Migrations \
-  -- --Database:Provider Sqlite --Database:ConnectionString 'Data Source=data/server.db'
+dotnet ef migrations add ChangeName --project Server.Database.Sqlite --startup-project Server.Database.Sqlite
+dotnet ef migrations add ChangeName --project Server.Database.PostgreSql --startup-project Server.Database.PostgreSql
 ```
+
+Creating a migration does not connect to a database. `dotnet ef migrations has-pending-model-changes`
+with the same arguments checks that a provider has a migration for the current model.
 
 Every shared model change needs a migration for each provider. Keep existing SQLite
 migrations intact. PostgreSQL uses native identity columns and UTC timestamps;

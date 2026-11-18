@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Server.Application.Abstractions.Persistence;
 using Server.Core.Models.TextChat.Messages.Content;
+using Server.Database;
 using Server.Infrastructure.Mappers;
 
 namespace Server.Infrastructure.Database.Repositories;

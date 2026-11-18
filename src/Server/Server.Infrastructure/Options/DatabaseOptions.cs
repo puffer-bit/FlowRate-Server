@@ -1,6 +1,6 @@
 using System.ComponentModel.DataAnnotations;
-using Microsoft.Data.Sqlite;
-using Npgsql;
+using Server.Database.PostgreSql;
+using Server.Database.Sqlite;
 
 namespace Server.Infrastructure.Options;
 
@@ -31,26 +31,13 @@ public class DatabaseOptions : IValidatableObject
             yield break;
         }
 
-        var valid = true;
-        try
+        var error = Provider switch
         {
-            if (Provider == DatabaseProvider.PostgreSql)
-            {
-                var connection = new NpgsqlConnectionStringBuilder(ConnectionString);
-                valid = !string.IsNullOrWhiteSpace(connection.Host);
-            }
-            else if (Provider == DatabaseProvider.Sqlite)
-            {
-                var connection = new SqliteConnectionStringBuilder(ConnectionString);
-                valid = !string.IsNullOrWhiteSpace(connection.DataSource);
-            }
-        }
-        catch (ArgumentException)
-        {
-            valid = false;
-        }
-
-        if (!valid)
-            yield return new ValidationResult("The connection string is invalid for the selected database provider.", [nameof(ConnectionString)]);
+            DatabaseProvider.Sqlite => SqliteDatabase.ValidateConnectionString(ConnectionString),
+            DatabaseProvider.PostgreSql => PostgreSqlDatabase.ValidateConnectionString(ConnectionString),
+            _ => null
+        };
+        if (error != null)
+            yield return new ValidationResult(error, [nameof(ConnectionString)]);
     }
 }

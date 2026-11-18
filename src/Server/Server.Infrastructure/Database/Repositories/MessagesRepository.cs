@@ -1,7 +1,8 @@
 using Microsoft.EntityFrameworkCore;
 using Server.Core.Models.Media;
 using Server.Core.Models.TextChat.Messages;
-using Server.Infrastructure.Database.Entities.TextChat;
+using Server.Database.Entities.TextChat;
+using Server.Database;
 using Server.Infrastructure.Mappers;
 using Server.Application.Abstractions.Persistence;
 

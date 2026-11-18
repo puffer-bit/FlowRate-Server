@@ -5,7 +5,8 @@ using Microsoft.EntityFrameworkCore.Migrations;
 using Server.Core.Models.Coordinator;
 using Server.Core.Models.Coordinator.Settings;
 using Server.Core.Models.Moderation;
-using Server.Infrastructure.Database;
+using Server.Database.Sqlite;
+using Server.Database;
 using Server.Infrastructure.Database.Repositories;
 using Server.Infrastructure.Mappers;
 using Shared.Enums.User;
@@ -18,7 +19,7 @@ public sealed class BanRepositoryTests : IDisposable
     private readonly string _path = Path.Combine(Path.GetTempPath(), $"bans-{Guid.NewGuid():N}.db");
     private readonly Factory _factory;
     public BanRepositoryTests() => _factory = new Factory(new DbContextOptionsBuilder<ServerDbContext>()
-        .UseSqlite($"Data Source={_path}").Options);
+        .UseServerSqlite($"Data Source={_path}").Options);
     public void Dispose() { SqliteConnection.ClearAllPools(); File.Delete(_path); }
 
     [Fact]

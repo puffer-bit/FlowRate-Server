@@ -5,6 +5,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.EntityFrameworkCore;
 using Serilog;
+using Server.Database;
 using Shared.Serialization;
 using Server.Infrastructure.Database;
 using Server.Infrastructure.Coordinator.Connection.Gateway;
