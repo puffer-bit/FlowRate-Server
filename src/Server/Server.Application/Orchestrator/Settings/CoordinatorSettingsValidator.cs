@@ -69,6 +69,9 @@ public static class CoordinatorSettingsValidator
         if (change.ImageQuality is < Limits.ChatImageQualityMin or > Limits.ChatImageQualityMax)
             errors.Add(CoordinatorSettingsFields.ImageQuality,
                 $"The quality of compressed images must be from {Limits.ChatImageQualityMin} to {Limits.ChatImageQualityMax}.");
+        if (change.VideoMaxSide is < Limits.ChatVideoCompressedSideMin or > Limits.ChatVideoCompressedSideMax)
+            errors.Add(CoordinatorSettingsFields.VideoMaxSide,
+                $"The side of compressed videos must be from {Limits.ChatVideoCompressedSideMin} to {Limits.ChatVideoCompressedSideMax} pixels.");
 
         ValidateUploads(errors, change);
         ValidateRateLimits(errors, change.RateLimits);
@@ -167,6 +170,7 @@ public static class CoordinatorSettingsFields
     public const string StorageQuota = "Media.StorageQuotaBytes";
     public const string ImageMaxSide = "Media.ImageMaxSide";
     public const string ImageQuality = "Media.ImageQuality";
+    public const string VideoMaxSide = "Media.VideoMaxSide";
     public const string MaxUnattachedUploads = "Uploads.MaxUnattachedPerUser";
     public const string UnattachedUploadLifetime = "Uploads.UnattachedLifetimeHours";
     public const string MediaTokenLifetime = "Uploads.TokenLifetimeMinutes";
