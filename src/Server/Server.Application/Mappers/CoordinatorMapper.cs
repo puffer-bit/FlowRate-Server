@@ -34,6 +34,11 @@ public static class CoordinatorMapperExtensions
             HeartbeatTimeoutSeconds = model.Heartbeat.TimeoutSeconds,
             MaxFileSizeBytes = model.Media.MaxFileSizeBytes,
             StorageQuotaBytes = model.Media.StorageQuotaBytes,
+            ImageMaxSide = model.Media.ImageMaxSide,
+            ImageQuality = model.Media.ImageQuality,
+            AllowOriginalImages = model.Media.AllowOriginalImages,
+            VideoMaxSide = model.Media.VideoMaxSide,
+            AllowOriginalVideos = model.Media.AllowOriginalVideos,
             SettingsRevision = model.Revision
         };
     }

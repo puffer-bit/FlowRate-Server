@@ -29,6 +29,7 @@ using Server.Application.Abstractions.Push;
 using Server.Application.Coordinator.Handlers.Push;
 using Server.Application.Coordinator.Handlers.Media;
 using Server.Application.Coordinator.Media;
+using Server.Core.Models.Coordinator.Settings;
 using Server.Application.Abstractions.Media;
 using Server.Infrastructure.Coordinator.Media;
 using Server.Infrastructure.Coordinator.Push;
@@ -89,7 +90,8 @@ public class CoordinatorInstanceFactory : ICoordinatorInstanceFactory
         var rateLimits = new RequestRateLimits(coordinatorInstanceModel.RateLimits);
         var mediaStorage = new TusDiskMediaStorage(Path.Combine(mediaDirectory, coordinatorInstanceModel.Id));
         var sfuPool = CreateSfuPool(coordinatorInstanceModel);
-        var chatSessionManager = CreateChatSessionManager(logger, coordinatorInstanceModel.Id, coordinatorEventBus, mediaStorage);
+        var chatSessionManager = CreateChatSessionManager(logger, coordinatorInstanceModel.Id, coordinatorEventBus, mediaStorage,
+            () => coordinatorInstanceContext.Model.Media);
         var userManager = CreateUserManager(logger, coordinatorInstanceModel.Id, coordinatorInstanceContext,
             connectionsContext);
         var mediaService = ActivatorUtilities.CreateInstance<MediaService>(_provider, logger, mediaStorage,
@@ -210,9 +212,10 @@ public class CoordinatorInstanceFactory : ICoordinatorInstanceFactory
             sessionLayout, coordinatorInstanceId);
 
     private IChatSessionManager CreateChatSessionManager(ILogger logger, string coordinatorInstanceId,
-        ICoordinatorEventBus coordinatorEventBus, IMediaStorage mediaStorage) =>
+        ICoordinatorEventBus coordinatorEventBus, IMediaStorage mediaStorage,
+        Func<CoordinatorMediaSettings> mediaSettings) =>
         ActivatorUtilities.CreateInstance<ChatSessionManager>(_provider, logger, coordinatorEventBus, mediaStorage,
-            coordinatorInstanceId);
+            coordinatorInstanceId, mediaSettings);
 
     private HybridSessionManager CreateHybridSessionManager(ILogger logger, string coordinatorInstanceId,
         ICoordinatorEventBus coordinatorEventBus, ISFUNodeSelector sfuPool) =>

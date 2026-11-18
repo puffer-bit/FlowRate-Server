@@ -30,8 +30,7 @@ public sealed class BanRepositoryTests : IDisposable
             await migrator.MigrateAsync("PinnedChatMessages");
             var model = CoordinatorInstanceModel.Create("legacy", "0.0.0.0", 1234, DateTime.UtcNow);
             model.SetAccessList(new AccessListSettings([], ["::ffff:192.0.2.1", "192.0.2.1", "2001:0db8::1"]));
-            db.CoordinatorInstances.Add(model.ToEntity());
-            await db.SaveChangesAsync();
+            await OldSchemaRows.InsertAsync(db, model.ToEntity());
             await db.Database.ExecuteSqlRawAsync("""
                 INSERT INTO UserEntities (IdentityHash, Username, CoordinatorInstanceId, State, LastStatus,
                     FirstConnectionTime, LastConnectionTime)
@@ -74,8 +73,7 @@ public sealed class BanRepositoryTests : IDisposable
         var migrator = db.GetService<IMigrator>();
         await migrator.MigrateAsync("GlobalBans");
         var coordinator = CoordinatorInstanceModel.Create("history", "0.0.0.0", 1234, DateTime.UtcNow);
-        db.CoordinatorInstances.Add(coordinator.ToEntity());
-        await db.SaveChangesAsync();
+        await OldSchemaRows.InsertAsync(db, coordinator.ToEntity());
         foreach (var id in new[] { 101, 102, 103 })
             await db.Database.ExecuteSqlRawAsync("""
                 INSERT INTO UserEntities (Id, IdentityHash, Username, CoordinatorInstanceId, State, LastStatus,

@@ -6,6 +6,9 @@ using Microsoft.Extensions.Logging;
 using Server.Application.Coordinator.Events;
 using Server.Application.Mappers;
 using Server.Core.Models.Media;
+using Server.Core.Models.Coordinator.Settings;
+using Server.Application.Coordinator.Media;
+using Shared.Validation;
 using Server.Core.Models.User;
 using Server.Core.Models.TextChat;
 using Server.Core.Models.TextChat.Messages.Content;
@@ -32,6 +35,9 @@ public class ChatSessionManager : IChatSessionManager
     private readonly IMediaStorage _mediaStorage;
     private readonly string _coordinatorInstanceId;
 
+    // The current media settings of the coordinator, which say whether images may go uncompressed
+    private readonly Func<CoordinatorMediaSettings> _mediaSettings;
+
     private readonly ConcurrentDictionary<int, ChatSessionModel> _sessions = new();
 
     // Serializes creation and deletion, so that two chats cannot take the same name
@@ -49,8 +55,10 @@ public class ChatSessionManager : IChatSessionManager
         IMessagesRepository messagesRepository,
         IMediaUploadRepository mediaUploads,
         IMediaStorage mediaStorage,
-        string coordinatorInstanceId)
+        string coordinatorInstanceId,
+        Func<CoordinatorMediaSettings>? mediaSettings = null)
     {
+        _mediaSettings = mediaSettings ?? (() => CoordinatorMediaSettings.Default);
         _mediaUploads = mediaUploads;
         _mediaStorage = mediaStorage;
         _logger = logger;
@@ -660,6 +668,9 @@ public class ChatSessionManager : IChatSessionManager
                     ? ErrorCode.AttachmentInvalid
                     : ErrorCode.AttachmentNotReady, [], []);
 
+            if (await CheckImageSizeAsync(original) is { } rejection)
+                return (rejection, [], []);
+
             images.Add(new ChatImageContentModel
             {
                 Id = 0,
@@ -683,6 +694,9 @@ public class ChatSessionManager : IChatSessionManager
             if (upload.State != MediaUploadState.Completed)
                 return (ErrorCode.AttachmentNotReady, [], []);
 
+            if (await CheckVideoAsync(upload, file.FileName) is { } rejection)
+                return (rejection, [], []);
+
             files.Add(new ChatFileContentModel
             {
                 Id = 0,
@@ -694,6 +708,46 @@ public class ChatSessionManager : IChatSessionManager
         }
 
         return (null, images, files);
+    }
+
+    /// <summary>
+    /// Refuses an image larger than the coordinator takes uncompressed, by the sides in its header.
+    /// </summary>
+    private async Task<ErrorCode?> CheckImageSizeAsync(MediaUploadModel upload)
+    {
+        var settings = _mediaSettings();
+        if (settings.AllowOriginalImages)
+            return null;
+
+        await using var content = await _mediaStorage.OpenReadAsync(upload.Id);
+        if (content == null || await ImageDimensions.ReadAsync(content, upload.MimeType) is not var (width, height))
+            return ErrorCode.AttachmentInvalid;
+
+        return Math.Max(width, height) > settings.ImageMaxSide ? ErrorCode.ImageNotCompressed : null;
+    }
+
+    /// <summary>
+    /// Refuses a video the coordinator does not take uncompressed: one that is not an MP4, or is larger or
+    /// of a higher bitrate than its compressed videos, by the index of the file.
+    /// </summary>
+    private async Task<ErrorCode?> CheckVideoAsync(MediaUploadModel upload, string fileName)
+    {
+        var settings = _mediaSettings();
+        if (settings.AllowOriginalVideos || !VideoDimensions.IsVideo(upload.MimeType, fileName))
+            return null;
+
+        await using var content = await _mediaStorage.OpenReadAsync(upload.Id);
+        if (content == null)
+            return ErrorCode.AttachmentInvalid;
+        if (await VideoDimensions.ReadAsync(content) is not var (width, height, duration))
+            return ErrorCode.VideoNotCompressed;
+
+        if (Math.Min(width, height) > settings.VideoMaxSide)
+            return ErrorCode.VideoNotCompressed;
+
+        // A video of a moment is mostly its first keyframe, so its bitrate says nothing
+        var kbps = duration >= TimeSpan.FromSeconds(2) ? upload.Size * 8 / duration.TotalSeconds / 1000 : 0;
+        return kbps > Limits.ChatVideoMaxKbps(settings.VideoMaxSide) ? ErrorCode.VideoNotCompressed : null;
     }
 
     private async Task<MediaUploadModel?> GetUploadAsync(string id, int chatId, int ownerUserId, MediaUploadKind kind)

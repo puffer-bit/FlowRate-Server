@@ -81,6 +81,11 @@ interface Form {
   heartbeatTimeout: number | string
   maxFileSizeMb: number | string
   storageQuotaMb: number | string
+  imageMaxSide: number | string
+  imageQuality: number | string
+  allowOriginalImages: boolean
+  videoMaxSide: number | string
+  allowOriginalVideos: boolean
   maxUnattachedUploads: number | string
   unattachedLifetimeHours: number | string
   tokenLifetimeMinutes: number | string
@@ -108,6 +113,11 @@ function toForm(settings: CoordinatorSettings): Form {
     heartbeatTimeout: settings.heartbeat.timeoutSeconds ?? '',
     maxFileSizeMb: Math.round((settings.media.maxFileSizeBytes ?? 0) / megabyte),
     storageQuotaMb: Math.round((settings.media.storageQuotaBytes ?? 0) / megabyte),
+    imageMaxSide: settings.media.imageMaxSide ?? '',
+    imageQuality: settings.media.imageQuality ?? '',
+    allowOriginalImages: settings.media.allowOriginalImages ?? true,
+    videoMaxSide: settings.media.videoMaxSide ?? '',
+    allowOriginalVideos: settings.media.allowOriginalVideos ?? true,
     maxUnattachedUploads: settings.uploads.maxUnattachedPerUser ?? '',
     unattachedLifetimeHours: settings.uploads.unattachedLifetimeHours ?? '',
     tokenLifetimeMinutes: settings.uploads.tokenLifetimeMinutes ?? '',
@@ -142,6 +152,11 @@ function toUpdate(form: Form, expectedRevision: number): UpdateCoordinatorSettin
     media: {
       maxFileSizeBytes: toNumber(form.maxFileSizeMb) * megabyte,
       storageQuotaBytes: toNumber(form.storageQuotaMb) * megabyte,
+      imageMaxSide: toNumber(form.imageMaxSide),
+      imageQuality: toNumber(form.imageQuality),
+      allowOriginalImages: form.allowOriginalImages,
+      videoMaxSide: toNumber(form.videoMaxSide),
+      allowOriginalVideos: form.allowOriginalVideos,
     },
     uploads: {
       maxUnattachedPerUser: toNumber(form.maxUnattachedUploads),
@@ -350,7 +365,28 @@ function SettingsForm({ id, saved: latest }: { id: string, saved: CoordinatorSet
           <NumberInput label="Storage quota, MB" description="0 leaves the storage unlimited" required min={0}
             allowDecimal={false} thousandSeparator=" " value={form.storageQuotaMb} onChange={set('storageQuotaMb')}
             error={fieldErrors.take('Media.StorageQuotaBytes')} />
+          <NumberInput label="Compressed image side, px"
+            description="Clients reduce images to this longest side when they compress them" required min={320}
+            max={16384} allowDecimal={false} value={form.imageMaxSide} onChange={set('imageMaxSide')}
+            error={fieldErrors.take('Media.ImageMaxSide')} />
+          <NumberInput label="Compressed image quality" description="JPEG or WebP quality, from 30 to 100" required
+            min={30} max={100} allowDecimal={false} value={form.imageQuality} onChange={set('imageQuality')}
+            error={fieldErrors.take('Media.ImageQuality')} />
         </SimpleGrid>
+        <Switch mt="md" label="Allow uncompressed images"
+          description="Off: images larger than the compressed side are refused, so users can only send them compressed"
+          checked={form.allowOriginalImages}
+          onChange={event => set('allowOriginalImages')(event.currentTarget.checked)} />
+        <SimpleGrid cols={{ base: 1, sm: 2 }} mt="md">
+          <NumberInput label="Compressed video side, px"
+            description="Clients reduce videos to this shorter side when they compress them, like 720 for 720p"
+            required min={240} max={2160} allowDecimal={false} value={form.videoMaxSide}
+            onChange={set('videoMaxSide')} error={fieldErrors.take('Media.VideoMaxSide')} />
+        </SimpleGrid>
+        <Switch mt="md" label="Allow uncompressed videos"
+          description="Off: only MP4 videos within the compressed side and its bitrate are taken, so users can only send them compressed"
+          checked={form.allowOriginalVideos}
+          onChange={event => set('allowOriginalVideos')(event.currentTarget.checked)} />
       </Fieldset>
 
       <Fieldset legend="Uploads" id="settings-uploads" className="settings-section">

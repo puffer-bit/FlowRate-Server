@@ -1231,6 +1231,14 @@ export interface components {
             maxFileSizeBytes?: number;
             /** Format: int64 */
             storageQuotaBytes?: number;
+            /** Format: int32 */
+            imageMaxSide?: number;
+            /** Format: int32 */
+            imageQuality?: number;
+            allowOriginalImages?: boolean;
+            /** Format: int32 */
+            videoMaxSide?: number;
+            allowOriginalVideos?: boolean;
         };
         MotdSettingsDto: {
             isEnabled?: boolean;
