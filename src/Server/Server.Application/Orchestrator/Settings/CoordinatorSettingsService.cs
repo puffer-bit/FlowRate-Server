@@ -116,7 +116,8 @@ public class CoordinatorSettingsService : ICoordinatorSettingsService
             change.HeartbeatTimeoutSeconds));
 
         model.SetMedia(new CoordinatorMediaSettings(change.MaxFileSizeBytes, change.StorageQuotaBytes,
-            change.ImageMaxSide, change.ImageQuality, change.AllowOriginalImages));
+            change.ImageMaxSide, change.ImageQuality, change.AllowOriginalImages, change.VideoMaxSide,
+            change.AllowOriginalVideos));
         model.SetUploads(new CoordinatorUploadSettings(change.MaxUnattachedUploadsPerUser,
             change.UnattachedUploadLifetimeHours, change.MediaTokenLifetimeMinutes));
         model.SetRateLimits(change.RateLimits.ToSettings());

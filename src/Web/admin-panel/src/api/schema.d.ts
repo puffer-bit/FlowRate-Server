@@ -1236,6 +1236,9 @@ export interface components {
             /** Format: int32 */
             imageQuality?: number;
             allowOriginalImages?: boolean;
+            /** Format: int32 */
+            videoMaxSide?: number;
+            allowOriginalVideos?: boolean;
         };
         MotdSettingsDto: {
             isEnabled?: boolean;

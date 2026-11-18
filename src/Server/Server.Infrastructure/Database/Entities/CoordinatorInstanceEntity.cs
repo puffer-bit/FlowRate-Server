@@ -32,6 +32,8 @@ namespace Server.Infrastructure.Database.Entities
         public int MediaImageMaxSide { get; set; }
         public int MediaImageQuality { get; set; }
         public bool MediaAllowOriginalImages { get; set; }
+        public int MediaVideoMaxSide { get; set; }
+        public bool MediaAllowOriginalVideos { get; set; }
 
         public int MaxUnattachedUploadsPerUser { get; set; }
         public int UnattachedUploadLifetimeHours { get; set; }

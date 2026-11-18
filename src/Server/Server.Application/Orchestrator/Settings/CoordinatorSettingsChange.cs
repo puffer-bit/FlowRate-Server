@@ -39,6 +39,8 @@ public sealed record CoordinatorSettingsChange
     public int ImageMaxSide { get; init; } = CoordinatorMediaSettings.DefaultImageMaxSide;
     public int ImageQuality { get; init; } = CoordinatorMediaSettings.DefaultImageQuality;
     public bool AllowOriginalImages { get; init; } = true;
+    public int VideoMaxSide { get; init; } = CoordinatorMediaSettings.DefaultVideoMaxSide;
+    public bool AllowOriginalVideos { get; init; } = true;
 
     public int MaxUnattachedUploadsPerUser { get; init; }
     public int UnattachedUploadLifetimeHours { get; init; }
