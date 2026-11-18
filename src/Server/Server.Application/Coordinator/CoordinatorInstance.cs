@@ -39,6 +39,7 @@ public partial class CoordinatorInstance : ICoordinatorInstance
     private readonly CoordinatorSettingsApplier? _settingsApplier;
     private readonly CoordinatorRoles? _roles;
     private readonly IDisposable? _chatViewers;
+    private readonly LinkPreviews.LinkPreviewService? _linkPreviews;
 
     public CoordinatorInstance(
         ICoordinatorInstanceContext coordinatorInstanceContext,
@@ -55,8 +56,10 @@ public partial class CoordinatorInstance : ICoordinatorInstance
         IMediaService? mediaService = null,
         CoordinatorSettingsApplier? settingsApplier = null,
         CoordinatorRoles? roles = null,
-        IDisposable? chatViewers = null, Moderation.ModerationService? moderation = null)
+        IDisposable? chatViewers = null, Moderation.ModerationService? moderation = null,
+        LinkPreviews.LinkPreviewService? linkPreviews = null)
     {
+        _linkPreviews = linkPreviews;
         _chatViewers = chatViewers;
         Moderation = moderation;
         _roles = roles;
@@ -99,6 +102,7 @@ public partial class CoordinatorInstance : ICoordinatorInstance
             await _sessionManager.LoadSessionsAsync();
             await _gatewayService.StartAsync(_messageRouter);
             _mediaService?.Start();
+            _linkPreviews?.Start();
 
             State = CoordinatorState.Online;
             _logger.LogInformation("Coordinator {Name} successful started.", Context.Name);
@@ -210,6 +214,8 @@ public partial class CoordinatorInstance : ICoordinatorInstance
             RunCloseStep("disposing the push notifier", _pushNotifier.Dispose);
         if (_mediaService != null)
             RunCloseStep("disposing the media service", _mediaService.Dispose);
+        if (_linkPreviews != null)
+            RunCloseStep("disposing the link previews", _linkPreviews.Dispose);
         if (_roles != null)
             RunCloseStep("disposing the roles", _roles.Dispose);
     }

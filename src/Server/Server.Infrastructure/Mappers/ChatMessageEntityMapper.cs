@@ -43,6 +43,8 @@ public static class ChatMessageEntityMapper
             SystemCallEndReason = (int?)model.SystemContent?.CallEndReason,
             SystemCallDurationSeconds = model.SystemContent?.CallDurationSeconds,
             IsDisposable = model.IsDisposable,
+            LinkPreviewId = model.LinkPreview?.Id,
+            IsLinkPreviewDisabled = model.IsLinkPreviewDisabled,
 
             TextContent = model.TextContent?.ToEntity()!,
             ReplyToMessageId = model.ReplyContent?.MessageId,
@@ -90,6 +92,8 @@ public static class ChatMessageEntityMapper
 
             TextContent = entity.TextContent?.ToModel(),
             ReplyContent = replyContent,
+            LinkPreview = entity.LinkPreview?.ToModel(),
+            IsLinkPreviewDisabled = entity.IsLinkPreviewDisabled,
             Images = entity.Images?.Select(i => i.ToModel()).ToList() ?? [],
             Videos = entity.Videos?.Select(v => v.ToModel()).ToList() ?? [],
             Files = entity.Files?.Select(f => f.ToModel()).ToList() ?? [],
@@ -102,6 +106,38 @@ public static class ChatMessageEntityMapper
     // -----------------------------------------------------------------
     // content conversions (model <-> entity)
     // -----------------------------------------------------------------
+
+    public static ChatLinkPreviewModel ToModel(this LinkPreviewEntity entity) => new()
+    {
+        Id = entity.Id,
+        CoordinatorInstanceId = entity.CoordinatorInstanceId,
+        Url = entity.Url,
+        SiteName = entity.SiteName,
+        Title = entity.Title,
+        Description = entity.Description,
+        ImageMimeType = entity.ImageMimeType,
+        ImageWidth = entity.ImageWidth,
+        ImageHeight = entity.ImageHeight,
+        ImageSize = entity.ImageSize,
+        IsLargeImage = entity.IsLargeImage,
+        FetchedAt = DateTime.SpecifyKind(entity.FetchedAt, DateTimeKind.Utc)
+    };
+
+    public static LinkPreviewEntity ToEntity(this ChatLinkPreviewModel model) => new()
+    {
+        Id = model.Id,
+        CoordinatorInstanceId = model.CoordinatorInstanceId,
+        Url = model.Url,
+        SiteName = model.SiteName,
+        Title = model.Title,
+        Description = model.Description,
+        ImageMimeType = model.ImageMimeType,
+        ImageWidth = model.ImageWidth,
+        ImageHeight = model.ImageHeight,
+        ImageSize = model.ImageSize,
+        IsLargeImage = model.IsLargeImage,
+        FetchedAt = model.FetchedAt
+    };
 
     public static ChatTextContentEntity ToEntity(this ChatTextContentModel? model)
     {

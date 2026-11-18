@@ -79,6 +79,7 @@ public static class RequestPolicies
         SendMessageRequest request => InSession(request.ChatId, View | Permission.SendMessages
             | (HasAttachments(request) ? Permission.AttachFiles : Permission.None)),
         ChatTypingRequest request => InSession(request.ChatId, View | Permission.SendMessages),
+        ChatLinkPreviewRequest request => InSession(request.ChatId, View | Permission.SendMessages),
         SetMessagePinnedRequest request => InSession(request.ChatId, View | Permission.ManageMessages),
         ChatPinnedMessagesRequest request => InSession(request.ChatId, View),
         ChatHistoryWindowRequest request => InSession(request.ChatId, View),

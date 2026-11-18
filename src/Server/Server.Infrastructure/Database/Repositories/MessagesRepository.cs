@@ -43,7 +43,8 @@ public class MessagesRepository : IMessagesRepository
         }
 
         await transaction.CommitAsync(cancellationToken);
-        
+
+        messageEntity.LinkPreview = message.LinkPreview?.ToEntity();
         return messageEntity.ToModel(message.ReplyContent);
     }
 
@@ -243,7 +244,8 @@ public class MessagesRepository : IMessagesRepository
             .Include(x => x.Images)
             .Include(x => x.Videos)
             .Include(x => x.Files)
-            .Include(x => x.Reactions);
+            .Include(x => x.Reactions)
+            .Include(x => x.LinkPreview);
 
     private static void ClearContent(ChatMessageEntity entity)
     {

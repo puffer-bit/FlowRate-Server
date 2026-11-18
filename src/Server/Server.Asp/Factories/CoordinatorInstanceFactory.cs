@@ -44,6 +44,8 @@ using Server.Application.Coordinator.Handlers.Users.Security;
 using Server.Application.Orchestrator.Security;
 using Server.Application.Coordinator.Moderation;
 using Server.Core.Models.Moderation;
+using Server.Application.Coordinator.LinkPreviews;
+using Server.Infrastructure.Coordinator.LinkPreviews;
 
 
 
@@ -71,15 +73,20 @@ public class CoordinatorInstanceFactory : ICoordinatorInstanceFactory
         var pushNotifier = ActivatorUtilities.CreateInstance<PushNotifier>(_provider, logger, coordinatorInstanceModel.Id);
         var readService = ActivatorUtilities.CreateInstance<ChatReadService>(_provider, logger, messageSender);
         var visibility = new SessionVisibility(messageSender);
+        // Beside the uploads, not among them: the upload store manages the files of its own directory
+        var mediaDirectory = _provider.GetRequiredService<IOptions<StorageOptions>>().Value.MediaDirectory;
+        var linkPreviews = ActivatorUtilities.CreateInstance<LinkPreviewService>(_provider, logger,
+            new LinkPreviewFetcher(logger),
+            new LinkPreviewImageStore(Path.Combine(mediaDirectory, coordinatorInstanceModel.Id + "-link-previews")),
+            coordinatorInstanceModel.Id);
         var coordinatorEventBus = CreateEventBus(logger, messageSender, visibility, panelEvents, pushNotifier,
-            readService);
+            readService, linkPreviews);
 
         var coordinatorInstanceContext =
             CreateCoordinatorInstanceContext(serverVersion, coordinatorInstanceModel);
         
         var messageParser = CreateMessageParser(logger);
         var rateLimits = new RequestRateLimits(coordinatorInstanceModel.RateLimits);
-        var mediaDirectory = _provider.GetRequiredService<IOptions<StorageOptions>>().Value.MediaDirectory;
         var mediaStorage = new TusDiskMediaStorage(Path.Combine(mediaDirectory, coordinatorInstanceModel.Id));
         var sfuPool = CreateSfuPool(coordinatorInstanceModel);
         var chatSessionManager = CreateChatSessionManager(logger, coordinatorInstanceModel.Id, coordinatorEventBus, mediaStorage);
@@ -89,11 +96,12 @@ public class CoordinatorInstanceFactory : ICoordinatorInstanceFactory
             chatSessionManager, coordinatorInstanceModel.Uploads, coordinatorInstanceModel.Media, coordinatorInstanceModel.Id,
             userManager);
         readService.Watch(chatSessionManager);
+        linkPreviews.Watch(chatSessionManager);
         var pushReplyService = ActivatorUtilities.CreateInstance<PushReplyService>(_provider, logger, userManager,
             chatSessionManager, readService, rateLimits, coordinatorInstanceModel.Id);
         var gatewayLogger = loggerFactory.CreateLogger($"Coordinator {coordinatorInstanceModel.Id} Gateway");
         var gatewayService = CreateGatewayService(gatewayLogger, coordinatorInstanceModel, messageParser,
-            new MediaHttpEndpoints(gatewayLogger, mediaService, mediaStorage), new PushHttpEndpoints(pushReplyService),
+            new MediaHttpEndpoints(gatewayLogger, mediaService, mediaStorage, linkPreviews), new PushHttpEndpoints(pushReplyService),
             rateLimits);
         var hybridSessionManager = CreateHybridSessionManager(logger, coordinatorInstanceModel.Id, coordinatorEventBus, sfuPool);
         var sessionLayout = ActivatorUtilities.CreateInstance<SessionLayoutService>(_provider, logger, messageSender,
@@ -131,7 +139,8 @@ public class CoordinatorInstanceFactory : ICoordinatorInstanceFactory
         var messagesHandlers = CreateMessageHandlers(logger, 
             coordinatorInstanceContext, coordinatorInstanceModel.Id, userManager, sessionManager, sessionLayout,
             chatSessionManager, hybridSessionManager, messageSender, heartbeatManager, connectionManager, authenticator,
-            mediaService, readService, roles, visibility, moderation).Append(chatViewers);
+            mediaService, readService, roles, visibility, moderation).Append(chatViewers)
+            .Append(new ChatLinkPreviewHandler(chatSessionManager, linkPreviews, messageSender, logger));
         
         var messageRouter = CreateMessageRouter(logger, messagesHandlers, connectionManager, rateLimits,
             new RequestAuthorizer(roles, hybridSessionManager, sessionManager));
@@ -154,7 +163,8 @@ public class CoordinatorInstanceFactory : ICoordinatorInstanceFactory
             settingsApplier,
             roles,
             chatViewers,
-            moderation);
+            moderation,
+            linkPreviews);
 
         return coordinatorInstance;
     }
@@ -229,10 +239,10 @@ public class CoordinatorInstanceFactory : ICoordinatorInstanceFactory
     
     private static ICoordinatorEventBus CreateEventBus(ILogger logger, IMessageSender messageSender,
         SessionVisibility visibility, CoordinatorPanelEvents panelEvents, PushNotifier pushNotifier,
-        ChatReadService readService) =>
+        ChatReadService readService, LinkPreviewService linkPreviews) =>
         new CoordinatorEventBus(logger,
             [new ChatSessionNotifier(messageSender, visibility), new HybridSessionNotifier(messageSender, visibility),
-                panelEvents, pushNotifier, readService]);
+                panelEvents, pushNotifier, readService, linkPreviews]);
     
     private IEnumerable<IMessageHandler> CreateMessageHandlers(
         ILogger logger,

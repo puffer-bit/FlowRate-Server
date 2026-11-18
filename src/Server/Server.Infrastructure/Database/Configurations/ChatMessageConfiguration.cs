@@ -21,6 +21,12 @@ public class ChatMessageConfiguration : IEntityTypeConfiguration<ChatMessageEnti
 
         builder.OwnsOne(x => x.TextContent);
 
+        // A preview outlives none of its messages: the cleanup removes only those nothing shows
+        builder.HasOne(x => x.LinkPreview)
+            .WithMany()
+            .HasForeignKey(x => x.LinkPreviewId)
+            .OnDelete(DeleteBehavior.SetNull);
+
         builder.OwnsMany(x => x.Reactions, b =>
         {
             b.ToTable("ChatMessageReactions");

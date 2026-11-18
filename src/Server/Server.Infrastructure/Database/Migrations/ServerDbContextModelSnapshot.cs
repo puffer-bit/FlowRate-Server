@@ -664,6 +664,9 @@ namespace Server.Infrastructure.Database.Migrations
                     b.Property<bool>("IsEdited")
                         .HasColumnType("INTEGER");
 
+                    b.Property<bool>("IsLinkPreviewDisabled")
+                        .HasColumnType("INTEGER");
+
                     b.Property<bool>("IsReadOnly")
                         .HasColumnType("INTEGER");
 
@@ -671,6 +674,9 @@ namespace Server.Infrastructure.Database.Migrations
                         .HasColumnType("INTEGER");
 
                     b.Property<bool>("IsSystem")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int?>("LinkPreviewId")
                         .HasColumnType("INTEGER");
 
                     b.Property<DateTime?>("PinnedAt")
@@ -714,6 +720,8 @@ namespace Server.Infrastructure.Database.Migrations
                         .HasColumnType("TEXT");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("LinkPreviewId");
 
                     b.HasIndex("ChatId", "Id");
 
@@ -831,6 +839,62 @@ namespace Server.Infrastructure.Database.Migrations
                     b.HasKey("Id");
 
                     b.ToTable("ChatVideoContents");
+                });
+
+            modelBuilder.Entity("Server.Infrastructure.Database.Entities.TextChat.LinkPreviewEntity", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("CoordinatorInstanceId")
+                        .IsRequired()
+                        .HasMaxLength(36)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(1000)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("FetchedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("ImageHeight")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("ImageMimeType")
+                        .HasMaxLength(100)
+                        .HasColumnType("TEXT");
+
+                    b.Property<long>("ImageSize")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("ImageWidth")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("IsLargeImage")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("SiteName")
+                        .HasMaxLength(100)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Title")
+                        .HasMaxLength(300)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Url")
+                        .IsRequired()
+                        .HasMaxLength(2048)
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CoordinatorInstanceId", "FetchedAt");
+
+                    b.HasIndex("CoordinatorInstanceId", "Url", "FetchedAt");
+
+                    b.ToTable("LinkPreviews", (string)null);
                 });
 
             modelBuilder.Entity("Server.Infrastructure.Database.Entities.UserEntity", b =>
@@ -1244,6 +1308,11 @@ namespace Server.Infrastructure.Database.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
+                    b.HasOne("Server.Infrastructure.Database.Entities.TextChat.LinkPreviewEntity", "LinkPreview")
+                        .WithMany()
+                        .HasForeignKey("LinkPreviewId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
                     b.OwnsOne("Server.Infrastructure.Database.Entities.TextChat.ChatTextContentEntity", "TextContent", b1 =>
                         {
                             b1.Property<int>("ChatMessageEntityId")
@@ -1298,6 +1367,8 @@ namespace Server.Infrastructure.Database.Migrations
                         });
 
                     b.Navigation("ChatSession");
+
+                    b.Navigation("LinkPreview");
 
                     b.Navigation("Reactions");
 
