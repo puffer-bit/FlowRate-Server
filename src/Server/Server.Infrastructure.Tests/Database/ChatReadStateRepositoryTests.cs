@@ -1,5 +1,6 @@
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using Server.Core.Models.TextChat;
 using Server.Core.Models.TextChat.Messages;
 using Server.Core.Models.TextChat.Messages.Content;
 using Server.Infrastructure.Database;
@@ -50,9 +51,9 @@ public sealed class ChatReadStateRepositoryTests : IDisposable
     [Fact]
     public async Task Move_NeverGoesBack()
     {
-        Assert.Equal(10, await _repository.MoveAsync(ReaderId, _chatId, 10));
-        Assert.Equal(10, await _repository.MoveAsync(ReaderId, _chatId, 4));
-        Assert.Equal(12, await _repository.MoveAsync(ReaderId, _chatId, 12));
+        Assert.Equal(new ChatReadMove(10, true), await _repository.MoveAsync(ReaderId, _chatId, 10, null));
+        Assert.Equal(new ChatReadMove(10, false), await _repository.MoveAsync(ReaderId, _chatId, 4, null));
+        Assert.Equal(new ChatReadMove(12, true), await _repository.MoveAsync(ReaderId, _chatId, 12, null));
 
         Assert.Equal(12, (await _repository.GetPositionsAsync(ReaderId))[_chatId]);
         Assert.Empty(await _repository.GetPositionsAsync(OtherId));
@@ -79,11 +80,76 @@ public sealed class ChatReadStateRepositoryTests : IDisposable
     [Fact]
     public async Task Positions_GoAwayWithTheirChat()
     {
-        await _repository.MoveAsync(ReaderId, _chatId, 3);
+        await _repository.MoveAsync(ReaderId, _chatId, 3, DateTime.UtcNow);
 
         await new ChatSessionRepository(_factory).RemoveAsync(_chatId);
 
         Assert.Empty(await _repository.GetPositionsAsync(ReaderId));
+    }
+
+    private const int ThirdId = 3;
+    private static readonly DateTime Noon = new(2026, 11, 13, 12, 0, 0, DateTimeKind.Utc);
+
+    [Fact]
+    public async Task Readers_GetTheTimeOfTheFirstMarkThatReachedTheMessage()
+    {
+        var first = await Add(ReaderId, "one");
+        var second = await Add(ReaderId, "two");
+        await _repository.MoveAsync(OtherId, _chatId, first, Noon);
+        await _repository.MoveAsync(OtherId, _chatId, second, Noon.AddMinutes(5));
+        await _repository.MoveAsync(ThirdId, _chatId, second, Noon.AddMinutes(1));
+        await _repository.MoveAsync(ReaderId, _chatId, second, Noon);
+
+        var ofFirst = await _repository.GetReadersAsync(_chatId, first, ReaderId);
+        var ofSecond = await _repository.GetReadersAsync(_chatId, second, ReaderId);
+
+        Assert.Equal([new ChatMessageReader(OtherId, Noon), new ChatMessageReader(ThirdId, Noon.AddMinutes(1))],
+            ofFirst);
+        Assert.Equal([new ChatMessageReader(ThirdId, Noon.AddMinutes(1)),
+            new ChatMessageReader(OtherId, Noon.AddMinutes(5))], ofSecond);
+        Assert.All(ofFirst, reader => Assert.Equal(DateTimeKind.Utc, reader.ReadAt!.Value.Kind));
+    }
+
+    [Fact]
+    public async Task Readers_OfAPositionWithoutMarks_HaveNoTime()
+    {
+        var message = await Add(ReaderId, "old");
+        await _repository.MoveAsync(OtherId, _chatId, message, null);
+
+        Assert.Equal([new ChatMessageReader(OtherId, null)],
+            await _repository.GetReadersAsync(_chatId, message, ReaderId));
+    }
+
+    [Fact]
+    public async Task Move_WithoutProgress_KeepsNoMark()
+    {
+        var message = await Add(ReaderId, "hi");
+        await _repository.MoveAsync(OtherId, _chatId, message, Noon);
+        var again = await _repository.MoveAsync(OtherId, _chatId, message, Noon.AddHours(1));
+
+        Assert.False(again.Moved);
+        Assert.Equal(Noon, Assert.Single(await _repository.GetReadersAsync(_chatId, message, ReaderId)).ReadAt);
+    }
+
+    [Fact]
+    public async Task PeerPositions_AreTheFurthestOfTheOthers()
+    {
+        await _repository.MoveAsync(ReaderId, _chatId, 40, null);
+        await _repository.MoveAsync(OtherId, _chatId, 7, null);
+        await _repository.MoveAsync(ThirdId, _chatId, 9, null);
+
+        Assert.Equal(9, (await _repository.GetPeerPositionsAsync(ReaderId, [_chatId]))[_chatId]);
+        Assert.Equal(40, (await _repository.GetPeerPositionsAsync(OtherId, [_chatId]))[_chatId]);
+        Assert.Empty(await _repository.GetPeerPositionsAsync(ReaderId, []));
+    }
+
+    [Fact]
+    public async Task Target_TellsTheSenderOfTheMessage()
+    {
+        var message = await Add(OtherId, "hi");
+
+        Assert.Equal(new ChatReadTarget(OtherId, false, false), await _repository.GetTargetAsync(_chatId, message));
+        Assert.Null(await _repository.GetTargetAsync(_chatId, message + 100));
     }
 
     private sealed class TestContextFactory(DbContextOptions<ServerDbContext> options) : IDbContextFactory<ServerDbContext>

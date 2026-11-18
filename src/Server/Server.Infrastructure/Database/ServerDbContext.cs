@@ -21,6 +21,7 @@ public class ServerDbContext : DbContext
     public DbSet<ChatVideoContentEntity> ChatVideoContents { get; set; }
     public DbSet<ChatFileContentEntity> ChatFileContents { get; set; }
     public DbSet<ChatReadStateEntity> ChatReadStates { get; set; }
+    public DbSet<ChatReadMarkEntity> ChatReadMarks { get; set; }
     public DbSet<PushDeviceEntity> PushDevices { get; set; }
     public DbSet<MediaUploadEntity> MediaUploads { get; set; }
     public DbSet<SessionCategoryEntity> SessionCategories { get; set; }

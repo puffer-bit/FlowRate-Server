@@ -8,4 +8,6 @@ public class ChatReactionEntity
     public required int UserId { get; set; }
 
     public required string Emoji { get; init; }
+
+    public DateTime? ReactedAt { get; set; }
 }

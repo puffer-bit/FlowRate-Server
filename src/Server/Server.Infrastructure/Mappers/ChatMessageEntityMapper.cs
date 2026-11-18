@@ -250,7 +250,8 @@ public static class ChatMessageEntityMapper
         return new ChatReactionEntity
         {
             Emoji = model.Emoji,
-            UserId = model.UserId
+            UserId = model.UserId,
+            ReactedAt = model.ReactedAt
         };
     }
 
@@ -260,7 +261,8 @@ public static class ChatMessageEntityMapper
         return new ChatReactionModel
         {
             Emoji = entity.Emoji,
-            UserId = entity.UserId
+            UserId = entity.UserId,
+            ReactedAt = entity.ReactedAt is { } at ? DateTime.SpecifyKind(at, DateTimeKind.Utc) : null
         };
     }
 }

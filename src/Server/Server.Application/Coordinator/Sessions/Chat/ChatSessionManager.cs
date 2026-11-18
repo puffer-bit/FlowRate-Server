@@ -494,7 +494,7 @@ public class ChatSessionManager : IChatSessionManager
                 if (message.IsSystem || message.IsReadOnly)
                     return ErrorCode.InsufficientPermissions;
 
-                var changed = isAdded ? message.AddReaction(userId, emoji) : message.RemoveReaction(userId, emoji);
+                var changed = isAdded ? message.AddReaction(userId, emoji, DateTime.UtcNow) : message.RemoveReaction(userId, emoji);
                 if (!changed)
                     return null;
 

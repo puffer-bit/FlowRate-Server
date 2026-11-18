@@ -151,12 +151,12 @@ public sealed class ChatMessageModel
     public void MarkChanged(long revision) => _revision = revision;
 
     /// <returns>False if the user already reacted with this emoji.</returns>
-    public bool AddReaction(int userId, string emoji)
+    public bool AddReaction(int userId, string emoji, DateTime? reactedAt = null)
     {
         if (_reactions.Any(r => r.UserId == userId && r.Emoji == emoji))
             return false;
 
-        _reactions.Add(new ChatReactionModel { UserId = userId, Emoji = emoji });
+        _reactions.Add(new ChatReactionModel { UserId = userId, Emoji = emoji, ReactedAt = reactedAt });
         return true;
     }
 

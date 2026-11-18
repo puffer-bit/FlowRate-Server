@@ -6,5 +6,5 @@ namespace Server.Application.Mappers;
 public static class ChatReadStateMapper
 {
     public static ChatReadStateDTO ToDto(this ChatReadState state) =>
-        new(state.ChatId, state.LastReadMessageId, state.UnreadCount, state.MentionCount);
+        new(state.ChatId, state.LastReadMessageId, state.UnreadCount, state.MentionCount, state.PeerReadMessageId);
 }
