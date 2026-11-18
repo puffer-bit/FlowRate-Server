@@ -44,8 +44,11 @@ public interface IUserManager
     /// <summary>Deletes a user, detaching them when connected; their connection stays open.</summary>
     Task<ErrorCode?> DeleteUser(int userId);
 
-    /// <summary>Takes the roles of a connected user saved elsewhere; announced as an update of the user.</summary>
-    void SetRoles(int userId, IEnumerable<int> roleIds);
+    /// <summary>
+    /// Takes the roles of a user saved elsewhere; announced as an update of the user. A connected user takes them
+    /// at once, before the task completes; one not connected is read as saved, so that the others see them too.
+    /// </summary>
+    Task SetRolesAsync(int userId, IEnumerable<int> roleIds);
     void DetachUser(int userId, string reason);
     /// <summary>
     /// Takes a closed connection from its user, and detaches the user when it was their last one.

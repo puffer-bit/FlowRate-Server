@@ -125,8 +125,9 @@ public sealed class CoordinatorRoles : ICoordinatorPermissions, IDisposable
 
         try
         {
+            // A connected user takes the roles before the permissions below are announced
             foreach (var (userId, roleIds) in change.UserRoles)
-                _userManager.SetRoles(userId, roleIds);
+                _ = SetRolesAsync(userId, roleIds);
 
             if (change.RolesModified)
                 _messageSender.BroadcastMessage(new CoordinatorRolesChangedNotification(change.Roles.ToDtos()));
@@ -144,6 +145,18 @@ public sealed class CoordinatorRoles : ICoordinatorPermissions, IDisposable
         catch (Exception ex)
         {
             _logger.LogError(ex, "Announcing a change of the roles failed.");
+        }
+    }
+
+    private async Task SetRolesAsync(int userId, IReadOnlyList<int> roleIds)
+    {
+        try
+        {
+            await _userManager.SetRolesAsync(userId, roleIds);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Announcing the roles of user {UserId} failed.", userId);
         }
     }
 
