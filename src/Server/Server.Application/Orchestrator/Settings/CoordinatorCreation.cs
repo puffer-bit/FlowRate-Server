@@ -18,6 +18,8 @@ public sealed record CreateCoordinator(string Name, string Ip, int Port, IReadOn
         ImageMaxSide = CoordinatorMediaSettings.Default.ImageMaxSide,
         ImageQuality = CoordinatorMediaSettings.Default.ImageQuality,
         AllowOriginalImages = CoordinatorMediaSettings.Default.AllowOriginalImages,
+        VideoMaxSide = CoordinatorMediaSettings.Default.VideoMaxSide,
+        AllowOriginalVideos = CoordinatorMediaSettings.Default.AllowOriginalVideos,
         MaxUnattachedUploadsPerUser = CoordinatorUploadSettings.Default.MaxUnattachedUploadsPerUser,
         UnattachedUploadLifetimeHours = CoordinatorUploadSettings.Default.UnattachedLifetimeHours,
         MediaTokenLifetimeMinutes = CoordinatorUploadSettings.Default.TokenLifetimeMinutes,

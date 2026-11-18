@@ -161,6 +161,12 @@ public sealed class MediaSettingsDto
 
     /// <summary>Images may go uncompressed; otherwise none larger than <see cref="ImageMaxSide"/> is taken.</summary>
     public bool AllowOriginalImages { get; init; } = true;
+
+    /// <summary>The shorter side clients reduce videos to when they compress them, like 720 for 720p.</summary>
+    public int VideoMaxSide { get; init; } = CoordinatorMediaSettings.DefaultVideoMaxSide;
+
+    /// <summary>Videos may go uncompressed; otherwise only an MP4 within <see cref="VideoMaxSide"/> and its bitrate is taken.</summary>
+    public bool AllowOriginalVideos { get; init; } = true;
 }
 
 /// <summary>Uploads not attached to a message yet, and the tokens media requests carry.</summary>

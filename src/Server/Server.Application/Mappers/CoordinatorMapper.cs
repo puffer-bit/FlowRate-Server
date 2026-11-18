@@ -37,6 +37,8 @@ public static class CoordinatorMapperExtensions
             ImageMaxSide = model.Media.ImageMaxSide,
             ImageQuality = model.Media.ImageQuality,
             AllowOriginalImages = model.Media.AllowOriginalImages,
+            VideoMaxSide = model.Media.VideoMaxSide,
+            AllowOriginalVideos = model.Media.AllowOriginalVideos,
             SettingsRevision = model.Revision
         };
     }
