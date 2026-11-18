@@ -314,3 +314,5 @@ For source builds, tests, and repository layout, see the [development guide](DEV
 ## License
 
 [MIT](LICENSE)
+
+PostgreSQL configuration and migration commands: [docs/postgresql.md](docs/postgresql.md).

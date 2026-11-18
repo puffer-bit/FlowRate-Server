@@ -1,6 +1,6 @@
 # Tests the server and SFU and builds the control panel, including before a release.
 #
-# The .NET tests need neither Docker nor the SFU: it is faked behind its gateway.
+# Default .NET tests need neither Docker nor the SFU. A separate job checks PostgreSQL.
 name: Tests
 
 on:
@@ -47,6 +47,51 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: test-results-ubuntu-24.04
+          path: TestResults
+          if-no-files-found: warn
+
+  postgresql:
+    name: PostgreSQL repositories and import
+    runs-on: ubuntu-24.04
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_DB: flowrate_tests
+          POSTGRES_USER: flowrate
+          POSTGRES_PASSWORD: integration_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U flowrate -d flowrate_tests"
+          --health-interval 5s --health-timeout 3s --health-retries 10
+    env:
+      FLOWRATE_TEST_DATABASE_PROVIDER: PostgreSql
+      FLOWRATE_TEST_POSTGRES_CONNECTION_STRING: Host=127.0.0.1;Database=flowrate_tests;Username=flowrate;Password=integration_test
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: recursive
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.x
+      - name: Test repositories and SQLite import on PostgreSQL
+        run: >-
+          dotnet test src/Server/Server.Infrastructure.Tests -c Release
+          --filter Category=DatabaseProvider
+          --logger "trx;LogFilePrefix=postgresql" --results-directory TestResults
+      - name: Validate PostgreSQL Compose configurations
+        env:
+          PUBLIC_IP: 127.0.0.1
+          POSTGRES_PASSWORD: integration_test
+        run: |
+          docker compose -f docker-compose.yml -f docker-compose.postgresql.yml config --quiet
+          docker compose -f docker-compose.yml -f docker-compose.bridge.yml -f docker-compose.postgresql.yml -f docker-compose.postgresql.bridge.yml config --quiet
+      - name: Upload test results
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: postgresql-test-results
           path: TestResults
           if-no-files-found: warn
 

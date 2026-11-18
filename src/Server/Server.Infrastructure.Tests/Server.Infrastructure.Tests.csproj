@@ -25,6 +25,7 @@
 
     <ItemGroup>
         <ProjectReference Include="..\Server.Infrastructure\Server.Infrastructure.csproj" />
+        <ProjectReference Include="..\Server.Migrations.PostgreSql\Server.Migrations.PostgreSql.csproj" />
     </ItemGroup>
 
 </Project>

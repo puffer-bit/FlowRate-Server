@@ -172,6 +172,10 @@ if [ -z "$archive" ]; then
         fetch 60 "$base/$file" > "$src/$file" \
             || die "could not download $base/$file${release:+, is $release a release of $repo?}"
     done
+    # Older releases do not ship PostgreSQL overlays; keep --version usable for them.
+    for file in docker-compose.postgresql.yml docker-compose.postgresql.bridge.yml; do
+        if ! fetch 60 "$base/$file" > "$src/$file"; then rm -f "$src/$file"; fi
+    done
     mv "$src/env.example" "$src/.env.example"
 fi
 
@@ -181,6 +185,9 @@ chmod 755 "$dir/secrets"
 dir=$(cd "$dir" && pwd)
 if [ "$src" != "$dir" ]; then
     cp "$src/docker-compose.yml" "$src/docker-compose.bridge.yml" "$src/.env.example" "$src/README.txt" "$dir/"
+    for file in docker-compose.postgresql.yml docker-compose.postgresql.bridge.yml; do
+        [ ! -f "$src/$file" ] || cp "$src/$file" "$dir/"
+    done
 fi
 cd "$dir"
 first_run=
@@ -235,8 +242,16 @@ key_name=$(get_env PUSH_SERVICE_ACCOUNT_FILE)
 if [ -z "$network" ]; then
     case $(get_env COMPOSE_FILE) in *bridge*) network=bridge ;; *) network=host ;; esac
 fi
-if [ "$network" = bridge ]; then set_env COMPOSE_FILE docker-compose.yml:docker-compose.bridge.yml
-else sed -i '/^COMPOSE_FILE=/d' .env; fi
+compose_files=docker-compose.yml
+[ "$network" != bridge ] || compose_files=$compose_files:docker-compose.bridge.yml
+# Keep an existing PostgreSQL selection when updating or switching network modes.
+case $(get_env COMPOSE_FILE) in
+    *docker-compose.postgresql.yml*)
+        compose_files=$compose_files:docker-compose.postgresql.yml
+        [ "$network" != bridge ] || compose_files=$compose_files:docker-compose.postgresql.bridge.yml ;;
+esac
+if [ "$compose_files" = docker-compose.yml ]; then sed -i '/^COMPOSE_FILE=/d' .env
+else set_env COMPOSE_FILE "$compose_files"; fi
 
 # A running stack holds its own ports, so only a fresh start is checked
 if [ -z "$(docker compose ps -q 2>/dev/null)" ] && command -v ss >/dev/null; then

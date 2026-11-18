@@ -1,4 +1,3 @@
-using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Server.Core.Models.TextChat;
 using Server.Core.Models.TextChat.Messages;
@@ -10,12 +9,13 @@ using Xunit;
 
 namespace Server.Infrastructure.Tests.Database;
 
+[Trait("Category", "DatabaseProvider")]
 public sealed class ChatReadStateRepositoryTests : IDisposable
 {
     private const int ReaderId = 1;
     private const int OtherId = 2;
 
-    private readonly string _databasePath = Path.Combine(Path.GetTempPath(), $"reads-{Guid.NewGuid():N}.db");
+    private readonly RepositoryTestDatabase _database = new();
     private readonly TestContextFactory _factory;
     private readonly ChatReadStateRepository _repository;
     private readonly MessagesRepository _messages;
@@ -23,9 +23,7 @@ public sealed class ChatReadStateRepositoryTests : IDisposable
 
     public ChatReadStateRepositoryTests()
     {
-        _factory = new TestContextFactory(new DbContextOptionsBuilder<ServerDbContext>()
-            .UseSqlite($"Data Source={_databasePath}")
-            .Options);
+        _factory = new TestContextFactory(_database.Options);
         _repository = new ChatReadStateRepository(_factory);
         _messages = new MessagesRepository(_factory);
 
@@ -40,8 +38,7 @@ public sealed class ChatReadStateRepositoryTests : IDisposable
 
     public void Dispose()
     {
-        SqliteConnection.ClearAllPools();
-        File.Delete(_databasePath);
+        _database.Dispose();
     }
 
     private async Task<int> Add(int senderId, string text) =>
