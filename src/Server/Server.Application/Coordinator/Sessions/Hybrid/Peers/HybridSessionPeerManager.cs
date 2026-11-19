@@ -86,7 +86,7 @@ public partial class HybridSessionPeerManager : IHybridSessionPeerManager
     });
 
     public Task<(ErrorCode? result, TransportData? transportData)> AddPeerAsync(int userId,
-        string clientEpoch, string? connectionId = null) => LockedAsync<(ErrorCode? result, TransportData? transportData)>(async () =>
+        string clientEpoch, string? connectionId = null, bool pastCapacity = false) => LockedAsync<(ErrorCode? result, TransportData? transportData)>(async () =>
     {
         if (Model.CallDevices is { } devices &&
             (!devices.TryGetValue(userId, out var selected) || selected != connectionId))
@@ -94,7 +94,7 @@ public partial class HybridSessionPeerManager : IHybridSessionPeerManager
         var isNew = !_peers.TryGetValue(userId, out var peer);
         if (isNew)
         {
-            if (Model.IsFull(_peers.Count))
+            if (!pastCapacity && Model.IsFull(_peers.Count))
                 return (ErrorCode.SessionFull, null);
 
             peer = Peer.Join(userId, Model, connectionId);
@@ -283,6 +283,42 @@ public partial class HybridSessionPeerManager : IHybridSessionPeerManager
             _isSessionLoaded = false;
     }
 
+    public Task<ErrorCode?> MoveInPeerAsync(int initiatorId, int userId, string? connectionId, int sourceSessionId) =>
+        LockedAsync<ErrorCode?>(async () =>
+        {
+            if (_peers.ContainsKey(userId))
+                return ErrorCode.Conflict;
+
+            // No transport yet: the SFU is asked for one when the client joins
+            var peer = Peer.MoveIn(userId, Model, connectionId);
+            _peers[userId] = peer;
+            await _coordinatorEventBus.PublishAsync(
+                new HybridSessionPeerMovedInEvent(Model.Id, peer.ToSnapshot(), sourceSessionId, initiatorId));
+
+            _logger.LogTrace("User with ID {userId} was moved in from session {SourceSessionId}.", userId, sourceSessionId);
+            return null;
+        }, ErrorCode.TimedOut);
+
+    public Task<ErrorCode?> MoveOutPeerAsync(int initiatorId, int userId, string? connectionId, int targetSessionId) =>
+        LockedAsync(() => _peers.TryGetValue(userId, out var peer) && peer.ConnectionId == connectionId
+                ? RemovePeerLockedAsync(userId,
+                    new HybridSessionPeerMovedOutEvent(Model.Id, userId, targetSessionId, initiatorId))
+                : Task.FromResult<ErrorCode?>(ErrorCode.PeerNotFound),
+            ErrorCode.TimedOut);
+
+    public Task<ErrorCode?> RemoveUnclaimedPeerAsync(int userId) =>
+        LockedAsync(() => _peers.TryGetValue(userId, out var peer) && peer.IsAwaitingMove
+                ? RemovePeerLockedAsync(userId, new HybridSessionPeerLeftEvent(Model.Id, userId))
+                : Task.FromResult<ErrorCode?>(ErrorCode.PeerNotFound),
+            ErrorCode.TimedOut);
+
+    public bool TryGetPeerConnection(int userId, out string? connectionId)
+    {
+        var found = _peers.TryGetValue(userId, out var peer);
+        connectionId = peer?.ConnectionId;
+        return found;
+    }
+
     public bool HasPeer(int userId) => _peers.ContainsKey(userId);
 
     public IReadOnlyDictionary<int, PeerSnapshot> GetAllPeerSnapshots() =>
@@ -297,6 +333,8 @@ public partial class HybridSessionPeerManager : IHybridSessionPeerManager
             return ErrorCode.PeerNotFound;
         }
 
+        // A moved peer whose client has not joined has nothing on the SFU yet
+        var hasSfuState = !peer.IsAwaitingMove;
         peer.Close();
         // Membership is already removed. Clients can release tracks and animate the row immediately,
         // without waiting for SFU round trips. Preserve the concrete event type for dispatch.
@@ -304,7 +342,7 @@ public partial class HybridSessionPeerManager : IHybridSessionPeerManager
 
         // Without a reachable node the SFU state is already dropped, so leaving must not depend on it
         var canReachSfu = IsReady;
-        if (canReachSfu)
+        if (canReachSfu && hasSfuState)
         {
             await ReleasePeerMediaAsync(userId, announceTrackStops: false);
             await ClosePeerTransportAsync(userId);
@@ -313,7 +351,7 @@ public partial class HybridSessionPeerManager : IHybridSessionPeerManager
 
         if (_peers.IsEmpty)
         {
-            if (canReachSfu)
+            if (canReachSfu && _isSessionLoaded)
                 await UnloadSessionAsync();
             else
                 _isSessionLoaded = false;

@@ -356,8 +356,8 @@ public partial class HybridSessionManager : IHybridSessionManager
 
     public void Dispose()
     {
-        _callLifetime.Cancel();
-        _callLifetime.Dispose();
+        _lifetime.Cancel();
+        _lifetime.Dispose();
         if (_permissions != null)
             _permissions.PermissionsChanged -= OnPermissionsChanged;
         if (_visibility != null)

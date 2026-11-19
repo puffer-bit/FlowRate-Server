@@ -35,9 +35,9 @@ public partial class HybridSessionManager
 
     private readonly SemaphoreSlim _callsLock = new(1, 1);
     private readonly System.Collections.Concurrent.ConcurrentDictionary<Guid, Call> _calls = new();
-    private readonly CancellationTokenSource _callLifetime = new();
+    private readonly CancellationTokenSource _lifetime = new();
     private Func<DirectCallDTO, Task>? _callPush;
-    private TimeProvider _callTime = TimeProvider.System;
+    private TimeProvider _time = TimeProvider.System;
     private IChatSessionManager? _callChats;
     private IUserManager? _callUsers;
     private IMessageSender? _callSender;
@@ -46,7 +46,7 @@ public partial class HybridSessionManager
     public void ConfigureCalls(IChatSessionManager chats, IUserManager users, IMessageSender sender,
         IConnectionsContext connections, TimeProvider? timeProvider = null, Func<DirectCallDTO, Task>? push = null)
     {
-        _callTime = timeProvider ?? TimeProvider.System;
+        _time = timeProvider ?? TimeProvider.System;
         _callPush = push;
         _callChats = chats;
         _callUsers = users;
@@ -79,7 +79,7 @@ public partial class HybridSessionManager
                     (c.Contains(request.SenderId) || c.Contains(other)))) return (ErrorCode.Conflict, null);
                 var leaveError = await LeaveVoiceChannelsForCallAsync(request.SenderId);
                 if (leaveError != null) return (leaveError, null);
-                call = new Call(request.CallId, chat.Id, request.SenderId, other, connectionId, _callTime.GetUtcNow());
+                call = new Call(request.CallId, chat.Id, request.SenderId, other, connectionId, _time.GetUtcNow());
                 _calls.TryAdd(call.Id, call);
                 PublishCall(call);
                 _ = ExpireCallAsync(call.Id);
@@ -89,7 +89,7 @@ public partial class HybridSessionManager
                 if (call.ChatId != request.ChatId || !call.Contains(request.SenderId)) return (ErrorCode.NotMember, null);
                 if (request.Action == DirectCallAction.Start && connectionId != call.CallerDevice)
                     return (ErrorCode.NotMember, null);
-                if (call.State == DirectCallState.Ringing && _callTime.GetUtcNow() >= call.Created.AddSeconds(45))
+                if (call.State == DirectCallState.Ringing && _time.GetUtcNow() >= call.Created.AddSeconds(45))
                     await FinishCallAsync(call, DirectCallEndReason.Missed);
                 if (call.State == DirectCallState.Ended) return (null, CallDto(call, connectionId));
                 switch (request.Action)
@@ -124,7 +124,7 @@ public partial class HybridSessionManager
                         if (error != null) { session.Dispose(); return (error, null); }
                         _sessions[call.ChatId] = session;
                         call.CalleeDevice = connectionId;
-                        call.Started = _callTime.GetUtcNow();
+                        call.Started = _time.GetUtcNow();
                         call.State = DirectCallState.Active;
                         PublishCall(call);
                         break;
@@ -156,7 +156,7 @@ public partial class HybridSessionManager
             if (_callChats == null) return ErrorCode.FeatureDisabled;
             if (!_calls.TryGetValue(callId, out var call)) return ErrorCode.SessionNotFound;
             if (call.Callee != userId) return ErrorCode.NotMember;
-            if (call.State == DirectCallState.Ringing && _callTime.GetUtcNow() >= call.Created.AddSeconds(45))
+            if (call.State == DirectCallState.Ringing && _time.GetUtcNow() >= call.Created.AddSeconds(45))
                 await FinishCallAsync(call, DirectCallEndReason.Missed);
             return call.State switch
             {
@@ -249,7 +249,7 @@ public partial class HybridSessionManager
                 Kind = ChatSystemEventKind.CallEnded, ActorUserId = actor, CallId = call.Id,
                 CallEndReason = reason,
                 CallDurationSeconds = wasActive && call.Started is { } started
-                    ? (int)Math.Max(0, (_callTime.GetUtcNow() - started).TotalSeconds) : null
+                    ? (int)Math.Max(0, (_time.GetUtcNow() - started).TotalSeconds) : null
             });
             if (error != null) _logger.LogError("Recording end of call {CallId} failed: {Error}", call.Id, error);
         }
@@ -260,8 +260,8 @@ public partial class HybridSessionManager
     {
         try
         {
-            await Task.Delay(TimeSpan.FromSeconds(45), _callTime, _callLifetime.Token);
-            await _callsLock.WaitAsync(_callLifetime.Token);
+            await Task.Delay(TimeSpan.FromSeconds(45), _time, _lifetime.Token);
+            await _callsLock.WaitAsync(_lifetime.Token);
             try
             {
                 if (_calls.TryGetValue(id, out var call) && call.State == DirectCallState.Ringing)

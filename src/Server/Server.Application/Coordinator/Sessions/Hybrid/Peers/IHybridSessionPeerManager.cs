@@ -26,8 +26,9 @@ public interface IHybridSessionPeerManager : IDisposable
     /// The connection the user joins from. Joining from another connection than the peer has takes the peer over: the
     /// previous connection is out (<see cref="HybridSessionPeerReplacedEvent"/>).
     /// </param>
+    /// <param name="pastCapacity">The user may join although the session is full.</param>
     Task<(ErrorCode? result, TransportData? transportData)> AddPeerAsync(int userId, string clientEpoch,
-        string? connectionId = null);
+        string? connectionId = null, bool pastCapacity = false);
     Task<ErrorCode?> ConnectPeerAsync(int userId, DTLSParameters dtlsParameters);
     Task<ErrorCode?> ApprovePeerAsync(int initiatorId, int userId);
     Task<ErrorCode?> RejectPeerAsync(int initiatorId, int userId, string? reason = null);
@@ -36,6 +37,22 @@ public interface IHybridSessionPeerManager : IDisposable
     /// <summary>Removes the peer only while it takes part from this connection.</summary>
     Task<ErrorCode?> RemovePeerOfConnectionAsync(int userId, string connectionId);
     Task KickAllPeersAsync(string? reason = null);
+
+    /// <summary>
+    /// Keeps a place for a peer moved in from <paramref name="sourceSessionId"/>: admitted past the capacity and
+    /// approval, it waits for its client to join from <paramref name="connectionId"/>. Fails with
+    /// <see cref="ErrorCode.Conflict"/> when the user already takes part in this session.
+    /// </summary>
+    Task<ErrorCode?> MoveInPeerAsync(int initiatorId, int userId, string? connectionId, int sourceSessionId);
+    /// <summary>
+    /// Takes the peer out to <paramref name="targetSessionId"/>, as long as it still takes part from
+    /// <paramref name="connectionId"/>; its media here is released.
+    /// </summary>
+    Task<ErrorCode?> MoveOutPeerAsync(int initiatorId, int userId, string? connectionId, int targetSessionId);
+    /// <summary>Gives up the place kept for a moved peer whose client has not joined; a joined peer stays.</summary>
+    Task<ErrorCode?> RemoveUnclaimedPeerAsync(int userId);
+    /// <summary>Whether the user takes part, and from which connection.</summary>
+    bool TryGetPeerConnection(int userId, out string? connectionId);
 
     Task<(ErrorCode? result, Outbound? outbound)> StartVoiceShareAsync(int userId);
     Task<ErrorCode?> StopVoiceShareAsync(int initiatorId, int userId);

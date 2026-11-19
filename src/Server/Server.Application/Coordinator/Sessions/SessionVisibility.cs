@@ -69,11 +69,12 @@ public sealed class SessionVisibility : IDisposable
     }
 
     /// <summary>Sends something that happened in a session to the connected users who may see it.</summary>
-    public void Send(int sessionId, BaseMessage message)
+    /// <param name="alsoTo">A user it concerns, who is told even when they may no longer see the session.</param>
+    public void Send(int sessionId, BaseMessage message, int? alsoTo = null)
     {
         if (_sessions != null && _sessions.TryGetSessionModel(sessionId, out var session))
-            _messageSender.BroadcastMessage(ConnectedUsers().Where(userId => CanView(userId, session)).ToList(),
-                message);
+            _messageSender.BroadcastMessage(ConnectedUsers()
+                .Where(userId => userId == alsoTo || CanView(userId, session)).ToList(), message);
     }
 
     public void Created(SessionModel session)

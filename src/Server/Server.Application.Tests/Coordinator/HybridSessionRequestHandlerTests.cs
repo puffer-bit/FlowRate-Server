@@ -110,11 +110,29 @@ public class HybridSessionRequestHandlerTests
     [Fact]
     public async Task Join_TakesPartFromTheConnectionOfTheRequest()
     {
-        _peers.Setup(p => p.AddPeerAsync(GuestId, It.IsAny<string>(), "desktop"))
+        _peers.Setup(p => p.AddPeerAsync(GuestId, It.IsAny<string>(), "desktop", false))
             .ReturnsAsync((null, null));
 
         await _join.HandleMessage(new HybridSessionJoinRequest(SessionId) { SenderId = GuestId }, "desktop");
 
-        _peers.Verify(p => p.AddPeerAsync(GuestId, It.IsAny<string>(), "desktop"), Times.Once);
+        _peers.Verify(p => p.AddPeerAsync(GuestId, It.IsAny<string>(), "desktop", false), Times.Once);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task Join_PastCapacity_OnlyWithMoveMembers(bool mayMove)
+    {
+        var permissions = new Mock<Server.Application.Coordinator.Roles.ICoordinatorPermissions>();
+        permissions.Setup(p => p.HasIn(GuestId, It.IsAny<Server.Core.Models.SessionModel>(), Permission.MoveMembers))
+            .Returns(mayMove);
+        var sender = new Mock<IMessageSender>();
+        var join = new HybridSessionJoinHandler(_sessions.Object, sender.Object, permissions.Object);
+        _peers.Setup(p => p.AddPeerAsync(GuestId, It.IsAny<string>(), "desktop", mayMove))
+            .ReturnsAsync((null, null));
+
+        await join.HandleMessage(new HybridSessionJoinRequest(SessionId) { SenderId = GuestId }, "desktop");
+
+        _peers.Verify(p => p.AddPeerAsync(GuestId, It.IsAny<string>(), "desktop", mayMove), Times.Once);
     }
 }

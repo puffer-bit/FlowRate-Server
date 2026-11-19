@@ -75,6 +75,9 @@ public static class RequestPolicies
             or HybridSessionStopVoiceRequest or HybridSessionSetMicrophoneMuteRequest
             or HybridSessionSetSoundMuteRequest or HybridSessionSetAfkRequest => Open,
         HybridSessionPokeRequest request => InSession(request.SessionId, View | Permission.PokeMembers),
+        // The target session and the moved user's view of it, the handler checks
+        HybridSessionMovePeerRequest request =>
+            InSession(request.SessionId, View | Permission.MoveMembers).Against(request.TargetUserId),
 
         SendMessageRequest request => InSession(request.ChatId, View | Permission.SendMessages
             | (HasAttachments(request) ? Permission.AttachFiles : Permission.None)),

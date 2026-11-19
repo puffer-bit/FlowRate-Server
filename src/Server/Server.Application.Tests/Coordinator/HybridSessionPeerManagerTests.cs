@@ -699,6 +699,20 @@ public class HybridSessionPeerManagerTests
     // Leaving
 
     [Fact]
+    public async Task AddPeer_PastCapacity_JoinsAFullSession_ButStillWaitsForApproval()
+    {
+        var model = HybridSessionModel.Create("coordinator", "room", 2, HostId, WebRTCEngine.Mediasoup, true);
+        var manager = await CreateManager(model: model);
+        await JoinAndConnect(manager, HostId);
+        await manager.AddPeerAsync(GuestId, "epoch");
+
+        Assert.Equal(ErrorCode.SessionFull, (await manager.AddPeerAsync(OtherGuestId, "epoch")).result);
+        Assert.Null((await manager.AddPeerAsync(OtherGuestId, "epoch", pastCapacity: true)).result);
+
+        Assert.Equal(HybridSessionPeerState.WaitingForApprove, StateOf(manager, OtherGuestId));
+    }
+
+    [Fact]
     public async Task KickPeer_RemovesTheTargetAndNotTheInitiator()
     {
         var manager = await CreateManager();

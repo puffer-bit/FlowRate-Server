@@ -23,6 +23,8 @@ public class HybridSessionNotifier :
     IEventHandler<HybridSessionPeerLeftEvent>,
     IEventHandler<HybridSessionPeerReplacedEvent>,
     IEventHandler<HybridSessionPeerKickedEvent>,
+    IEventHandler<HybridSessionPeerMovedOutEvent>,
+    IEventHandler<HybridSessionPeerMovedInEvent>,
     IEventHandler<HybridSessionPeerStartedVideoShareEvent>,
     IEventHandler<HybridSessionPeerStoppedVideoShareEvent>,
     IEventHandler<HybridSessionPeerStartedVoiceShareEvent>,
@@ -133,6 +135,21 @@ public class HybridSessionNotifier :
     public Task HandleAsync(HybridSessionPeerKickedEvent evt, CancellationToken ct = default)
     {
         _visibility.Send(evt.SessionId, new HybridSessionPeerKickedNotification(evt.SessionId, evt.UserId, evt.InitiatorUserId, evt.Reason));
+        return Task.CompletedTask;
+    }
+
+    // The moved user has to hear of it to join the target, whatever they may see of the session they left
+    public Task HandleAsync(HybridSessionPeerMovedOutEvent evt, CancellationToken ct = default)
+    {
+        _visibility.Send(evt.SessionId, new HybridSessionPeerMovedOutNotification(evt.SessionId, evt.UserId,
+            evt.TargetSessionId, evt.InitiatorUserId), alsoTo: evt.UserId);
+        return Task.CompletedTask;
+    }
+
+    public Task HandleAsync(HybridSessionPeerMovedInEvent evt, CancellationToken ct = default)
+    {
+        _visibility.Send(evt.SessionId, new HybridSessionPeerMovedInNotification(evt.SessionId, evt.Peer.ToDto(),
+            evt.SourceSessionId, evt.InitiatorUserId));
         return Task.CompletedTask;
     }
 
