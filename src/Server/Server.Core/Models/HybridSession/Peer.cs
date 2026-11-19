@@ -24,6 +24,11 @@ public sealed class Peer
 
     /// <summary>The user stepped away from the keyboard; the reason they gave goes with it.</summary>
     public bool IsAfk { get; private set; }
+
+    /// <summary>
+    /// The peer was moved here by someone else and its client has not joined yet; the place is kept only for a while.
+    /// </summary>
+    public bool IsAwaitingMove { get; private set; }
     public string? AfkReason { get; private set; }
 
     /// <summary>The users whose screen share the peer watches; replaced whole, so it can be read without the session lock.</summary>
@@ -57,6 +62,20 @@ public sealed class Peer
     }
 
     /// <summary>
+    /// A peer moved in from another session by someone else: admitted whatever the session asks of joiners, and
+    /// waiting for its client to join from the connection it was on.
+    /// </summary>
+    public static Peer MoveIn(int userId, HybridSessionModel session, string? connectionId)
+    {
+        var peer = new Peer(userId, session.IsHost(userId), PeerAdmission.NotRequired, connectionId)
+        {
+            State = HybridSessionPeerState.WaitingForServer,
+            IsAwaitingMove = true
+        };
+        return peer;
+    }
+
+    /// <summary>
     /// The same user joins again, e.g. after a reconnect or from another device, which takes the peer over.
     /// A rejected peer stays rejected.
     /// </summary>
@@ -66,6 +85,7 @@ public sealed class Peer
             return ErrorCode.NotAdmitted;
 
         ConnectionId = connectionId;
+        IsAwaitingMove = false;
         ResetSessionState();
         State = IsAdmitted ? HybridSessionPeerState.Connecting : HybridSessionPeerState.WaitingForApprove;
         return null;

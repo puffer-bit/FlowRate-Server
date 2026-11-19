@@ -45,6 +45,12 @@ public sealed class RequestAuthorizer
         if (RequestPolicies.Of(message) is not { } policy)
             return false;
 
+        // A user moved here takes the place kept for them without the right to join on their own
+        if (message is Shared.Models.Requests.SessionActions.HybridSession.HybridSessionJoinRequest join
+            && _hybridSessions.TryGetSession(join.SessionId, out var moveTarget)
+            && moveTarget.PeerManager.IsAwaitingMove(message.SenderId))
+            policy = policy with { Required = policy.Required & ~Permission.JoinSessions };
+
         var senderId = message.SenderId;
         if (senderId == UserModel.SystemUserId || policy == RequestPolicy.Open)
             return true;

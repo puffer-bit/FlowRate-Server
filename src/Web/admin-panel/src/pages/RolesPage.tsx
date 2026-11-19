@@ -45,6 +45,7 @@ const permissions: { value: Permission, label: string, hint: string }[] = [
   { value: 'KickMembers', label: 'Kick members', hint: 'Global account and IP bans, reasons and revocation' },
   { value: 'BanMembers', label: 'Ban members', hint: 'Global account and IP bans, reasons and revocation' },
   { value: 'ApproveMembers', label: 'Approve members', hint: 'Let users waiting to enter in, or refuse them' },
+  { value: 'MoveMembers', label: 'Move members', hint: 'Move users between voice sessions past their limit and approval; join full ones' },
   { value: 'ManageMessages', label: 'Manage messages', hint: 'Delete messages of others' },
   { value: 'ManageUsers', label: 'Manage users', hint: 'Change names and avatars of others' },
 ]

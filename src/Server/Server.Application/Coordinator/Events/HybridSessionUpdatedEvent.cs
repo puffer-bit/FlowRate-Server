@@ -30,6 +30,14 @@ public record HybridSessionPeerReplacedEvent(int SessionId, int UserId, string R
 public record HybridSessionPeerKickedEvent(int SessionId, int UserId, int? InitiatorUserId = null, string? Reason = null)
     : HybridSessionUpdatedEvent(SessionId);
 
+/// <summary>The peer was moved out to <paramref name="TargetSessionId"/>; its client is to join there.</summary>
+public record HybridSessionPeerMovedOutEvent(int SessionId, int UserId, int TargetSessionId, int InitiatorUserId)
+    : HybridSessionUpdatedEvent(SessionId);
+
+/// <summary>The peer was moved in from <paramref name="SourceSessionId"/> and waits for its client to join.</summary>
+public record HybridSessionPeerMovedInEvent(int SessionId, PeerSnapshot Peer, int SourceSessionId, int InitiatorUserId)
+    : HybridSessionUpdatedEvent(SessionId);
+
 public record HybridSessionPeerApprovedEvent(int SessionId, int UserId, int InitiatorUserId)
     : HybridSessionUpdatedEvent(SessionId);
 

@@ -33,6 +33,13 @@ public interface IHybridSessionManager : IDisposable
     bool TryGetSession(int sessionId, [NotNullWhen(true)] out IHybridSession? session);
     IReadOnlyCollection<IHybridSession> GetAllSessions();
 
+    /// <summary>
+    /// Moves a peer of <paramref name="sessionId"/> to <paramref name="targetSessionId"/>, past its capacity and
+    /// approval. The target keeps a place for the peer until its client joins there, for
+    /// <see cref="HybridSessionManager.MovedPeerJoinTimeout"/> at most. Permissions are the caller's to check.
+    /// </summary>
+    Task<ErrorCode?> MovePeerAsync(int initiatorId, int sessionId, int userId, int targetSessionId);
+
     Task RemoveUserFromAllSessionsAsync(int userId);
     /// <summary>Removes the user from the sessions they take part in from this connection only.</summary>
     Task RemoveConnectionFromAllSessionsAsync(int userId, string connectionId);

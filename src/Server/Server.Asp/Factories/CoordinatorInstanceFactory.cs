@@ -306,7 +306,7 @@ public class CoordinatorInstanceFactory : ICoordinatorInstanceFactory
         yield return ActivatorUtilities.CreateInstance<RejectInSessionHandler>(_provider, hybridSessionManager, messageSender);
         
         yield return new Server.Application.Coordinator.Handlers.Chat.DirectCallHandler(hybridSessionManager, messageSender);
-        yield return ActivatorUtilities.CreateInstance<HybridSessionJoinHandler>(_provider, hybridSessionManager, messageSender);
+        yield return new HybridSessionJoinHandler(hybridSessionManager, messageSender, permissions);
         yield return ActivatorUtilities.CreateInstance<HybridSessionConnectHandler>(_provider, hybridSessionManager, messageSender);
         yield return ActivatorUtilities.CreateInstance<HybridSessionPeerListRequestHandler>(_provider, hybridSessionManager, messageSender);
         yield return ActivatorUtilities.CreateInstance<HybridSessionStartVideoShareHandler>(_provider, hybridSessionManager, messageSender);
@@ -321,6 +321,7 @@ public class CoordinatorInstanceFactory : ICoordinatorInstanceFactory
         yield return ActivatorUtilities.CreateInstance<HybridSessionSetSoundMuteHandler>(_provider, hybridSessionManager, messageSender);
         yield return ActivatorUtilities.CreateInstance<HybridSessionSetAfkHandler>(_provider, hybridSessionManager, messageSender);
         yield return ActivatorUtilities.CreateInstance<HybridSessionPokeHandler>(_provider, hybridSessionManager, messageSender);
+        yield return new HybridSessionMovePeerHandler(hybridSessionManager, permissions, messageSender);
         
         yield return ActivatorUtilities.CreateInstance<SendMessageHandler>(_provider, chatSessionManager, messageSender, userManager);
         yield return ActivatorUtilities.CreateInstance<SetMessageReactionHandler>(_provider, chatSessionManager, messageSender);
