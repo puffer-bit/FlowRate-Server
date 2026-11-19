@@ -39,7 +39,7 @@ public class RegisterPushTokenHandler : IMessageHandler<RegisterPushTokenRequest
 
         if (!_pushSender.IsEnabled)
         {
-            _messageSender.SendMessageById(connectionId, request.ToResponse(PushTokenResult.PushDisabled));
+            _messageSender.SendMessageById(connectionId, request.ToError(ErrorCode.FeatureDisabled));
             return HandleMessageResult.NoError;
         }
 
@@ -50,17 +50,14 @@ public class RegisterPushTokenHandler : IMessageHandler<RegisterPushTokenRequest
                 request.Platform, request.KeyId.ToLowerInvariant(), Convert.FromBase64String(request.Key),
                 PushReplyToken.Hash(replyToken)));
 
-            _messageSender.SendMessageById(connectionId, request.ToResponse(PushTokenResult.NoError, replyToken));
+            _messageSender.SendMessageById(connectionId, request.ToResponse(replyToken));
             return HandleMessageResult.NoError;
         }
         catch (Exception exception)
         {
             _logger.LogError(exception, "Registering a push device of user {UserId} failed.", request.SenderId);
-            _messageSender.SendMessageById(connectionId, request.ToResponse(PushTokenResult.InternalError));
+            _messageSender.SendMessageById(connectionId, request.ToError(ErrorCode.Internal));
             return HandleMessageResult.InternalError;
         }
     }
-
-    public BaseMessage? CreateFailureResponse(RegisterPushTokenRequest request) =>
-        request.ToResponse(PushTokenResult.InternalError);
 }

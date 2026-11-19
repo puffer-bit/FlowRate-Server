@@ -35,26 +35,23 @@ public class ChangeSessionPermissionsHandler : IMessageHandler<ChangeSessionPerm
             return HandleMessageResult.ForbiddenRequest;
 
         var result = await ChangeAsync(request);
-        _messageSender.SendMessageById(connectionId, request.ToResponse(result));
+        _messageSender.SendMessageById(connectionId, request.Answer(result, request.ToResponse));
 
         return HandleMessageResult.NoError;
     }
 
-    public BaseMessage? CreateFailureResponse(ChangeSessionPermissionsRequest request) =>
-        request.ToResponse(ChangeSessionPermissionsResult.InternalError);
-
-    private async Task<ChangeSessionPermissionsResult> ChangeAsync(ChangeSessionPermissionsRequest request)
+    private async Task<ErrorCode?> ChangeAsync(ChangeSessionPermissionsRequest request)
     {
         if (!_sessionManager.TryGetSessionModel(request.SessionId, out var session))
-            return ChangeSessionPermissionsResult.SessionNotExists;
+            return ErrorCode.SessionNotFound;
 
         var overrides = request.Overrides.ToModels();
         if (overrides.DistinctBy(o => o.RoleId).Count() != overrides.Count)
-            return ChangeSessionPermissionsResult.NotAllowed;
+            return ErrorCode.InvalidValue;
 
         var roles = _permissions.Roles;
         if (overrides.Any(o => roles.Find(o.RoleId) == null))
-            return ChangeSessionPermissionsResult.RoleNotExists;
+            return ErrorCode.RoleNotFound;
 
         var senderPosition = await _permissions.HighestPositionOfAsync(request.SenderId);
         var senderPermissions = _permissions.PermissionsOf(request.SenderId);
@@ -73,11 +70,11 @@ public class ChangeSessionPermissionsHandler : IMessageHandler<ChangeSessionPerm
                 continue;
 
             if (role.Position >= senderPosition || (changedFlags & ~senderPermissions) != 0)
-                return ChangeSessionPermissionsResult.NotAllowed;
+                return ErrorCode.HierarchyViolation;
         }
 
         var result = await _sessionManager.SetPermissionsAsync(session.Id, overrides);
-        if (result == ChangeSessionPermissionsResult.NoError)
+        if (result == null)
             _visibility.Reconfigured(session);
 
         return result;

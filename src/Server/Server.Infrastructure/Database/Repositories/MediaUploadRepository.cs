@@ -1,7 +1,8 @@
 using Microsoft.EntityFrameworkCore;
 using Server.Application.Abstractions.Persistence;
 using Server.Core.Models.Media;
-using Server.Infrastructure.Database.Entities;
+using Server.Database.Entities;
+using Server.Database;
 
 namespace Server.Infrastructure.Database.Repositories;
 
@@ -123,7 +124,7 @@ public class MediaUploadRepository : IMediaUploadRepository
             .Where(file => file.Id == fileId)
             .Join(context.ChatMessagesEntities.IgnoreQueryFilters(), file => file.MessageId, message => message.Id,
                 (file, message) => new ChatFileDownloadModel(file.Id, message.ChatId, message.IsDeleted, file.FileName,
-                    file.UploadId))
+                    file.UploadId, file.PreviewUploadId))
             .FirstOrDefaultAsync(cancellationToken);
     }
 

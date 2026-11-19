@@ -17,17 +17,14 @@ public class UserSetPasswordHandler(IMessageSender messageSender, UserSecurityRe
 
         if (!await replies.IsProvenAsync(request.SenderId, request.Proof))
         {
-            messageSender.SendMessageById(connectionId, request.ToResponse(UserSecurityResult.ProofRequired));
+            messageSender.SendMessageById(connectionId, request.ToError(ErrorCode.ProofRequired));
             return HandleMessageResult.ForbiddenRequest;
         }
 
         var status = await replies.Security.SetPasswordAsync(replies.CoordinatorId, request.SenderId,
             request.NewPassword);
         var (result, security) = await replies.AfterAsync(request.SenderId, status);
-        messageSender.SendMessageById(connectionId, request.ToResponse(result, security));
+        messageSender.SendMessageById(connectionId, request.Answer(result, () => request.ToResponse(security!)));
         return HandleMessageResult.NoError;
     }
-
-    public BaseMessage? CreateFailureResponse(UserSetPasswordRequest request) =>
-        request.ToResponse(UserSecurityResult.InternalError);
 }

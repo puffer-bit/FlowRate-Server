@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.Logging;
 using Microsoft.Net.Http.Headers;
+using Server.Application.Coordinator.LinkPreviews;
 using Server.Application.Coordinator.Media;
 using Server.Core.Models.Media;
 using Shared.Models.Media;
@@ -32,12 +33,15 @@ public sealed class MediaHttpEndpoints : IMediaHttpEndpoints
     private readonly ILogger _logger;
     private readonly IMediaService _media;
     private readonly TusDiskMediaStorage _storage;
+    private readonly LinkPreviewService? _linkPreviews;
 
-    public MediaHttpEndpoints(ILogger logger, IMediaService media, TusDiskMediaStorage storage)
+    public MediaHttpEndpoints(ILogger logger, IMediaService media, TusDiskMediaStorage storage,
+        LinkPreviewService? linkPreviews = null)
     {
         _logger = logger;
         _media = media;
         _storage = storage;
+        _linkPreviews = linkPreviews;
     }
 
     public void Map(IEndpointRouteBuilder endpoints)
@@ -46,6 +50,7 @@ public sealed class MediaHttpEndpoints : IMediaHttpEndpoints
         endpoints.MapGet(MediaEndpoints.Images + "/{id:int}", (RequestDelegate)GetImageAsync);
         endpoints.MapGet(MediaEndpoints.Files + "/{id:int}", (RequestDelegate)GetFileAsync);
         endpoints.MapGet(MediaEndpoints.Avatars + "/{id}", (RequestDelegate)GetAvatarAsync);
+        endpoints.MapGet(MediaEndpoints.LinkPreviewImages + "/{id:int}", (RequestDelegate)GetLinkPreviewImageAsync);
     }
 
     private DefaultTusConfiguration CreateTusConfiguration() => new()
@@ -147,7 +152,7 @@ public sealed class MediaHttpEndpoints : IMediaHttpEndpoints
             return;
         }
 
-        var file = await _media.OpenImageAsync(imageId, variant == MediaEndpoints.VariantPreview, context.RequestAborted);
+        var file = await _media.OpenImageAsync(imageId, variant == MediaEndpoints.VariantPreview, context.RequestAborted, (int)context.Items[UserIdItem]!);
         if (file == null)
         {
             context.Response.StatusCode = StatusCodes.Status404NotFound;
@@ -162,14 +167,19 @@ public sealed class MediaHttpEndpoints : IMediaHttpEndpoints
         if (!await TryAuthorizeReadAsync(context))
             return;
 
-        if (!int.TryParse(context.Request.RouteValues["id"]?.ToString(), NumberStyles.None,
+        var variant = context.Request.Query[MediaEndpoints.VariantParameter].ToString();
+        if (variant is not ("" or MediaEndpoints.VariantOriginal or MediaEndpoints.VariantPreview)
+            || !int.TryParse(context.Request.RouteValues["id"]?.ToString(), NumberStyles.None,
                 CultureInfo.InvariantCulture, out var fileId))
         {
             context.Response.StatusCode = StatusCodes.Status400BadRequest;
             return;
         }
 
-        var file = await _media.OpenFileAsync(fileId, context.RequestAborted);
+        var userId = (int)context.Items[UserIdItem]!;
+        var file = variant == MediaEndpoints.VariantPreview
+            ? await _media.OpenFilePreviewAsync(fileId, context.RequestAborted, userId)
+            : await _media.OpenFileAsync(fileId, context.RequestAborted, userId);
         if (file == null)
         {
             context.Response.StatusCode = StatusCodes.Status404NotFound;
@@ -192,6 +202,30 @@ public sealed class MediaHttpEndpoints : IMediaHttpEndpoints
         }
 
         var file = await _media.OpenAvatarAsync(uploadId.ToLowerInvariant(), context.RequestAborted);
+        if (file == null)
+        {
+            context.Response.StatusCode = StatusCodes.Status404NotFound;
+            return;
+        }
+
+        await SendFileAsync(context, file);
+    }
+
+    // The image of a page anyone could open: every user with media access may have it
+    private async Task GetLinkPreviewImageAsync(HttpContext context)
+    {
+        if (!await TryAuthorizeReadAsync(context))
+            return;
+
+        if (_linkPreviews == null
+            || !int.TryParse(context.Request.RouteValues["id"]?.ToString(), NumberStyles.None,
+                CultureInfo.InvariantCulture, out var previewId))
+        {
+            context.Response.StatusCode = StatusCodes.Status404NotFound;
+            return;
+        }
+
+        var file = await _linkPreviews.OpenImageAsync(previewId, context.RequestAborted);
         if (file == null)
         {
             context.Response.StatusCode = StatusCodes.Status404NotFound;
@@ -230,7 +264,10 @@ public sealed class MediaHttpEndpoints : IMediaHttpEndpoints
         }
 
         if (await _media.IsAllowedAsync(userId, isUpload: false, context.RequestAborted))
+        {
+            context.Items[UserIdItem] = userId;
             return true;
+        }
 
         context.Response.StatusCode = StatusCodes.Status403Forbidden;
         return false;

@@ -20,11 +20,5 @@ public class HybridSessionSetMicrophoneMuteHandler : HybridSessionRequestHandler
     protected override int GetSessionId(HybridSessionSetMicrophoneMuteRequest request) => request.SessionId;
 
     protected override async Task<BaseMessage> HandleAsync(HybridSessionSetMicrophoneMuteRequest request, IHybridSession session) =>
-        request.ToResponse(await session.PeerManager.SetMicrophoneMutedAsync(request.SenderId, request.SenderId, request.IsMuted));
-
-    protected override BaseMessage SessionNotFound(HybridSessionSetMicrophoneMuteRequest request) =>
-        request.ToResponse(SetMicrophoneMuteResult.SessionNotExists);
-
-    public override BaseMessage CreateFailureResponse(HybridSessionSetMicrophoneMuteRequest request) =>
-        request.ToResponse(SetMicrophoneMuteResult.InternalError);
+        request.Answer(await session.PeerManager.SetMicrophoneMutedAsync(request.SenderId, request.SenderId, request.IsMuted), request.ToResponse);
 }

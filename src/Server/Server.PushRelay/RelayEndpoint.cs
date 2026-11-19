@@ -18,7 +18,7 @@ public static class RelayEndpoint
             return Results.StatusCode(StatusCodes.Status429TooManyRequests);
 
         var result = await client.SendAsync(
-            new FcmMessage(request.Token, request.Platform, request.KeyId, request.Payload), context.RequestAborted);
+            new FcmMessage(request.Token, request.Platform, request.KeyId, request.Payload, request.TimeToLiveSeconds), context.RequestAborted);
 
         switch (result.Status)
         {
@@ -34,6 +34,7 @@ public static class RelayEndpoint
 
     private static bool IsValid(RelayPushRequest request) =>
         request.Token is { Length: > 0 and <= RelayContract.MaxTokenLength }
+        && request.TimeToLiveSeconds is null or >= 0 and <= 86400
         && Enum.IsDefined(request.Platform)
         && request.KeyId is { Length: RelayContract.KeyIdLength } && request.KeyId.All(char.IsAsciiHexDigit)
         && request.Payload is { Length: > 0 and <= RelayContract.MaxPayloadLength }

@@ -6,6 +6,8 @@ namespace Server.Core.Models.HybridSession;
 public sealed class HybridSessionModel : SessionModel
 {
     public int HostId { get; }
+    /// <summary>Only selected devices may join a private call. Null for server channels.</summary>
+    public IReadOnlyDictionary<int, string>? CallDevices { get; init; }
     public WebRTCEngine EngineType { get; }
     public bool IsHostMustApprove { get; private set; }
     public HybridMediaSettings Media { get; private set; }

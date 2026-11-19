@@ -4,6 +4,7 @@ import { mediaProto } from "../api/gRPC/proto-loader.js";
 import type { IceCandidate, RtpCodecParameters, WebRtcTransport } from "mediasoup/types";
 import type { SfuConfig } from "./config.js";
 import type { Session } from "./session/session.js";
+import { requireAuth } from "./auth.js";
 
 class NotFoundError extends Error {}
 
@@ -18,10 +19,12 @@ export class SFUServer {
 
     public async start(): Promise<void> {
         const { rtc, grpcBind, logLevel, workers } = this.config;
+        if (!this.config.auth)
+            console.warn('[Mediasoup Node] gRPC authentication is disabled; restrict access to this API.');
         await this.sessions.start(rtc.endpoints, logLevel, workers);
 
         this.server.addService(mediaProto.MediasoupServer.service, {
-            Ping: this.handlePing.bind(this),
+            Ping: requireAuth(this.config.auth, this.handlePing.bind(this)),
 
             LoadSession: this.handle(async ({ session_id }) => {
                 await this.sessions.getOrCreateSession(session_id);
@@ -112,7 +115,7 @@ export class SFUServer {
      * the action's result is merged into a SUCCESS response, a thrown error becomes ERROR or NOT_FOUND.
      */
     private handle(action: (request: any) => Promise<object | void> | object | void): grpc.handleUnaryCall<any, object> {
-        return async (call, callback) => {
+        return requireAuth(this.config.auth, async (call, callback) => {
             try {
                 const result = await action(call.request);
                 callback(null, { status: 'SUCCESS', ...result });
@@ -122,7 +125,7 @@ export class SFUServer {
                     error_message: err.message
                 });
             }
-        };
+        });
     }
 
     private requireSession(sessionId: number): Session {

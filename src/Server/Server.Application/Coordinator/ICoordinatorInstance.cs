@@ -8,6 +8,7 @@ namespace Server.Application.Coordinator;
 
 public interface ICoordinatorInstance : IDisposable
 {
+    Moderation.ModerationService? Moderation => null;
     ICoordinatorInstanceContext Context { get; }
     CoordinatorState State { get; }
     TimeSpan UpTime => Context.UpTime;

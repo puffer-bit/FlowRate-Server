@@ -14,4 +14,5 @@ public sealed record PeerSnapshot(
     bool IsSoundMuted = false,
     bool IsScreenAudioActive = false,
     bool IsAfk = false,
-    string? AfkReason = null);
+    string? AfkReason = null,
+    IReadOnlyCollection<int>? WatchedScreenShares = null);

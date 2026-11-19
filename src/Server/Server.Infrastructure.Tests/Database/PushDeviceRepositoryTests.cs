@@ -1,25 +1,23 @@
-using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Server.Core.Models.Push;
-using Server.Infrastructure.Database;
+using Server.Database;
 using Server.Infrastructure.Database.Repositories;
 using Shared.Enums;
 using Xunit;
 
 namespace Server.Infrastructure.Tests.Database;
 
+[Trait("Category", "DatabaseProvider")]
 public sealed class PushDeviceRepositoryTests : IDisposable
 {
     private const string Coordinator = "coordinator";
 
-    private readonly string _databasePath = Path.Combine(Path.GetTempPath(), $"push-{Guid.NewGuid():N}.db");
+    private readonly RepositoryTestDatabase _database = new();
     private readonly PushDeviceRepository _repository;
 
     public PushDeviceRepositoryTests()
     {
-        var factory = new TestContextFactory(new DbContextOptionsBuilder<ServerDbContext>()
-            .UseSqlite($"Data Source={_databasePath}")
-            .Options);
+        var factory = new TestContextFactory(_database.Options);
         _repository = new PushDeviceRepository(factory);
 
         using var context = factory.CreateDbContext();
@@ -28,8 +26,7 @@ public sealed class PushDeviceRepositoryTests : IDisposable
 
     public void Dispose()
     {
-        SqliteConnection.ClearAllPools();
-        File.Delete(_databasePath);
+        _database.Dispose();
     }
 
     private static PushDeviceModel Device(int userId, string token, byte keyByte = 1, string coordinator = Coordinator) =>

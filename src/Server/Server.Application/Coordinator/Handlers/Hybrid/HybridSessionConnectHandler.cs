@@ -22,11 +22,5 @@ public class HybridSessionConnectHandler : HybridSessionRequestHandler<HybridSes
     protected override bool DrivesOwnPeer => true;
 
     protected override async Task<BaseMessage> HandleAsync(HybridSessionConnectTransportRequest request, IHybridSession session) =>
-        request.ToResponse(await session.PeerManager.ConnectPeerAsync(request.SenderId, request.DtlsParameters));
-
-    protected override BaseMessage SessionNotFound(HybridSessionConnectTransportRequest request) =>
-        request.ToResponse(HybridSessionConnectTransportResult.SessionNotExists);
-
-    public override BaseMessage CreateFailureResponse(HybridSessionConnectTransportRequest request) =>
-        request.ToResponse(HybridSessionConnectTransportResult.InternalError);
+        request.Answer(await session.PeerManager.ConnectPeerAsync(request.SenderId, request.DTLSParameters), request.ToResponse);
 }

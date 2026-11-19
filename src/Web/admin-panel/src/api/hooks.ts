@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react'
 import { hashKey, useMutation, useQuery, useQueryClient, type QueryKey } from '@tanstack/react-query'
 import {
   assignRole,
+  createCoordinator,
+  createSfuNode,
   confirmTwoFactor,
   createRole,
   deletePasskey,
@@ -23,8 +25,10 @@ import {
   setUserPassword,
   unassignRole,
   updateCoordinatorSettings,
+  updateSfuCredentials,
   updateRole,
   type RoleChange,
+  type SfuCredentials,
   type UpdateCoordinatorSettings,
   type UpdateRole,
   type UserSecurity,
@@ -38,6 +42,14 @@ const refetchDebounceMs = 300
 // Every change is signalled, see useLiveUpdates; only the SFU round trips are polled
 export const useOverview = () => useQuery({ queryKey: queryKeys.overview, queryFn: getOverview })
 
+export function useCreateCoordinator() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: createCoordinator,
+    onSuccess: () => { void queryClient.invalidateQueries({ queryKey: queryKeys.overview }) },
+  })
+}
+
 export const useCoordinator = (id: string) =>
   useQuery({ queryKey: queryKeys.coordinator(id), queryFn: () => getCoordinator(id) })
 
@@ -49,6 +61,22 @@ const sfuNodesPollMs = 5_000
 
 export const useSfuNodes = () =>
   useQuery({ queryKey: queryKeys.sfuNodes, queryFn: getSfuNodes, refetchInterval: sfuNodesPollMs })
+
+export function useCreateSfuNode() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: createSfuNode,
+    onSuccess: () => { void queryClient.invalidateQueries({ queryKey: queryKeys.sfuNodes }) },
+  })
+}
+
+export function useUpdateSfuCredentials(id: number) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (credentials: SfuCredentials) => updateSfuCredentials(id, credentials),
+    onSuccess: () => { void queryClient.invalidateQueries({ queryKey: queryKeys.sfuNodes }) },
+  })
+}
 
 export function useUpdateCoordinatorSettings(id: string) {
   const queryClient = useQueryClient()

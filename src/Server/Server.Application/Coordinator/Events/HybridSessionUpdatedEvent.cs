@@ -30,7 +30,12 @@ public record HybridSessionPeerReplacedEvent(int SessionId, int UserId, string R
 public record HybridSessionPeerKickedEvent(int SessionId, int UserId, int? InitiatorUserId = null, string? Reason = null)
     : HybridSessionUpdatedEvent(SessionId);
 
-public record HybridSessionPeerBannedEvent(int SessionId, int UserId, int? InitiatorUserId = null, string? Reason = null)
+/// <summary>The peer was moved out to <paramref name="TargetSessionId"/>; its client is to join there.</summary>
+public record HybridSessionPeerMovedOutEvent(int SessionId, int UserId, int TargetSessionId, int InitiatorUserId)
+    : HybridSessionUpdatedEvent(SessionId);
+
+/// <summary>The peer was moved in from <paramref name="SourceSessionId"/> and waits for its client to join.</summary>
+public record HybridSessionPeerMovedInEvent(int SessionId, PeerSnapshot Peer, int SourceSessionId, int InitiatorUserId)
     : HybridSessionUpdatedEvent(SessionId);
 
 public record HybridSessionPeerApprovedEvent(int SessionId, int UserId, int InitiatorUserId)
@@ -39,8 +44,11 @@ public record HybridSessionPeerApprovedEvent(int SessionId, int UserId, int Init
 public record HybridSessionPeerRejectedEvent(int SessionId, int UserId, int? InitiatorUserId = null, string? Reason = null)
     : HybridSessionUpdatedEvent(SessionId);
 
-/// <summary>Not sent to clients yet: video is not routed to the other peers.</summary>
-public record HybridSessionPeerStartedVideoShareEvent(int SessionId, int UserId, Outbound Outbound)
+/// <summary>A listener receives a camera on their active session connection.</summary>
+public record HybridSessionPeerStartedVideoShareEvent(int SessionId, int UserId, int ListenerUserId,
+    Inbound Inbound, string? ListenerConnectionId = null) : HybridSessionUpdatedEvent(SessionId);
+
+public record HybridSessionPeerStoppedVideoShareEvent(int SessionId, int UserId, int? InitiatorUserId = null)
     : HybridSessionUpdatedEvent(SessionId);
 
 /// <summary>A listener started to receive the voice of a peer, on the connection they take part from.</summary>
@@ -66,6 +74,12 @@ public record HybridSessionPeerMuteSoundEvent(int SessionId, int UserId, int? In
     : HybridSessionUpdatedEvent(SessionId);
 
 public record HybridSessionPeerUnmuteSoundEvent(int SessionId, int UserId, int? InitiatorUserId = null)
+    : HybridSessionUpdatedEvent(SessionId);
+
+public record HybridSessionPeerStartedWatchingScreenShareEvent(int SessionId, int UserId, int SharerUserId)
+    : HybridSessionUpdatedEvent(SessionId);
+
+public record HybridSessionPeerStoppedWatchingScreenShareEvent(int SessionId, int UserId, int SharerUserId)
     : HybridSessionUpdatedEvent(SessionId);
 
 public record HybridSessionPeerAfkEvent(int SessionId, int UserId, string? Reason)

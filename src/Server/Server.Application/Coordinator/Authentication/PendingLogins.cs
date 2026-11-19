@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using Shared.Models.DataTransferObjects;
 
 namespace Server.Application.Coordinator.Authentication;
 
@@ -17,7 +18,7 @@ public sealed class PendingLogins(TimeProvider timeProvider)
     {
     }
 
-    public void Start(string connectionId, string userIdentity, LoginChallenge challenge)
+    public void Start(string connectionId, string userIdentity, DeviceInfoDTO? device, LoginChallenge challenge)
     {
         var now = timeProvider.GetUtcNow();
         foreach (var (id, login) in _logins)
@@ -26,7 +27,7 @@ public sealed class PendingLogins(TimeProvider timeProvider)
                 _logins.TryRemove(id, out _);
         }
 
-        _logins[connectionId] = new PendingLogin(userIdentity, challenge, now);
+        _logins[connectionId] = new PendingLogin(userIdentity, device, challenge, now);
     }
 
     /// <summary>The login the connection started, unless it is too old.</summary>
@@ -58,9 +59,11 @@ public sealed class PendingLogins(TimeProvider timeProvider)
     public int Count => _logins.Count;
 }
 
-public sealed class PendingLogin(string userIdentity, LoginChallenge challenge, DateTimeOffset startedAt)
+public sealed class PendingLogin(string userIdentity, DeviceInfoDTO? device, LoginChallenge challenge,
+    DateTimeOffset startedAt)
 {
     public string UserIdentity { get; } = userIdentity;
+    public DeviceInfoDTO? Device { get; } = device;
     public LoginChallenge Challenge { get; } = challenge;
     public DateTimeOffset StartedAt { get; } = startedAt;
     internal int Failures;

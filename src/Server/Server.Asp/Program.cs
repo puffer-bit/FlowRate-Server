@@ -5,6 +5,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.EntityFrameworkCore;
 using Serilog;
+using Server.Database;
 using Shared.Serialization;
 using Server.Infrastructure.Database;
 using Server.Infrastructure.Coordinator.Connection.Gateway;
@@ -39,6 +40,9 @@ namespace Server.Asp
     {
         public static async Task<int> Main(string[] args)
         {
+            if (args.FirstOrDefault() == "import-sqlite")
+                return await Commands.ImportSqliteCommand.RunAsync(args[1..]);
+
             try
             {
                 Console.WriteLine("Configuring services...");
@@ -107,6 +111,7 @@ namespace Server.Asp
 
             // Only what is needed before the database is read; everything else lives in the database
             services.AddValidatedOptions<StorageOptions>(StorageOptions.SectionName);
+            services.AddValidatedOptions<DatabaseOptions>(DatabaseOptions.SectionName);
             services.AddValidatedOptions<CertificateOptions>(CertificateOptions.SectionName);
             services.AddValidatedOptions<OrchestratorOptions>(OrchestratorOptions.SectionName);
             services.AddValidatedOptions<PushOptions>(PushOptions.SectionName);
@@ -137,10 +142,11 @@ namespace Server.Asp
             services.AddHostedService<OrchestratorService>();
 
             services.AddPooledDbContextFactory<ServerDbContext>((provider, options) =>
-                options.UseSqlite(provider.GetRequiredService<IOptions<StorageOptions>>().Value.DatabaseConnectionString)
-                    .AddInterceptors(new SqliteSynchronousInterceptor()));
+                options.UseServerDatabase(provider.GetRequiredService<IOptions<DatabaseOptions>>().Value,
+                    provider.GetRequiredService<IOptions<StorageOptions>>().Value));
             
             services.AddSingleton<ServerCertificate>();
+            services.AddSingleton<IDatabaseInfo, DatabaseInfo>();
             services.AddSingleton(ProtocolJsonContext.Default.Options);
             services.AddSingleton<IMessageSerializer, MessageSerializer>();
             
@@ -162,9 +168,11 @@ namespace Server.Asp
             
             services.AddSingleton<IOrchestratorInstanceRepository, OrchestratorInstanceRepository>();
             services.AddSingleton<IUserRepository, UserRepository>();
+            services.AddSingleton<IBanRepository, BanRepository>();
             services.AddSingleton<ICoordinatorInstanceRepository, CoordinatorInstanceRepository>();
             services.AddSingleton<IVideoSessionRepository, VideoSessionRepository>();
             services.AddSingleton<IMessagesRepository, MessagesRepository>();
+            services.AddSingleton<ILinkPreviewRepository, LinkPreviewRepository>();
             services.AddSingleton<IChatReadStateRepository, ChatReadStateRepository>();
             services.AddSingleton<IChatSessionRepository, ChatSessionRepository>();
             services.AddSingleton<ISessionsRepository, SessionsRepository>();
@@ -183,6 +191,7 @@ namespace Server.Asp
             services.AddSingleton<IPasskeyService, PasskeyService>();
             services.AddSingleton<IUserSecurityDataRepository, UserSecurityDataRepository>();
             services.AddSingleton<IUserPasskeyRepository, UserPasskeyRepository>();
+            services.AddSingleton<IUserSessionRepository, UserSessionRepository>();
         }
 
         private static void ConfigureMiddleware(WebApplication app)

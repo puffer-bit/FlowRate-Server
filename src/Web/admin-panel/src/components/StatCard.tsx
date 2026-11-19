@@ -1,11 +1,12 @@
-import { Paper, Text } from '@mantine/core'
 import type { ReactNode } from 'react'
+import { PanelIcon, type IconName } from './PanelIcon'
 
-export function StatCard({ label, value }: { label: string, value: ReactNode }) {
+export function StatCard({ label, value, icon = 'activity', hint }: { label: string, value: ReactNode, icon?: IconName, hint?: string }) {
   return (
-    <Paper withBorder p="md" radius="md">
-      <Text size="sm" c="dimmed">{label}</Text>
-      <Text fz={28} fw={700} style={{ fontVariantNumeric: 'tabular-nums' }}>{value}</Text>
-    </Paper>
+    <div className="stat-card">
+      <div className="stat-card-top"><span>{label}</span><span className="stat-icon"><PanelIcon name={icon} size={18} /></span></div>
+      <div className="stat-value">{value}</div>
+      {hint && <div className="stat-hint">{hint}</div>}
+    </div>
   )
 }

@@ -80,22 +80,22 @@ public sealed class SessionLayoutService : ISessionLayoutService
             : SessionLayoutChange.Unchanged);
     }
 
-    public async Task<(SessionLayoutResult Result, int? CategoryId)> CreateCategoryAsync(string name)
+    public async Task<(ErrorCode? Result, int? CategoryId)> CreateCategoryAsync(string name)
     {
         await _lock.WaitAsync();
         try
         {
             if (_state.Layout.CategoriesCount >= Limits.SessionCategoriesMaxCount)
-                return (SessionLayoutResult.TooManyCategories, null);
+                return (ErrorCode.TooManyCategories, null);
 
             var categoryId = await _repository.AddCategoryAsync(_coordinatorInstanceId, name);
             var result = await ApplyAsync(layout => layout.AddCategory(new SessionCategoryModel(categoryId, name)));
-            return (result, result == SessionLayoutResult.NoError ? categoryId : null);
+            return (result, result == null ? categoryId : null);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Session category {Name} could not be created.", name);
-            return (SessionLayoutResult.InternalError, null);
+            return (ErrorCode.Internal, null);
         }
         finally
         {
@@ -103,19 +103,19 @@ public sealed class SessionLayoutService : ISessionLayoutService
         }
     }
 
-    public Task<SessionLayoutResult> RenameCategoryAsync(int categoryId, string name) =>
+    public Task<ErrorCode?> RenameCategoryAsync(int categoryId, string name) =>
         ChangeAsync(layout => layout.RenameCategory(categoryId, name));
 
-    public Task<SessionLayoutResult> DeleteCategoryAsync(int categoryId) =>
+    public Task<ErrorCode?> DeleteCategoryAsync(int categoryId) =>
         ChangeAsync(layout => layout.RemoveCategory(categoryId));
 
-    public Task<SessionLayoutResult> MoveSessionAsync(int sessionId, int? categoryId, int index) =>
+    public Task<ErrorCode?> MoveSessionAsync(int sessionId, int? categoryId, int index) =>
         ChangeAsync(layout => layout.MoveSession(sessionId, categoryId, index));
 
-    public Task<SessionLayoutResult> MoveCategoryAsync(int categoryId, int index) =>
+    public Task<ErrorCode?> MoveCategoryAsync(int categoryId, int index) =>
         ChangeAsync(layout => layout.MoveCategory(categoryId, index));
 
-    private async Task<SessionLayoutResult> ChangeAsync(Func<SessionLayoutModel, SessionLayoutChange> change)
+    private async Task<ErrorCode?> ChangeAsync(Func<SessionLayoutModel, SessionLayoutChange> change)
     {
         await _lock.WaitAsync();
         try
@@ -126,7 +126,7 @@ public sealed class SessionLayoutService : ISessionLayoutService
         {
             _logger.LogError(ex, "Session layout of coordinator {CoordinatorId} could not be saved.",
                 _coordinatorInstanceId);
-            return SessionLayoutResult.InternalError;
+            return ErrorCode.Internal;
         }
         finally
         {
@@ -134,25 +134,25 @@ public sealed class SessionLayoutService : ISessionLayoutService
         }
     }
 
-    private async Task<SessionLayoutResult> ApplyAsync(Func<SessionLayoutModel, SessionLayoutChange> change)
+    private async Task<ErrorCode?> ApplyAsync(Func<SessionLayoutModel, SessionLayoutChange> change)
     {
         var layout = _state.Layout.Clone();
 
         switch (change(layout))
         {
             case SessionLayoutChange.SessionNotExists:
-                return SessionLayoutResult.SessionNotExists;
+                return ErrorCode.SessionNotFound;
             case SessionLayoutChange.CategoryNotExists:
-                return SessionLayoutResult.CategoryNotExists;
+                return ErrorCode.CategoryNotFound;
             case SessionLayoutChange.Unchanged:
-                return SessionLayoutResult.NoError;
+                return null;
         }
 
         await _repository.SaveAsync(_coordinatorInstanceId, layout);
         var state = new LayoutState(layout, _state.Revision + 1);
         _state = state;
         _messageSender.BroadcastMessage(new SessionLayoutChangedNotification(state.Layout.ToDto(state.Revision)));
-        return SessionLayoutResult.NoError;
+        return null;
     }
 
     private sealed record LayoutState(SessionLayoutModel Layout, long Revision);

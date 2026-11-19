@@ -38,12 +38,12 @@ public class PushReplyServiceTests
             .ReturnsAsync(new PushDeviceModel(CoordinatorId, UserId, "fcm", PushPlatform.Android, "00", new byte[32]));
         _users.Setup(u => u.GetUserAsync(UserId)).ReturnsAsync(User(UserState.Normal));
         _chats.Setup(c => c.AddMessageAsync(ChatId, It.IsAny<NewChatMessageModel>(), UserId))
-            .ReturnsAsync(AddMessageResult.NoError);
+            .ReturnsAsync((ErrorCode?)null);
         var chat = ChatSessionModel.Create(CoordinatorId, "general", UserId);
         _chats.Setup(c => c.TryGetSession(ChatId, out chat)).Returns(true);
         _reads.Setup(r => r.GetLastMessageIdAsync(ChatId, It.IsAny<CancellationToken>())).ReturnsAsync(50);
-        _reads.Setup(r => r.MoveAsync(UserId, ChatId, It.IsAny<int>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((int _, int _, int messageId, CancellationToken _) => messageId);
+        _reads.Setup(r => r.MoveAsync(UserId, ChatId, It.IsAny<int>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((int _, int _, int messageId, DateTime? _, CancellationToken _) => new ChatReadMove(messageId, true));
         _reads.Setup(r => r.GetUnreadAsync(ChatId, UserId, It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync([]);
     }
@@ -68,6 +68,22 @@ public class PushReplyServiceTests
         _chats.Verify(c => c.AddMessageAsync(ChatId,
             It.Is<NewChatMessageModel>(m => m.ChatId == ChatId && m.TextContent!.Text == "hi" && m.Images.Count == 0),
             UserId), Times.Once);
+    }
+
+    [Fact]
+    public async Task DeclineCall_DeclinesAsTheUserOfTheDevice()
+    {
+        var calls = new Mock<Server.Application.Coordinator.Sessions.Hybrid.IHybridSessionManager>();
+        var callId = Guid.NewGuid();
+        calls.Setup(c => c.DeclineCallFromPushAsync(callId, UserId)).ReturnsAsync((ErrorCode?)null);
+        var service = Create();
+        service.WatchCalls(calls.Object);
+
+        Assert.Equal(PushReplyResult.Sent, await service.DeclineCallAsync(Token, new PushDeclineCallRequest(callId)));
+        Assert.Equal(PushReplyResult.Unauthorized, await service.DeclineCallAsync("other", new PushDeclineCallRequest(callId)));
+        Assert.Equal(PushReplyResult.Invalid, await service.DeclineCallAsync(Token, new PushDeclineCallRequest(Guid.Empty)));
+        calls.Verify(c => c.DeclineCallFromPushAsync(callId, UserId), Times.Once);
+        calls.VerifyNoOtherCalls();
     }
 
     [Fact]
@@ -105,10 +121,10 @@ public class PushReplyServiceTests
     }
 
     [Theory]
-    [InlineData(AddMessageResult.ChatNotExists, PushReplyResult.ChatNotExists)]
-    [InlineData(AddMessageResult.Rejected, PushReplyResult.Forbidden)]
-    [InlineData(AddMessageResult.InternalError, PushReplyResult.InternalError)]
-    public async Task Reply_ReportsWhatTheChatAnswered(AddMessageResult added, PushReplyResult expected)
+    [InlineData(ErrorCode.ChatNotFound, PushReplyResult.ChatNotExists)]
+    [InlineData(ErrorCode.ChatReadOnly, PushReplyResult.Forbidden)]
+    [InlineData(ErrorCode.Internal, PushReplyResult.InternalError)]
+    public async Task Reply_ReportsWhatTheChatAnswered(ErrorCode? added, PushReplyResult expected)
     {
         _chats.Setup(c => c.AddMessageAsync(ChatId, It.IsAny<NewChatMessageModel>(), UserId)).ReturnsAsync(added);
 
@@ -131,7 +147,7 @@ public class PushReplyServiceTests
         var result = await Create().MarkReadAsync(Token, new PushMarkReadRequest(ChatId, 42));
 
         Assert.Equal(PushReplyResult.Sent, result);
-        _reads.Verify(r => r.MoveAsync(UserId, ChatId, 42, It.IsAny<CancellationToken>()), Times.Once);
+        _reads.Verify(r => r.MoveAsync(UserId, ChatId, 42, It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()), Times.Once);
         _sender.Verify(s => s.SendMessageByUserId(UserId, It.IsAny<ChatReadStateChangedNotification>()), Times.Once);
     }
 

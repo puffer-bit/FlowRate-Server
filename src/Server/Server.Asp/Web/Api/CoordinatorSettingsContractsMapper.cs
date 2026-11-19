@@ -27,7 +27,10 @@ public static class CoordinatorSettingsContractsMapper
         },
         new MediaSettingsDto
         {
-            MaxFileSizeBytes = model.Media.MaxFileSizeBytes, StorageQuotaBytes = model.Media.StorageQuotaBytes
+            MaxFileSizeBytes = model.Media.MaxFileSizeBytes, StorageQuotaBytes = model.Media.StorageQuotaBytes,
+            ImageMaxSide = model.Media.ImageMaxSide, ImageQuality = model.Media.ImageQuality,
+            AllowOriginalImages = model.Media.AllowOriginalImages, VideoMaxSide = model.Media.VideoMaxSide,
+            AllowOriginalVideos = model.Media.AllowOriginalVideos
         },
         new UploadSettingsDto
         {
@@ -91,6 +94,11 @@ public static class CoordinatorSettingsContractsMapper
         HeartbeatTimeoutSeconds = settings.Heartbeat.TimeoutSeconds,
         MaxFileSizeBytes = settings.Media.MaxFileSizeBytes,
         StorageQuotaBytes = settings.Media.StorageQuotaBytes,
+        ImageMaxSide = settings.Media.ImageMaxSide,
+        ImageQuality = settings.Media.ImageQuality,
+        AllowOriginalImages = settings.Media.AllowOriginalImages,
+        VideoMaxSide = settings.Media.VideoMaxSide,
+        AllowOriginalVideos = settings.Media.AllowOriginalVideos,
         MaxUnattachedUploadsPerUser = settings.Uploads.MaxUnattachedPerUser,
         UnattachedUploadLifetimeHours = settings.Uploads.UnattachedLifetimeHours,
         MediaTokenLifetimeMinutes = settings.Uploads.TokenLifetimeMinutes,

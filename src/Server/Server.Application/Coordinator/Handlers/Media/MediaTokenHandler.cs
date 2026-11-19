@@ -23,10 +23,7 @@ public class MediaTokenHandler : IMessageHandler<MediaTokenRequest>
             return Task.FromResult(HandleMessageResult.ForbiddenRequest);
 
         var (token, expiresAt) = _media.IssueToken(request.SenderId);
-        _messageSender.SendMessageById(connectionId, request.ToResponse(MediaTokenResult.NoError, token, expiresAt));
+        _messageSender.SendMessageById(connectionId, request.ToResponse(token, expiresAt));
         return Task.FromResult(HandleMessageResult.NoError);
     }
-
-    public BaseMessage? CreateFailureResponse(MediaTokenRequest request) =>
-        request.ToResponse(MediaTokenResult.InternalError);
 }

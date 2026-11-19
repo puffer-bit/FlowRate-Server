@@ -2,7 +2,6 @@ using Server.Application.Coordinator.Messaging;
 using Server.Application.Mappers;
 using Server.Application.Orchestrator.Roles;
 using Shared.Enums;
-using Shared.Enums.Coordinator;
 using Shared.Models;
 using Shared.Models.Requests.Coordinator;
 
@@ -28,11 +27,9 @@ public class UpdateRoleHandler : IMessageHandler<CoordinatorUpdateRoleRequest>
 
         var result = await _roleService.UpdateAsync(_coordinatorInstanceId, request.SenderId, request.RoleId,
             request.Role.ToChange(), request.ExpectedRevision);
-        _messageSender.SendMessageById(connectionId, request.ToResponse(result.Status.ToResult(), result.Value?.ToDto()));
+        _messageSender.SendMessageById(connectionId, request.Answer(result.Status.ToResult(),
+            () => request.ToResponse(result.Value!.ToDto())));
 
         return HandleMessageResult.NoError;
     }
-
-    public BaseMessage? CreateFailureResponse(CoordinatorUpdateRoleRequest request) =>
-        request.ToResponse(CoordinatorRoleResult.InternalError);
 }

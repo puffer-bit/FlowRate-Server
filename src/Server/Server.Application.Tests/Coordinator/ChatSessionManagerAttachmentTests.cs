@@ -1,3 +1,4 @@
+using Server.Core.Models.TextChat.Messages.Content;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Server.Application.Abstractions.Media;
@@ -5,6 +6,7 @@ using Server.Application.Abstractions.Persistence;
 using Server.Application.Coordinator.Events;
 using Server.Application.Coordinator.Sessions.Chat;
 using Server.Application.Tests.Fakes;
+using Server.Core.Models.Coordinator.Settings;
 using Server.Core.Models.Media;
 using Server.Core.Models.TextChat.Messages;
 using Server.Core.Models.User;
@@ -32,6 +34,7 @@ public class ChatSessionManagerAttachmentTests
     private readonly Dictionary<string, MediaUploadModel> _storedUploads = new();
     private readonly List<ChatMessageModel> _added = [];
     private readonly ChatSessionManager _manager;
+    private CoordinatorMediaSettings _media = CoordinatorMediaSettings.Default;
 
     public ChatSessionManagerAttachmentTests()
     {
@@ -49,7 +52,7 @@ public class ChatSessionManagerAttachmentTests
             });
 
         _manager = new ChatSessionManager(NullLogger.Instance, _events, _chats.Object, _messages.Object,
-            _uploads.Object, _storage.Object, Coordinator);
+            _uploads.Object, _storage.Object, Coordinator, () => _media);
     }
 
     private async Task<int> CreateChat(bool attachmentsAllowed = true)
@@ -88,7 +91,7 @@ public class ChatSessionManagerAttachmentTests
 
         var result = await _manager.AddMessageAsync(chatId, MessageWithImage(chatId), AuthorId);
 
-        Assert.Equal(AddMessageResult.NoError, result);
+        Assert.Equal(null, result);
         var image = Assert.Single(Assert.Single(_added).Images);
         Assert.Equal(5000, image.Size);
         Assert.Equal("image/png", image.MimeType);
@@ -124,7 +127,7 @@ public class ChatSessionManagerAttachmentTests
         var chatId = await CreateChat(attachmentsAllowed: false);
         StoreUploads(chatId);
 
-        Assert.Equal(AddMessageResult.AttachmentsNotAllowed,
+        Assert.Equal(ErrorCode.AttachmentsNotAllowed,
             await _manager.AddMessageAsync(chatId, MessageWithImage(chatId), AuthorId));
         Assert.Empty(_added);
     }
@@ -135,7 +138,7 @@ public class ChatSessionManagerAttachmentTests
         var chatId = await CreateChat();
         StoreUploads(chatId, ownerId: 2);
 
-        Assert.Equal(AddMessageResult.AttachmentInvalid,
+        Assert.Equal(ErrorCode.AttachmentInvalid,
             await _manager.AddMessageAsync(chatId, MessageWithImage(chatId), AuthorId));
     }
 
@@ -145,7 +148,7 @@ public class ChatSessionManagerAttachmentTests
         var chatId = await CreateChat();
         StoreUploads(chatId + 1);
 
-        Assert.Equal(AddMessageResult.AttachmentInvalid,
+        Assert.Equal(ErrorCode.AttachmentInvalid,
             await _manager.AddMessageAsync(chatId, MessageWithImage(chatId), AuthorId));
     }
 
@@ -155,7 +158,7 @@ public class ChatSessionManagerAttachmentTests
         var chatId = await CreateChat();
         StoreUploads(chatId, state: MediaUploadState.Uploading);
 
-        Assert.Equal(AddMessageResult.AttachmentNotReady,
+        Assert.Equal(ErrorCode.AttachmentNotReady,
             await _manager.AddMessageAsync(chatId, MessageWithImage(chatId), AuthorId));
     }
 
@@ -165,7 +168,7 @@ public class ChatSessionManagerAttachmentTests
         var chatId = await CreateChat();
         StoreUploads(chatId, state: MediaUploadState.Attached);
 
-        Assert.Equal(AddMessageResult.AttachmentInvalid,
+        Assert.Equal(ErrorCode.AttachmentInvalid,
             await _manager.AddMessageAsync(chatId, MessageWithImage(chatId), AuthorId));
     }
 
@@ -177,7 +180,7 @@ public class ChatSessionManagerAttachmentTests
         _messages.Setup(r => r.AddAsync(It.IsAny<ChatMessageModel>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new MediaUploadUnavailableException());
 
-        Assert.Equal(AddMessageResult.AttachmentNotReady,
+        Assert.Equal(ErrorCode.AttachmentNotReady,
             await _manager.AddMessageAsync(chatId, MessageWithImage(chatId), AuthorId));
         Assert.Empty(_events.Of<ChatSessionMessageAddedEvent>());
     }
@@ -201,7 +204,7 @@ public class ChatSessionManagerAttachmentTests
         var chatId = await CreateChat();
         StoreFile(chatId);
 
-        Assert.Equal(AddMessageResult.NoError, await _manager.AddMessageAsync(chatId, MessageWithFile(chatId), AuthorId));
+        Assert.Equal(null, await _manager.AddMessageAsync(chatId, MessageWithFile(chatId), AuthorId));
 
         var file = Assert.Single(Assert.Single(_added).Files);
         Assert.Equal("report.pdf", file.FileName);
@@ -216,7 +219,7 @@ public class ChatSessionManagerAttachmentTests
         var chatId = await CreateChat();
         StoreFile(chatId, kind: MediaUploadKind.Image);
 
-        Assert.Equal(AddMessageResult.AttachmentInvalid,
+        Assert.Equal(ErrorCode.AttachmentInvalid,
             await _manager.AddMessageAsync(chatId, MessageWithFile(chatId), AuthorId));
     }
 
@@ -226,7 +229,7 @@ public class ChatSessionManagerAttachmentTests
         var chatId = await CreateChat();
         StoreFile(chatId, state: MediaUploadState.Uploading);
 
-        Assert.Equal(AddMessageResult.AttachmentNotReady,
+        Assert.Equal(ErrorCode.AttachmentNotReady,
             await _manager.AddMessageAsync(chatId, MessageWithFile(chatId), AuthorId));
     }
 
@@ -236,7 +239,7 @@ public class ChatSessionManagerAttachmentTests
         var chatId = await CreateChat(attachmentsAllowed: false);
         StoreFile(chatId);
 
-        Assert.Equal(AddMessageResult.AttachmentsNotAllowed,
+        Assert.Equal(ErrorCode.AttachmentsNotAllowed,
             await _manager.AddMessageAsync(chatId, MessageWithFile(chatId), AuthorId));
     }
 
@@ -250,7 +253,7 @@ public class ChatSessionManagerAttachmentTests
             Video = [new ChatVideoContentDTO { Id = 1, FileName = "a.mp4", Size = 1, MimeType = "video/mp4", Width = 1, Height = 1, Duration = TimeSpan.FromSeconds(1) }]
         };
 
-        Assert.Equal(AddMessageResult.AttachmentInvalid, await _manager.AddMessageAsync(chatId, message, AuthorId));
+        Assert.Equal(ErrorCode.AttachmentInvalid, await _manager.AddMessageAsync(chatId, message, AuthorId));
     }
 
     [Fact]
@@ -269,9 +272,251 @@ public class ChatSessionManagerAttachmentTests
         _uploads.Setup(r => r.RemoveByMessageAsync(7, It.IsAny<CancellationToken>()))
             .ReturnsAsync([OriginalId, PreviewId]);
 
-        Assert.Equal(DeleteMessageResult.NoError, await _manager.DeleteMessageAsync(chatId, 7, AuthorId));
+        Assert.Equal(null, await _manager.DeleteMessageAsync(chatId, 7, AuthorId));
 
         _storage.Verify(s => s.DeleteAsync(OriginalId, It.IsAny<CancellationToken>()), Times.Once);
         _storage.Verify(s => s.DeleteAsync(PreviewId, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    private void StorePng(int width, int height)
+    {
+        var header = new byte[24];
+        new byte[] { 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0, 0, 0, 13 }.CopyTo(header, 0);
+        "IHDR"u8.CopyTo(header.AsSpan(12));
+        System.Buffers.Binary.BinaryPrimitives.WriteUInt32BigEndian(header.AsSpan(16), (uint)width);
+        System.Buffers.Binary.BinaryPrimitives.WriteUInt32BigEndian(header.AsSpan(20), (uint)height);
+        _storage.Setup(s => s.OpenReadAsync(OriginalId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(() => new MemoryStream(header));
+    }
+
+    [Fact]
+    public async Task LargeImage_IsTaken_WhileOriginalsAreAllowed()
+    {
+        var chatId = await CreateChat();
+        StoreUploads(chatId);
+        StorePng(8000, 6000);
+
+        Assert.Null(await _manager.AddMessageAsync(chatId, MessageWithImage(chatId), AuthorId));
+        Assert.Single(_added);
+    }
+
+    [Fact]
+    public async Task LargeImage_IsRefused_WhenOnlyCompressedOnesAreTaken()
+    {
+        _media = new CoordinatorMediaSettings(1000, 0, imageMaxSide: 2560, allowOriginalImages: false);
+        var chatId = await CreateChat();
+        StoreUploads(chatId);
+        StorePng(2561, 100);
+
+        Assert.Equal(ErrorCode.ImageNotCompressed,
+            await _manager.AddMessageAsync(chatId, MessageWithImage(chatId), AuthorId));
+        Assert.Empty(_added);
+    }
+
+    [Fact]
+    public async Task ImageWithinTheSide_IsTaken_WhenOnlyCompressedOnesAreTaken()
+    {
+        _media = new CoordinatorMediaSettings(1000, 0, imageMaxSide: 2560, allowOriginalImages: false);
+        var chatId = await CreateChat();
+        StoreUploads(chatId);
+        StorePng(1440, 2560);
+
+        Assert.Null(await _manager.AddMessageAsync(chatId, MessageWithImage(chatId), AuthorId));
+        Assert.Single(_added);
+    }
+
+    [Fact]
+    public async Task ImageWithAnUnreadableHeader_IsRefused_WhenOnlyCompressedOnesAreTaken()
+    {
+        _media = new CoordinatorMediaSettings(1000, 0, allowOriginalImages: false);
+        var chatId = await CreateChat();
+        StoreUploads(chatId);
+        _storage.Setup(s => s.OpenReadAsync(OriginalId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(() => new MemoryStream([1, 2, 3]));
+
+        Assert.Equal(ErrorCode.AttachmentInvalid,
+            await _manager.AddMessageAsync(chatId, MessageWithImage(chatId), AuthorId));
+    }
+
+    private void StoreVideo(int chatId, byte[] content, string mimeType = "video/mp4")
+    {
+        _storedUploads[FileId] = new MediaUploadModel(FileId, Coordinator, AuthorId, chatId, MediaUploadKind.File,
+            mimeType, content.Length, MediaUploadState.Completed, DateTime.UtcNow);
+        _storage.Setup(s => s.OpenReadAsync(FileId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(() => new MemoryStream(content));
+    }
+
+    private static NewChatMessageModel MessageWithVideo(int chatId, string fileName = "clip.mp4") => new()
+    {
+        ChatId = chatId,
+        Files = [new NewChatFileModel { UploadId = FileId, FileName = fileName }]
+    };
+
+    private static readonly CoordinatorMediaSettings OnlyCompressedVideos =
+        new(1000, 0, videoMaxSide: 720, allowOriginalVideos: false);
+
+    [Fact]
+    public async Task LargeVideo_IsTaken_WhileOriginalsAreAllowed()
+    {
+        var chatId = await CreateChat();
+        StoreVideo(chatId, Media.TestMp4.Build(3840, 2160, 10, mediaLength: 100_000));
+
+        Assert.Null(await _manager.AddMessageAsync(chatId, MessageWithVideo(chatId), AuthorId));
+    }
+
+    [Theory]
+    [InlineData(1280, 720)]
+    [InlineData(720, 1280)]
+    public async Task CompressedVideo_IsTaken_WhenOnlyCompressedOnesAreTaken(int width, int height)
+    {
+        _media = OnlyCompressedVideos;
+        var chatId = await CreateChat();
+        // 10 s at about 2.5 Mbit/s
+        StoreVideo(chatId, Media.TestMp4.Build(width, height, 10, mediaLength: 3_100_000));
+
+        Assert.Null(await _manager.AddMessageAsync(chatId, MessageWithVideo(chatId), AuthorId));
+    }
+
+    [Fact]
+    public async Task LargerVideo_IsRefused_WhenOnlyCompressedOnesAreTaken()
+    {
+        _media = OnlyCompressedVideos;
+        var chatId = await CreateChat();
+        StoreVideo(chatId, Media.TestMp4.Build(1920, 1080, 10));
+
+        Assert.Equal(ErrorCode.VideoNotCompressed,
+            await _manager.AddMessageAsync(chatId, MessageWithVideo(chatId), AuthorId));
+        Assert.Empty(_added);
+    }
+
+    [Fact]
+    public async Task VideoOfAHigherBitrate_IsRefused_WhenOnlyCompressedOnesAreTaken()
+    {
+        _media = OnlyCompressedVideos;
+        var chatId = await CreateChat();
+        // 10 s at about 20 Mbit/s
+        StoreVideo(chatId, Media.TestMp4.Build(1280, 720, 10, mediaLength: 25_000_000));
+
+        Assert.Equal(ErrorCode.VideoNotCompressed,
+            await _manager.AddMessageAsync(chatId, MessageWithVideo(chatId), AuthorId));
+    }
+
+    [Fact]
+    public async Task VideoThatIsNotAnMp4_IsRefused_WhenOnlyCompressedOnesAreTaken()
+    {
+        _media = OnlyCompressedVideos;
+        var chatId = await CreateChat();
+        StoreVideo(chatId, [0x1A, 0x45, 0xDF, 0xA3, 0, 0, 0, 0], "application/octet-stream");
+
+        Assert.Equal(ErrorCode.VideoNotCompressed,
+            await _manager.AddMessageAsync(chatId, MessageWithVideo(chatId, "clip.webm"), AuthorId));
+    }
+
+    [Fact]
+    public async Task OtherFile_IsNotChecked_WhenOnlyCompressedVideosAreTaken()
+    {
+        _media = OnlyCompressedVideos;
+        var chatId = await CreateChat();
+        StoreFile(chatId);
+
+        Assert.Null(await _manager.AddMessageAsync(chatId, MessageWithFile(chatId), AuthorId));
+    }
+
+    private static readonly string FrameId = new('d', 32);
+
+    private void StoreFrame(int chatId, int width, int height)
+    {
+        var header = new byte[24];
+        new byte[] { 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0, 0, 0, 13 }.CopyTo(header, 0);
+        "IHDR"u8.CopyTo(header.AsSpan(12));
+        System.Buffers.Binary.BinaryPrimitives.WriteUInt32BigEndian(header.AsSpan(16), (uint)width);
+        System.Buffers.Binary.BinaryPrimitives.WriteUInt32BigEndian(header.AsSpan(20), (uint)height);
+        _storedUploads[FrameId] = new MediaUploadModel(FrameId, Coordinator, AuthorId, chatId,
+            MediaUploadKind.ImagePreview, "image/png", header.Length, MediaUploadState.Completed, DateTime.UtcNow);
+        _storage.Setup(s => s.OpenReadAsync(FrameId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(() => new MemoryStream(header));
+    }
+
+    private static NewChatMessageModel MessageWithFramedVideo(int chatId, string fileName = "clip.mp4") => new()
+    {
+        ChatId = chatId,
+        Files = [new NewChatFileModel { UploadId = FileId, FileName = fileName, PreviewUploadId = FrameId }]
+    };
+
+    [Fact]
+    public async Task Video_IsShownByTheSidesAndLengthOfItsIndex_AndItsFrame()
+    {
+        var chatId = await CreateChat();
+        StoreVideo(chatId, Media.TestMp4.Build(1280, 720, 10));
+        StoreFrame(chatId, 480, 270);
+
+        Assert.Null(await _manager.AddMessageAsync(chatId, MessageWithFramedVideo(chatId), AuthorId));
+
+        var file = Assert.Single(Assert.Single(_added).Files);
+        Assert.Equal(new ChatFileVideoModel(1280, 720, TimeSpan.FromSeconds(10)), file.Video);
+        Assert.Equal(FrameId, file.PreviewUploadId);
+    }
+
+    [Fact]
+    public async Task TurnedVideo_TakesItsShapeFromTheFrame()
+    {
+        var chatId = await CreateChat();
+        StoreVideo(chatId, Media.TestMp4.Build(1280, 720, 10));
+        StoreFrame(chatId, 270, 480);
+
+        Assert.Null(await _manager.AddMessageAsync(chatId, MessageWithFramedVideo(chatId), AuthorId));
+
+        var file = Assert.Single(Assert.Single(_added).Files);
+        Assert.Equal((720, 1280), (file.Video!.Width, file.Video.Height));
+    }
+
+    [Fact]
+    public async Task VideoWithoutAnIndex_TakesItsShapeFromTheFrame()
+    {
+        var chatId = await CreateChat();
+        StoreVideo(chatId, [1, 2, 3], "video/webm");
+        StoreFrame(chatId, 480, 360);
+
+        Assert.Null(await _manager.AddMessageAsync(chatId, MessageWithFramedVideo(chatId, "clip.webm"), AuthorId));
+
+        var file = Assert.Single(Assert.Single(_added).Files);
+        Assert.Equal(new ChatFileVideoModel(480, 360, null), file.Video);
+    }
+
+    [Fact]
+    public async Task VideoWithoutAFrame_IsStillKnownAsAVideo()
+    {
+        var chatId = await CreateChat();
+        StoreVideo(chatId, Media.TestMp4.Build(640, 480, 3));
+
+        Assert.Null(await _manager.AddMessageAsync(chatId, MessageWithVideo(chatId), AuthorId));
+
+        var file = Assert.Single(Assert.Single(_added).Files);
+        Assert.Equal(new ChatFileVideoModel(640, 480, TimeSpan.FromSeconds(3)), file.Video);
+        Assert.Null(file.PreviewUploadId);
+    }
+
+    [Fact]
+    public async Task FrameOfAFileThatIsNoVideo_IsRefused()
+    {
+        var chatId = await CreateChat();
+        StoreFile(chatId);
+        StoreFrame(chatId, 480, 270);
+
+        Assert.Equal(ErrorCode.AttachmentInvalid,
+            await _manager.AddMessageAsync(chatId, MessageWithFramedVideo(chatId, "report.pdf"), AuthorId));
+        Assert.Empty(_added);
+    }
+
+    [Fact]
+    public async Task FrameThatIsAFile_IsRefused()
+    {
+        var chatId = await CreateChat();
+        StoreVideo(chatId, Media.TestMp4.Build(1280, 720, 10));
+        StoreFrame(chatId, 480, 270);
+        _storedUploads[FrameId] = _storedUploads[FrameId] with { Kind = MediaUploadKind.File };
+
+        Assert.Equal(ErrorCode.AttachmentInvalid,
+            await _manager.AddMessageAsync(chatId, MessageWithFramedVideo(chatId), AuthorId));
     }
 }

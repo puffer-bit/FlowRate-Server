@@ -1,3 +1,4 @@
+using Shared.Enums;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Server.Application.Abstractions.Persistence;
@@ -31,7 +32,7 @@ public class UserManagerTests
 
         var result = await _manager.ChangeUsername(1, "  bob ");
 
-        Assert.Equal(ChangeUsernameResult.NoError, result);
+        Assert.Equal(null, result);
         Assert.Equal("bob", alice.Username);
         Assert.Same(alice, updated);
         _users.Verify(r => r.UpdateAsync(alice, It.IsAny<CancellationToken>()), Times.Once);
@@ -44,10 +45,10 @@ public class UserManagerTests
         var updates = 0;
         _manager.UserUpdated += _ => updates++;
 
-        Assert.Equal(SetAvatarResult.NoError, await _manager.SetAvatar(1, "/media/avatars/0a"));
+        Assert.Equal(null, await _manager.SetAvatar(1, "/media/avatars/0a"));
         Assert.Equal("/media/avatars/0a", alice.AvatarUrl);
-        Assert.Equal(SetAvatarResult.NoError, await _manager.SetAvatar(1, "/media/avatars/0a"));
-        Assert.Equal(SetAvatarResult.NoError, await _manager.SetAvatar(1, null));
+        Assert.Equal(null, await _manager.SetAvatar(1, "/media/avatars/0a"));
+        Assert.Equal(null, await _manager.SetAvatar(1, null));
 
         Assert.Null(alice.AvatarUrl);
         Assert.Equal(2, updates);
@@ -57,7 +58,7 @@ public class UserManagerTests
     [Fact]
     public async Task SetAvatar_UserNotConnected_ReturnsUserNotFound()
     {
-        Assert.Equal(SetAvatarResult.UserNotFound, await _manager.SetAvatar(1, null));
+        Assert.Equal(ErrorCode.UserNotFound, await _manager.SetAvatar(1, null));
     }
 
     [Fact]
@@ -68,7 +69,7 @@ public class UserManagerTests
 
         var result = await _manager.ChangeUsername(1, "bob");
 
-        Assert.Equal(ChangeUsernameResult.UsernameAlreadyUsed, result);
+        Assert.Equal(ErrorCode.NameTaken, result);
         Assert.Equal("alice", alice.Username);
         _users.Verify(r => r.UpdateAsync(It.IsAny<UserModel>(), It.IsAny<CancellationToken>()), Times.Never);
     }
@@ -81,7 +82,7 @@ public class UserManagerTests
 
         var result = await _manager.ChangeUsername(1, "bob");
 
-        Assert.Equal(ChangeUsernameResult.UsernameAlreadyUsed, result);
+        Assert.Equal(ErrorCode.NameTaken, result);
     }
 
     [Fact]
@@ -89,7 +90,7 @@ public class UserManagerTests
     {
         var result = await _manager.ChangeUsername(1, "bob");
 
-        Assert.Equal(ChangeUsernameResult.UserNotFound, result);
+        Assert.Equal(ErrorCode.UserNotFound, result);
     }
 
     [Fact]
@@ -101,7 +102,7 @@ public class UserManagerTests
 
         var result = await _manager.ChangeUsername(1, "bob");
 
-        Assert.Equal(ChangeUsernameResult.NoError, result);
+        Assert.Equal(null, result);
         Assert.Equal("bob", alice.Username);
         Assert.Same(alice, updated);
         _users.Verify(r => r.UpdateAsync(alice, It.IsAny<CancellationToken>()), Times.Once);
@@ -114,7 +115,7 @@ public class UserManagerTests
 
         var result = await _manager.ChangeUsername(1, "bob");
 
-        Assert.Equal(ChangeUsernameResult.UserNotFound, result);
+        Assert.Equal(ErrorCode.UserNotFound, result);
         _users.Verify(r => r.UpdateAsync(It.IsAny<UserModel>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
@@ -125,7 +126,7 @@ public class UserManagerTests
         UserModel? updated = null;
         _manager.UserUpdated += user => updated = user;
 
-        Assert.Equal(ModerateUserResult.NoError, await _manager.SetState(1, UserState.Suspended));
+        Assert.Equal(null, await _manager.SetState(1, UserState.Suspended));
 
         Assert.Equal(UserState.Suspended, alice.State);
         Assert.Same(alice, updated);
@@ -137,7 +138,7 @@ public class UserManagerTests
     {
         var alice = Stored(1, "alice", CoordinatorId);
 
-        Assert.Equal(ModerateUserResult.NoError, await _manager.SetState(1, UserState.Banned));
+        Assert.Equal(null, await _manager.SetState(1, UserState.Banned));
 
         Assert.True(alice.IsBanned);
         _users.Verify(r => r.UpdateAsync(alice, It.IsAny<CancellationToken>()), Times.Once);
@@ -150,7 +151,7 @@ public class UserManagerTests
     {
         var alice = Attach(1, "alice");
 
-        Assert.Equal(ModerateUserResult.InvalidState, await _manager.SetState(1, state));
+        Assert.Equal(ErrorCode.InvalidValue, await _manager.SetState(1, state));
         Assert.Equal(UserState.Normal, alice.State);
     }
 
@@ -159,7 +160,7 @@ public class UserManagerTests
     {
         Stored(1, "alice", "other");
 
-        Assert.Equal(ModerateUserResult.UserNotFound, await _manager.SetState(1, UserState.Banned));
+        Assert.Equal(ErrorCode.UserNotFound, await _manager.SetState(1, UserState.Banned));
         _users.Verify(r => r.UpdateAsync(It.IsAny<UserModel>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
@@ -170,7 +171,7 @@ public class UserManagerTests
         int? deleted = null;
         _manager.UserDeleted += id => deleted = id;
 
-        Assert.Equal(ModerateUserResult.NoError, await _manager.DeleteUser(1));
+        Assert.Equal(null, await _manager.DeleteUser(1));
 
         Assert.False(_manager.TryGetConnectedUser(1, out _));
         Assert.Equal(1, deleted);
@@ -180,7 +181,7 @@ public class UserManagerTests
     [Fact]
     public async Task DeleteUser_UnknownUser_ReturnsUserNotFound()
     {
-        Assert.Equal(ModerateUserResult.UserNotFound, await _manager.DeleteUser(1));
+        Assert.Equal(ErrorCode.UserNotFound, await _manager.DeleteUser(1));
         _users.Verify(r => r.RemoveAsync(It.IsAny<int>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
@@ -236,7 +237,7 @@ public class UserManagerTests
 
         var result = await _manager.SetStatus(1, UserStatus.DoNotDisturb);
 
-        Assert.Equal(SetUserStatusResult.NoError, result);
+        Assert.Equal(null, result);
         Assert.Equal(UserStatus.DoNotDisturb, alice.Status);
         Assert.Same(alice, updated);
         _users.Verify(r => r.UpdateAsync(alice, It.IsAny<CancellationToken>()), Times.Once);
@@ -249,14 +250,14 @@ public class UserManagerTests
     {
         var alice = Attach(1, "alice");
 
-        Assert.Equal(SetUserStatusResult.InvalidStatus, await _manager.SetStatus(1, status));
+        Assert.Equal(ErrorCode.InvalidValue, await _manager.SetStatus(1, status));
         Assert.Equal(UserStatus.Online, alice.Status);
     }
 
     [Fact]
     public async Task SetStatus_UserNotConnected_ReturnsUserNotFound()
     {
-        Assert.Equal(SetUserStatusResult.UserNotFound, await _manager.SetStatus(1, UserStatus.Away));
+        Assert.Equal(ErrorCode.UserNotFound, await _manager.SetStatus(1, UserStatus.Away));
     }
 
     [Fact]

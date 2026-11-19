@@ -1,3 +1,5 @@
+using Server.Application.Tests.Fakes;
+using Shared.Enums;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Server.Application.Abstractions.Persistence;
@@ -23,14 +25,14 @@ public class SetAvatarHandlerTests
     private readonly Mock<IMessageSender> _sender = new();
     private readonly UserManagerContext _context = new();
     private readonly SetAvatarHandler _handler;
-    private CoordinatorSetAvatarResponse? _response;
+    private BaseMessage? _response;
 
     public SetAvatarHandlerTests()
     {
         var manager = new UserManager(_context, NullLogger.Instance, CoordinatorId, new Mock<IUserRepository>().Object);
         _handler = new SetAvatarHandler(NullLogger.Instance, _sender.Object, manager, _media.Object);
         _sender.Setup(s => s.SendMessageById(It.IsAny<string>(), It.IsAny<BaseMessage>()))
-            .Callback((string _, BaseMessage message) => _response = (CoordinatorSetAvatarResponse)message);
+            .Callback((string _, BaseMessage message) => _response = message);
         _media.Setup(m => m.AttachAvatarAsync(Upload, 1, It.IsAny<CancellationToken>())).ReturnsAsync(true);
     }
 
@@ -42,7 +44,7 @@ public class SetAvatarHandlerTests
         return user;
     }
 
-    private async Task<CoordinatorSetAvatarResponse> SendAsync(string? uploadId, int? userId = null, int senderId = 1)
+    private async Task<BaseMessage> SendAsync(string? uploadId, int? userId = null, int senderId = 1)
     {
         await _handler.HandleMessage(new CoordinatorSetAvatarRequest(uploadId, userId) { SenderId = senderId }, "connection");
         return _response!;
@@ -54,10 +56,8 @@ public class SetAvatarHandlerTests
         var user = Attach(1, AvatarAddress.Of(Previous));
 
         var response = await SendAsync(Upload);
-
-        Assert.Equal(SetAvatarResult.NoError, response.Result);
         Assert.Equal(AvatarAddress.Of(Upload), user.AvatarUrl);
-        Assert.Equal(user.AvatarUrl, response.User!.AvatarUrl);
+        Assert.Equal(user.AvatarUrl, Assert.IsType<CoordinatorSetAvatarResponse>(response).User.AvatarUrl);
         _media.Verify(m => m.RemoveAvatarAsync(Previous, It.IsAny<CancellationToken>()), Times.Once);
         _media.Verify(m => m.RemoveAvatarAsync(Upload, It.IsAny<CancellationToken>()), Times.Never);
     }
@@ -70,8 +70,7 @@ public class SetAvatarHandlerTests
 
         var response = await SendAsync(Upload);
 
-        Assert.Equal(SetAvatarResult.UploadNotFound, response.Result);
-        Assert.Null(response.User);
+        Assert.Equal(ErrorCode.UploadNotFound, response.Error());
         Assert.Equal(AvatarAddress.Of(Previous), user.AvatarUrl);
         _media.Verify(m => m.RemoveAvatarAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
     }
@@ -84,7 +83,7 @@ public class SetAvatarHandlerTests
 
         var response = await SendAsync(Upload, userId: 2);
 
-        Assert.Equal(SetAvatarResult.NotAllowed, response.Result);
+        Assert.Equal(ErrorCode.InsufficientPermissions, response.Error());
         Assert.Null(other.AvatarUrl);
         _media.Verify(m => m.AttachAvatarAsync(It.IsAny<string>(), It.IsAny<int>(), It.IsAny<CancellationToken>()), Times.Never);
     }
@@ -96,10 +95,8 @@ public class SetAvatarHandlerTests
         var other = Attach(2, AvatarAddress.Of(Previous));
 
         var response = await SendAsync(null, userId: 2);
-
-        Assert.Equal(SetAvatarResult.NoError, response.Result);
         Assert.Null(other.AvatarUrl);
-        Assert.Null(response.User!.AvatarUrl);
+        Assert.Null(Assert.IsType<CoordinatorSetAvatarResponse>(response).User.AvatarUrl);
         _media.Verify(m => m.RemoveAvatarAsync(Previous, It.IsAny<CancellationToken>()), Times.Once);
     }
 
@@ -110,6 +107,6 @@ public class SetAvatarHandlerTests
 
         var response = await SendAsync(null, userId: 9);
 
-        Assert.Equal(SetAvatarResult.UserNotFound, response.Result);
+        Assert.Equal(ErrorCode.UserNotFound, response.Error());
     }
 }

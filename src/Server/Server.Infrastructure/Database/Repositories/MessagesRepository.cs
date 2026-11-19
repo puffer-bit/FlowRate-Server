@@ -1,7 +1,8 @@
 using Microsoft.EntityFrameworkCore;
 using Server.Core.Models.Media;
 using Server.Core.Models.TextChat.Messages;
-using Server.Infrastructure.Database.Entities.TextChat;
+using Server.Database.Entities.TextChat;
+using Server.Database;
 using Server.Infrastructure.Mappers;
 using Server.Application.Abstractions.Persistence;
 
@@ -28,7 +29,8 @@ public class MessagesRepository : IMessagesRepository
         await context.SaveChangesAsync(cancellationToken);
 
         var uploadIds = message.Images.SelectMany(image => new[] { image.UploadId, image.PreviewUploadId })
-            .Concat(message.Files.Select(file => file.UploadId))
+            .Concat(message.Files.SelectMany(file =>
+                file.PreviewUploadId is { } preview ? new[] { file.UploadId, preview } : [file.UploadId]))
             .ToList();
         if (uploadIds.Count > 0)
         {
@@ -43,7 +45,8 @@ public class MessagesRepository : IMessagesRepository
         }
 
         await transaction.CommitAsync(cancellationToken);
-        
+
+        messageEntity.LinkPreview = message.LinkPreview?.ToEntity();
         return messageEntity.ToModel(message.ReplyContent);
     }
 
@@ -83,6 +86,26 @@ public class MessagesRepository : IMessagesRepository
             .ToListAsync(cancellationToken);
 
         entities.Reverse();
+        return await ToModelsAsync(context, entities, cancellationToken);
+    }
+
+    public async Task<List<ChatMessageModel>> GetAfterAsync(int chatId, int afterMessageId, int take,
+        CancellationToken cancellationToken = default)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+        var entities = await WithContent(context.ChatMessagesEntities)
+            .Where(x => x.ChatId == chatId && x.Id > afterMessageId)
+            .OrderBy(x => x.Id).Take(take).ToListAsync(cancellationToken);
+        return await ToModelsAsync(context, entities, cancellationToken);
+    }
+
+    public async Task<List<ChatMessageModel>> GetPinnedAsync(int chatId, CancellationToken cancellationToken = default)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+        var entities = await WithContent(context.ChatMessagesEntities)
+            .Where(x => x.ChatId == chatId && x.PinnedAt != null)
+            .OrderByDescending(x => x.PinnedAt).ThenByDescending(x => x.Id)
+            .ToListAsync(cancellationToken);
         return await ToModelsAsync(context, entities, cancellationToken);
     }
 
@@ -155,7 +178,7 @@ public class MessagesRepository : IMessagesRepository
 
         var entities = await WithContent(context.ChatMessagesEntities)
             .Where(x => x.ChatId == chatId)
-            .OrderByDescending(x => x.SentTime)
+            .OrderByDescending(x => x.Id)
             .Take(count)
             .ToListAsync(cancellationToken);
 
@@ -175,6 +198,8 @@ public class MessagesRepository : IMessagesRepository
             return null;
 
         entity.IsDeleted = true;
+        entity.PinnedAt = null;
+        entity.PinnedByUserId = null;
         entity.Revision = await NextRevisionAsync(context, entity.ChatId, cancellationToken);
         await context.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
@@ -192,10 +217,22 @@ public class MessagesRepository : IMessagesRepository
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
 
-        var entity = message.ToEntity();
-        entity.Revision = await NextRevisionAsync(context, message.ChatId, cancellationToken);
+        var entity = await context.ChatMessagesEntities
+            .Include(x => x.TextContent)
+            .Include(x => x.Reactions)
+            .SingleAsync(x => x.Id == message.Id && x.ChatId == message.ChatId, cancellationToken);
+        var updated = message.ToEntity();
+        context.Entry(entity).CurrentValues.SetValues(updated);
+        entity.TextContent = updated.TextContent;
 
-        context.ChatMessagesEntities.Update(entity);
+        // Keep existing owned rows tracked so new reactions are inserted and removed ones deleted.
+        entity.Reactions.RemoveAll(existing => !updated.Reactions.Any(
+            reaction => reaction.UserId == existing.UserId && reaction.Emoji == existing.Emoji));
+        foreach (var reaction in updated.Reactions)
+            if (!entity.Reactions.Any(existing => existing.UserId == reaction.UserId && existing.Emoji == reaction.Emoji))
+                entity.Reactions.Add(reaction);
+
+        entity.Revision = await NextRevisionAsync(context, message.ChatId, cancellationToken);
         await context.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
 
@@ -209,7 +246,8 @@ public class MessagesRepository : IMessagesRepository
             .Include(x => x.Images)
             .Include(x => x.Videos)
             .Include(x => x.Files)
-            .Include(x => x.Reactions);
+            .Include(x => x.Reactions)
+            .Include(x => x.LinkPreview);
 
     private static void ClearContent(ChatMessageEntity entity)
     {
@@ -249,6 +287,9 @@ public class MessagesRepository : IMessagesRepository
             : await context.ChatMessagesEntities
                 .AsNoTracking()
                 .IgnoreQueryFilters()
+                .Include(x => x.Images)
+                .Include(x => x.Videos)
+                .Include(x => x.Files)
                 .Where(x => targetIds.Contains(x.Id))
                 .ToDictionaryAsync(x => x.Id, cancellationToken);
 

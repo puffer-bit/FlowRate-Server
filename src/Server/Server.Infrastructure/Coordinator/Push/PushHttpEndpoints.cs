@@ -32,6 +32,7 @@ public sealed class PushHttpEndpoints : IPushHttpEndpoints
     {
         endpoints.MapPost(PushEndpoints.Reply, (RequestDelegate)ReplyAsync);
         endpoints.MapPost(PushEndpoints.MarkRead, (RequestDelegate)MarkReadAsync);
+        endpoints.MapPost(PushEndpoints.DeclineCall, (RequestDelegate)DeclineCallAsync);
     }
 
     private Task ReplyAsync(HttpContext context) =>
@@ -41,6 +42,10 @@ public sealed class PushHttpEndpoints : IPushHttpEndpoints
     private Task MarkReadAsync(HttpContext context) =>
         HandleAsync(context, ProtocolJsonContext.Default.PushMarkReadRequest,
             (token, request, ct) => _replies.MarkReadAsync(token, request, ct));
+
+    private Task DeclineCallAsync(HttpContext context) =>
+        HandleAsync(context, ProtocolJsonContext.Default.PushDeclineCallRequest,
+            (token, request, ct) => _replies.DeclineCallAsync(token, request, ct));
 
     private static async Task HandleAsync<TRequest>(HttpContext context, JsonTypeInfo<TRequest> typeInfo,
         Func<string, TRequest, CancellationToken, Task<PushReplyResult>> handle) where TRequest : class

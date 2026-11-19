@@ -2,6 +2,9 @@ import type { components } from './schema'
 
 type Schemas = components['schemas']
 
+export type CreateCoordinator = Schemas['CreateCoordinatorDto']
+export type CoordinatorCreated = Schemas['CoordinatorCreatedDto']
+
 export type PanelOverview = Schemas['PanelOverviewDto']
 export type CoordinatorSummary = Schemas['CoordinatorSummaryDto']
 export type CoordinatorDetails = Schemas['CoordinatorDetailsDto']
@@ -13,8 +16,10 @@ export type CoordinatorSettings = Schemas['CoordinatorSettingsDto']
 export type UpdateCoordinatorSettings = Schemas['UpdateCoordinatorSettingsDto']
 export type RateLimitSettings = Schemas['RateLimitSettingsDto']
 export type SfuNode = Schemas['SfuNodeDto']
+export type SfuCredentials = { username: string, password: string }
+export type CreateSfuNode = SfuCredentials & { name: string, host: string, port: number, isSecured: boolean }
 export type SfuNodeStatus = Schemas['SfuNodeStatusDto']
-export type SfuNodeConnectionState = Schemas['SfuNodeConnectionState']
+export type SfuNodeConnectionState = Schemas['SFUNodeConnectionState']
 export type Role = Schemas['RoleDto']
 export type RoleChange = Schemas['RoleChangeDto']
 export type UpdateRole = Schemas['UpdateRoleDto']
@@ -74,9 +79,14 @@ const send = <T>(method: 'POST' | 'PUT' | 'DELETE', path: string, body?: unknown
 
 const coordinatorPath = (id: string) => `/coordinators/${encodeURIComponent(id)}`
 
+export const createCoordinator = (settings: CreateCoordinator) => send<CoordinatorCreated>('POST', '/coordinators', settings)
+
 export const getOverview = () => get<PanelOverview>('/overview')
 
 export const getSfuNodes = () => get<SfuNode[]>('/sfu-nodes')
+export const createSfuNode = (node: CreateSfuNode) => send<SfuNode>('POST', '/sfu-nodes', node)
+export const updateSfuCredentials = (id: number, credentials: SfuCredentials) =>
+  send<SfuNode>('PUT', `/sfu-nodes/${id}/credentials`, credentials)
 
 export const getCoordinator = (id: string) => get<CoordinatorDetails>(coordinatorPath(id))
 
@@ -151,3 +161,9 @@ export const queryKeys = {
   coordinatorUsers: (id: string) => ['coordinator', id, 'users'] as const,
   userSecurity: (id: string, userId: number) => ['coordinator', id, 'users', userId, 'security'] as const,
 }
+
+export type GlobalBan = Schemas['BanDTO']
+export type CreateGlobalBan = Schemas['CreateBan']
+export const getBans = (id: string) => get<GlobalBan[]>(`${coordinatorPath(id)}/bans`)
+export const createBan = (id: string, ban: CreateGlobalBan) => send<void>('POST', `${coordinatorPath(id)}/bans`, ban)
+export const revokeBan = (id: string, banId: string) => send<void>('DELETE', `${coordinatorPath(id)}/bans/${encodeURIComponent(banId)}`)

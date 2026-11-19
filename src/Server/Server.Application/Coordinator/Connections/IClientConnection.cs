@@ -16,6 +16,8 @@ public interface IClientConnection : IDisposable
     
     string ConnectionId { get; }
     int? UserId { get; set; }
+    /// <summary>The device session the connection logged in with; null before the login.</summary>
+    Guid? UserSessionId { get; set; }
     string IpEndpoint { get; }
     bool IsAvailable { get; }
     /// <summary>The server closed the connection, or is closing it; nothing is attached to it any more.</summary>

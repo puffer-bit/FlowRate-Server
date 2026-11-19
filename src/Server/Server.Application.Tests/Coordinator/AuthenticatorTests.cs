@@ -84,12 +84,12 @@ public class AuthenticatorTests
     }
 
     [Fact]
-    public async Task BannedUser_IsLeftToBeRefusedWhenAttached()
+    public async Task BannedUser_StillNeedsTheSecondStage_SoExpiryCannotBypassIt()
     {
         Security(data => data.SetPassword("hash"));
         _state = UserState.Banned;
 
-        Assert.Null(await _authenticator.BeginUserLoginAsync(Identity));
+        Assert.NotNull(await _authenticator.BeginUserLoginAsync(Identity));
     }
 
     [Fact]

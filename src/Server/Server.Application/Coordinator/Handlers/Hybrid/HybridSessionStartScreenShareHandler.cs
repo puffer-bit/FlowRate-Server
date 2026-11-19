@@ -25,12 +25,6 @@ public class HybridSessionStartScreenShareHandler : HybridSessionRequestHandler<
     {
         var (result, outbound, audioOutbound) =
             await session.PeerManager.StartScreenShareAsync(request.SenderId, request.WithAudio);
-        return request.ToResponse(result, outbound, audioOutbound);
+        return request.Answer(result, () => request.ToResponse(outbound!, audioOutbound));
     }
-
-    protected override BaseMessage SessionNotFound(HybridSessionStartScreenShareRequest request) =>
-        request.ToResponse(StartScreenShareResult.SessionNotExists);
-
-    public override BaseMessage CreateFailureResponse(HybridSessionStartScreenShareRequest request) =>
-        request.ToResponse(StartScreenShareResult.InternalError);
 }

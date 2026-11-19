@@ -12,8 +12,9 @@ using Shared.Models.Responses.Auth;
 namespace Server.Application.Coordinator.Handlers.Authentication;
 
 /// <summary>
-/// The first login stage. A user who has a password, one-time codes or passkeys is answered
-/// <see cref="AuthResult.SecondStageRequeried"/> and finishes with <see cref="TwoFactorUserAuthRequest"/> or
+/// The first login stage. A device with the token of a session the server knows is let in at once. Otherwise a user
+/// who has a password, one-time codes or passkeys is answered
+/// <see cref="AuthResult.SecondStageRequired"/> and finishes with <see cref="TwoFactorUserAuthRequest"/> or
 /// <see cref="FIDO2UserAuthRequest"/>; everyone else is let in at once.
 /// </summary>
 public class AuthenticationActionHandler : IMessageHandler<UserAuthRequest>
@@ -53,7 +54,7 @@ public class AuthenticationActionHandler : IMessageHandler<UserAuthRequest>
         if (clientConnection.UserId != null)
         {
             if (request != null)
-                _messageSender.SendMessageById(connectionId, request.ToResponse(AuthResult.AuthFailed));
+                _messageSender.SendMessageById(connectionId, request.ToError(ErrorCode.AuthFailed));
             return HandleMessageResult.ForbiddenRequest;
         }
 
@@ -66,27 +67,22 @@ public class AuthenticationActionHandler : IMessageHandler<UserAuthRequest>
                 return HandleMessageResult.ForbiddenRequest;
             }
 
+            // A token that is unknown or expired is not refused: the device goes on with its identity
+            if (request.SessionToken is { } token && await _userLogin.Sessions.FindAsync(token) is { } session)
+                return Respond(request, clientConnection,
+                    await _userLogin.ResumeAsync(session, token, request.Device, clientConnection));
+
             if (request.UserIdentity is { } identity
                 && await _authenticator.BeginUserLoginAsync(identity) is { } challenge)
             {
-                _pendingLogins.Start(connectionId, identity, challenge);
-                _messageSender.SendMessageById(connectionId, new UserAuthResponse(request.RequestId, null, null,
-                    AuthResult.SecondStageRequeried, ToServerMessage(challenge), ToDto(challenge.Passkey)));
+                _pendingLogins.Start(connectionId, identity, request.Device, challenge);
+                _messageSender.SendMessageById(connectionId,
+                    request.ToSecondStageResponse(challenge.Methods.ToList(), ToDto(challenge.Passkey)));
                 return HandleMessageResult.NoError;
             }
 
-            var outcome = await _userLogin.AttachAsync(request.UserIdentity, clientConnection);
-            if (outcome.Result != AuthResult.Success)
-            {
-                _logger.LogTrace("User auth rejected for connection {ConnectionId}: {Result}", connectionId,
-                    outcome.Attach);
-                Reject(request, clientConnection, outcome.Result);
-                return HandleMessageResult.ForbiddenRequest;
-            }
-
-            _messageSender.SendMessageById(connectionId, request.ToResponse(AuthResult.Success, outcome.UserIdentity,
-                outcome.User!.ToDto(outcome.User.Id)));
-            return HandleMessageResult.NoError;
+            return Respond(request, clientConnection,
+                await _userLogin.AttachAsync(request.UserIdentity, request.Device, clientConnection));
         }
         catch (Exception ex)
         {
@@ -96,8 +92,22 @@ public class AuthenticationActionHandler : IMessageHandler<UserAuthRequest>
         }
     }
 
-    /// <summary>What the user can prove, as names of <see cref="SecondStageAuthType"/>: "Password,TwoFactor".</summary>
-    private static string ToServerMessage(LoginChallenge challenge) => string.Join(',', challenge.Methods);
+    private HandleMessageResult Respond(UserAuthRequest request, IClientConnection clientConnection,
+        LoginOutcome outcome)
+    {
+        if (outcome.Error is { } error)
+        {
+            _logger.LogTrace("User auth rejected for connection {ConnectionId}: {Result}",
+                clientConnection.ConnectionId, outcome.Attach);
+            Reject(request, clientConnection, error, outcome.BanReason);
+            return HandleMessageResult.ForbiddenRequest;
+        }
+
+        var user = outcome.User!;
+        _messageSender.SendMessageById(clientConnection.ConnectionId,
+            request.ToResponse(user.ToDto(user.Id), outcome.SessionToken!, outcome.UserIdentity));
+        return HandleMessageResult.NoError;
+    }
 
     private static FIDO2LoginOptionsDTO? ToDto(Abstractions.Security.PasskeyLoginOptions? options) =>
         options == null
@@ -108,16 +118,16 @@ public class AuthenticationActionHandler : IMessageHandler<UserAuthRequest>
                 RpId = options.RelyingPartyId,
                 Timeout = (long)options.TimeoutMs,
                 AllowedCredentials = options.AllowedCredentialIds
-                    .Select(id => new FIDO2AllowedCredentialDto { Id = id })
+                    .Select(id => new FIDO2AllowedCredentialDTO { Id = id })
                     .ToList(),
                 UserVerification = options.UserVerification
             };
 
     private void Reject(UserAuthRequest? request, IClientConnection clientConnection,
-        AuthResult result = AuthResult.AuthFailed)
+        ErrorCode error = ErrorCode.AuthFailed, string? reason = null)
     {
         if (request != null)
-            _messageSender.SendMessageById(clientConnection.ConnectionId, request.ToResponse(result));
+            _messageSender.SendMessageById(clientConnection.ConnectionId, request.ToError(error, reason));
         clientConnection.Close();
     }
 }

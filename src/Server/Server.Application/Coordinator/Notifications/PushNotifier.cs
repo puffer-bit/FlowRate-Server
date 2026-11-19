@@ -165,6 +165,24 @@ public sealed class PushNotifier : IEventHandler<ChatSessionMessageAddedEvent>, 
         return builder.ToString();
     }
 
+    public async Task NotifyCallAsync(Shared.Models.DataTransferObjects.DirectCallDTO call)
+    {
+        if (!_sender.IsEnabled || _userManager == null)
+            return;
+        var caller = await _userManager.GetUserAsync(call.CallerId);
+        var payload = PushPayload.CreateCall(_coordinatorInstanceId, caller?.Username ?? "", caller?.AvatarUrl, call);
+        var devices = await _devices.GetAllAsync(_coordinatorInstanceId, _stopping.Token);
+        foreach (var device in devices.Where(d => d.UserId == call.CalleeId))
+        {
+            var result = await _sender.SendAsync(new PushMessage(device.Token, device.Platform, device.KeyId,
+                PushCipher.Encrypt(device.Key, payload), TimeToLiveSeconds: 45), _stopping.Token);
+            if (result.Status == PushSendStatus.TokenInvalid)
+                await _devices.RemoveAsync(_coordinatorInstanceId, device.Token, _stopping.Token);
+            else if (result.Status == PushSendStatus.Failed)
+                _logger.LogWarning("Call push to user {UserId} failed: {Detail}", device.UserId, result.Detail);
+        }
+    }
+
     public Task DrainAsync()
     {
         _queue.Writer.TryComplete();

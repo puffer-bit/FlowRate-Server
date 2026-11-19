@@ -8,11 +8,6 @@ public class SFUNodeModel
     public int Id { get; init; }
     public string ServerName { get; init; }
     
-    public SFUMediaInfo? VideoMediaInfo { get; init; }
-    public SFUMediaInfo? AudioMediaInfo { get; init; }
-    public SFUMediaInfo? ScreenVideoMediaInfo { get; init; }
-    public SFUMediaInfo? ScreenAudioInfo { get; init; }
-    
     public bool IsTunnelModeAvailable { get; init; } = false;
 
     public SFUEndpoint Endpoint { get; init; }

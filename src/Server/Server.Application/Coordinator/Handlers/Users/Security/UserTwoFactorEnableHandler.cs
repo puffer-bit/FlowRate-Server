@@ -19,10 +19,7 @@ public class UserTwoFactorEnableHandler(IMessageSender messageSender, UserSecuri
         var status = await replies.Security.EnableTwoFactorAsync(replies.CoordinatorId, request.SenderId,
             request.Code);
         var (result, security) = await replies.AfterAsync(request.SenderId, status);
-        messageSender.SendMessageById(connectionId, request.ToResponse(result, security));
+        messageSender.SendMessageById(connectionId, request.Answer(result, () => request.ToResponse(security!)));
         return HandleMessageResult.NoError;
     }
-
-    public BaseMessage? CreateFailureResponse(UserTwoFactorEnableRequest request) =>
-        request.ToResponse(UserSecurityResult.InternalError);
 }

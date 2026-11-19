@@ -2,7 +2,6 @@ using Server.Application.Coordinator.Messaging;
 using Server.Application.Mappers;
 using Server.Application.Orchestrator.Roles;
 using Shared.Enums;
-using Shared.Enums.Coordinator;
 using Shared.Models;
 using Shared.Models.Requests.Coordinator;
 
@@ -27,11 +26,9 @@ public class ReorderRolesHandler : IMessageHandler<CoordinatorReorderRolesReques
             return HandleMessageResult.ForbiddenRequest;
 
         var result = await _roleService.ReorderAsync(_coordinatorInstanceId, request.SenderId, request.RoleIds.ToList());
-        _messageSender.SendMessageById(connectionId, request.ToResponse(result.Status.ToResult(), result.Value?.ToDtos()));
+        _messageSender.SendMessageById(connectionId, request.Answer(result.Status.ToResult(),
+            () => request.ToResponse(result.Value!.ToDtos())));
 
         return HandleMessageResult.NoError;
     }
-
-    public BaseMessage? CreateFailureResponse(CoordinatorReorderRolesRequest request) =>
-        request.ToResponse(CoordinatorRoleResult.InternalError);
 }

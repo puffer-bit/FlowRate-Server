@@ -95,6 +95,8 @@ namespace Server.Application.Coordinator.Connections {
             return false;
         }
         
+        public IReadOnlyList<IClientConnection> GetAllConnections() => _context.ClientConnections.Values.ToList();
+
         public void CloseAllConnections()
         {
             foreach (var connection in _context.ClientConnections.Values)

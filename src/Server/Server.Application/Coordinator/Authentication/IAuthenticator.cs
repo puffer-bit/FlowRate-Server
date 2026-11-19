@@ -9,7 +9,7 @@ public interface IAuthenticator
 
     /// <summary>
     /// What a known user has to prove besides the identity. Null when the identity is enough: an unknown or new
-    /// identity, a banned user (refused later), or a user with no password, one-time codes or passkeys.
+    /// identity, or a user with no password, one-time codes or passkeys. Bans never bypass account proofs.
     /// </summary>
     Task<LoginChallenge?> BeginUserLoginAsync(string userIdentity, CancellationToken ct = default);
 

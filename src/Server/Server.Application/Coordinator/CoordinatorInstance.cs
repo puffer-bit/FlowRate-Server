@@ -20,6 +20,7 @@ namespace Server.Application.Coordinator;
 
 public partial class CoordinatorInstance : ICoordinatorInstance
 {
+    public Moderation.ModerationService? Moderation { get; }
     public ICoordinatorInstanceContext Context { get; }
     public CoordinatorState State { get; private set; } = CoordinatorState.Offline;
 
@@ -37,6 +38,8 @@ public partial class CoordinatorInstance : ICoordinatorInstance
     private readonly IMediaService? _mediaService;
     private readonly CoordinatorSettingsApplier? _settingsApplier;
     private readonly CoordinatorRoles? _roles;
+    private readonly IDisposable? _chatViewers;
+    private readonly LinkPreviews.LinkPreviewService? _linkPreviews;
 
     public CoordinatorInstance(
         ICoordinatorInstanceContext coordinatorInstanceContext,
@@ -52,8 +55,13 @@ public partial class CoordinatorInstance : ICoordinatorInstance
         PushNotifier? pushNotifier = null,
         IMediaService? mediaService = null,
         CoordinatorSettingsApplier? settingsApplier = null,
-        CoordinatorRoles? roles = null)
+        CoordinatorRoles? roles = null,
+        IDisposable? chatViewers = null, Moderation.ModerationService? moderation = null,
+        LinkPreviews.LinkPreviewService? linkPreviews = null)
     {
+        _linkPreviews = linkPreviews;
+        _chatViewers = chatViewers;
+        Moderation = moderation;
         _roles = roles;
         _settingsApplier = settingsApplier;
         _mediaService = mediaService;
@@ -90,9 +98,11 @@ public partial class CoordinatorInstance : ICoordinatorInstance
             // Requests are checked against the roles, so they are there before the first connection
             if (_roles != null)
                 await _roles.LoadAsync();
+            if (Moderation != null) { await Moderation.ListAsync(); Moderation.Start(); }
             await _sessionManager.LoadSessionsAsync();
             await _gatewayService.StartAsync(_messageRouter);
             _mediaService?.Start();
+            _linkPreviews?.Start();
 
             State = CoordinatorState.Online;
             _logger.LogInformation("Coordinator {Name} successful started.", Context.Name);
@@ -192,6 +202,8 @@ public partial class CoordinatorInstance : ICoordinatorInstance
 
     public void Dispose()
     {
+        Moderation?.Dispose();
+        _chatViewers?.Dispose();
         UnsubscribeFromEvents();
 
         RunCloseStep("disposing the gateway", _gatewayService.Dispose);
@@ -202,6 +214,8 @@ public partial class CoordinatorInstance : ICoordinatorInstance
             RunCloseStep("disposing the push notifier", _pushNotifier.Dispose);
         if (_mediaService != null)
             RunCloseStep("disposing the media service", _mediaService.Dispose);
+        if (_linkPreviews != null)
+            RunCloseStep("disposing the link previews", _linkPreviews.Dispose);
         if (_roles != null)
             RunCloseStep("disposing the roles", _roles.Dispose);
     }

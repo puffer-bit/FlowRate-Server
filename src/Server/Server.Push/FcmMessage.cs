@@ -6,7 +6,7 @@ public enum FcmPlatform
     Ios = 1
 }
 
-public sealed record FcmMessage(string Token, FcmPlatform Platform, string KeyId, string Payload);
+public sealed record FcmMessage(string Token, FcmPlatform Platform, string KeyId, string Payload, int? TimeToLiveSeconds = null);
 
 public enum FcmSendStatus
 {

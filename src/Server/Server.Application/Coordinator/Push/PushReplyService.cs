@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging;
 using Server.Application.Abstractions.Persistence;
 using Server.Application.Coordinator.Connections.RateLimiting;
 using Server.Application.Coordinator.Sessions.Chat;
+using Server.Application.Coordinator.Sessions.Hybrid;
 using Server.Application.Coordinator.Users;
 using Server.Core.Models.Push;
 using Shared.Enums;
@@ -39,6 +40,7 @@ public sealed class PushReplyService
     private readonly ConcurrentDictionary<int, TokenBucket> _buckets = new();
     private int _bucketsVersion;
     private ICoordinatorPermissions? _permissions;
+    private IHybridSessionManager? _calls;
 
     public PushReplyService(ILogger logger, IPushDeviceRepository devices, IUserManager users,
         IChatSessionManager chats, ChatReadService reads, RequestRateLimits limits, string coordinatorInstanceId,
@@ -57,6 +59,39 @@ public sealed class PushReplyService
 
     /// <summary>Starts checking replies against the permissions of the user in the chat.</summary>
     public void Watch(ICoordinatorPermissions permissions) => _permissions = permissions;
+
+    /// <summary>Starts answering the "Decline" button of incoming calls.</summary>
+    public void WatchCalls(IHybridSessionManager calls) => _calls = calls;
+
+    public async Task<PushReplyResult> DeclineCallAsync(string replyToken, PushDeclineCallRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        if (request.CallId == Guid.Empty)
+            return PushReplyResult.Invalid;
+
+        try
+        {
+            var (authorization, device) = await AuthorizeAsync(replyToken, cancellationToken);
+            if (authorization != PushReplyResult.Sent)
+                return authorization;
+
+            if (_calls is not { } calls)
+                return PushReplyResult.InternalError;
+
+            return await calls.DeclineCallFromPushAsync(request.CallId, device!.UserId) switch
+            {
+                null => PushReplyResult.Sent,
+                ErrorCode.SessionNotFound => PushReplyResult.ChatNotExists,
+                ErrorCode.NotMember or ErrorCode.Conflict => PushReplyResult.Forbidden,
+                _ => PushReplyResult.InternalError
+            };
+        }
+        catch (Exception exception)
+        {
+            _logger.LogError(exception, "Declining a call from a push notification failed.");
+            return PushReplyResult.InternalError;
+        }
+    }
 
     public async Task<PushReplyResult> ReplyAsync(string replyToken, PushReplyRequest request,
         CancellationToken cancellationToken = default)
@@ -85,9 +120,9 @@ public sealed class PushReplyService
 
             return await _chats.AddMessageAsync(request.ChatId, message, device!.UserId) switch
             {
-                AddMessageResult.NoError => PushReplyResult.Sent,
-                AddMessageResult.ChatNotExists => PushReplyResult.ChatNotExists,
-                AddMessageResult.Rejected => PushReplyResult.Forbidden,
+                null => PushReplyResult.Sent,
+                ErrorCode.ChatNotFound => PushReplyResult.ChatNotExists,
+                ErrorCode.ChatReadOnly => PushReplyResult.Forbidden,
                 _ => PushReplyResult.InternalError
             };
         }
@@ -114,8 +149,8 @@ public sealed class PushReplyService
                 cancellationToken);
             return result switch
             {
-                ChatReadResult.NoError => PushReplyResult.Sent,
-                ChatReadResult.ChatNotExists => PushReplyResult.ChatNotExists,
+                null => PushReplyResult.Sent,
+                ErrorCode.ChatNotFound => PushReplyResult.ChatNotExists,
                 _ => PushReplyResult.InternalError
             };
         }

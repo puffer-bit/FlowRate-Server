@@ -39,7 +39,7 @@ public class ChatMessageModelTests
         var message = Message();
         var editTime = Now.AddMinutes(5);
 
-        Assert.Equal(EditMessageResult.NoError, message.Edit(AuthorId, "changed", editTime));
+        Assert.Equal(null, message.Edit(AuthorId, "changed", editTime));
 
         Assert.Equal("changed", message.TextContent!.Text);
         Assert.Equal(editTime, message.EditTime);
@@ -51,7 +51,7 @@ public class ChatMessageModelTests
     {
         var message = Message();
 
-        Assert.Equal(EditMessageResult.InsufficientPermissions, message.Edit(OtherUserId, "changed", Now));
+        Assert.Equal(ErrorCode.InsufficientPermissions, message.Edit(OtherUserId, "changed", Now));
         Assert.Equal("hello", message.TextContent!.Text);
         Assert.False(message.IsEdited);
     }

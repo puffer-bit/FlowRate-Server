@@ -26,37 +26,55 @@ public interface IHybridSessionPeerManager : IDisposable
     /// The connection the user joins from. Joining from another connection than the peer has takes the peer over: the
     /// previous connection is out (<see cref="HybridSessionPeerReplacedEvent"/>).
     /// </param>
-    Task<(HybridSessionJoinResult result, TransportData? transportData)> AddPeerAsync(int userId, string clientEpoch,
-        string? connectionId = null);
-    Task<HybridSessionConnectTransportResult> ConnectPeerAsync(int userId, DTLSParameters dtlsParameters);
-    Task<ApproveUserSessionResult> ApprovePeerAsync(int initiatorId, int userId);
-    Task<RejectUserSessionResult> RejectPeerAsync(int initiatorId, int userId, string? reason = null);
-    Task<LeaveSessionResult> KickPeerAsync(int initiatorId, int userId, string? reason = null);
-    Task<BanFromSessionResult> BanPeerAsync(int initiatorId, int userId, string? reason = null);
-    Task<LeaveSessionResult> RemovePeerAsync(int userId);
+    /// <param name="pastCapacity">The user may join although the session is full.</param>
+    Task<(ErrorCode? result, TransportData? transportData)> AddPeerAsync(int userId, string clientEpoch,
+        string? connectionId = null, bool pastCapacity = false);
+    Task<ErrorCode?> ConnectPeerAsync(int userId, DTLSParameters dtlsParameters);
+    Task<ErrorCode?> ApprovePeerAsync(int initiatorId, int userId);
+    Task<ErrorCode?> RejectPeerAsync(int initiatorId, int userId, string? reason = null);
+    Task<ErrorCode?> KickPeerAsync(int initiatorId, int userId, string? reason = null);
+    Task<ErrorCode?> RemovePeerAsync(int userId);
     /// <summary>Removes the peer only while it takes part from this connection.</summary>
-    Task<LeaveSessionResult> RemovePeerOfConnectionAsync(int userId, string connectionId);
+    Task<ErrorCode?> RemovePeerOfConnectionAsync(int userId, string connectionId);
     Task KickAllPeersAsync(string? reason = null);
 
-    Task<(StartVoiceShareResult result, Outbound? outbound)> StartVoiceShareAsync(int userId);
-    Task<StopVoiceShareResult> StopVoiceShareAsync(int initiatorId, int userId);
-    Task<SetMicrophoneMuteResult> SetMicrophoneMutedAsync(int initiatorId, int userId, bool isMuted);
-    Task<SetSoundMuteResult> SetSoundMutedAsync(int initiatorId, int userId, bool isMuted);
-    Task<SetAfkResult> SetAfkAsync(int userId, bool isAfk, string? reason);
-    Task<PokeResult> PokeAsync(int initiatorId, int userId, string? message);
+    /// <summary>
+    /// Keeps a place for a peer moved in from <paramref name="sourceSessionId"/>: admitted past the capacity and
+    /// approval, it waits for its client to join from <paramref name="connectionId"/>. Fails with
+    /// <see cref="ErrorCode.Conflict"/> when the user already takes part in this session.
+    /// </summary>
+    Task<ErrorCode?> MoveInPeerAsync(int initiatorId, int userId, string? connectionId, int sourceSessionId);
+    /// <summary>
+    /// Takes the peer out to <paramref name="targetSessionId"/>, as long as it still takes part from
+    /// <paramref name="connectionId"/>; its media here is released.
+    /// </summary>
+    Task<ErrorCode?> MoveOutPeerAsync(int initiatorId, int userId, string? connectionId, int targetSessionId);
+    /// <summary>Gives up the place kept for a moved peer whose client has not joined; a joined peer stays.</summary>
+    Task<ErrorCode?> RemoveUnclaimedPeerAsync(int userId);
+    /// <summary>Whether the user takes part, and from which connection.</summary>
+    bool TryGetPeerConnection(int userId, out string? connectionId);
 
-    Task<(StartVideoShareResult result, Outbound? outbound)> StartVideoShareAsync(int userId);
-    Task<StopVideoShareResult> StopVideoShareAsync(int initiatorId, int userId);
+    Task<(ErrorCode? result, Outbound? outbound)> StartVoiceShareAsync(int userId);
+    Task<ErrorCode?> StopVoiceShareAsync(int initiatorId, int userId);
+    Task<ErrorCode?> SetMicrophoneMutedAsync(int initiatorId, int userId, bool isMuted);
+    Task<ErrorCode?> SetSoundMutedAsync(int initiatorId, int userId, bool isMuted);
+    Task<ErrorCode?> SetAfkAsync(int userId, bool isAfk, string? reason);
+    Task<ErrorCode?> PokeAsync(int initiatorId, int userId, string? message);
+
+    Task<(ErrorCode? result, Outbound? outbound)> StartVideoShareAsync(int userId);
+    Task<ErrorCode?> StopVideoShareAsync(int initiatorId, int userId);
     /// <param name="withAudio">Also publish the sound of the shared application or system.</param>
-    Task<(StartScreenShareResult result, Outbound? outbound, Outbound? audioOutbound)> StartScreenShareAsync(int userId,
+    Task<(ErrorCode? result, Outbound? outbound, Outbound? audioOutbound)> StartScreenShareAsync(int userId,
         bool withAudio);
-    Task<StopScreenShareResult> StopScreenShareAsync(int initiatorId, int userId);
+    Task<ErrorCode?> StopScreenShareAsync(int initiatorId, int userId);
     /// <returns>The inbound of the picture and, when the share carries sound, the inbound of the sound.</returns>
-    Task<(SetScreenShareWatchResult result, Inbound? inbound, Inbound? audioInbound)> SetScreenShareWatchAsync(
+    Task<(ErrorCode? result, Inbound? inbound, Inbound? audioInbound)> SetScreenShareWatchAsync(
         int listenerUserId, int userId, bool isWatching);
-    Task<ResumeInboundsResult> ResumeInboundsAsync(int listenerUserId, IReadOnlyCollection<string> inboundIds);
+    Task<ErrorCode?> ResumeInboundsAsync(int listenerUserId, IReadOnlyCollection<string> inboundIds);
 
     bool HasPeer(int userId);
+    /// <summary>The user was moved here and the place kept for them is not taken yet.</summary>
+    bool IsAwaitingMove(int userId);
     /// <summary>
     /// False only when the user is a peer from another connection: the media of the peer is not this connection's.
     /// </summary>

@@ -81,6 +81,11 @@ interface Form {
   heartbeatTimeout: number | string
   maxFileSizeMb: number | string
   storageQuotaMb: number | string
+  imageMaxSide: number | string
+  imageQuality: number | string
+  allowOriginalImages: boolean
+  videoMaxSide: number | string
+  allowOriginalVideos: boolean
   maxUnattachedUploads: number | string
   unattachedLifetimeHours: number | string
   tokenLifetimeMinutes: number | string
@@ -108,6 +113,11 @@ function toForm(settings: CoordinatorSettings): Form {
     heartbeatTimeout: settings.heartbeat.timeoutSeconds ?? '',
     maxFileSizeMb: Math.round((settings.media.maxFileSizeBytes ?? 0) / megabyte),
     storageQuotaMb: Math.round((settings.media.storageQuotaBytes ?? 0) / megabyte),
+    imageMaxSide: settings.media.imageMaxSide ?? '',
+    imageQuality: settings.media.imageQuality ?? '',
+    allowOriginalImages: settings.media.allowOriginalImages ?? true,
+    videoMaxSide: settings.media.videoMaxSide ?? '',
+    allowOriginalVideos: settings.media.allowOriginalVideos ?? true,
     maxUnattachedUploads: settings.uploads.maxUnattachedPerUser ?? '',
     unattachedLifetimeHours: settings.uploads.unattachedLifetimeHours ?? '',
     tokenLifetimeMinutes: settings.uploads.tokenLifetimeMinutes ?? '',
@@ -142,6 +152,11 @@ function toUpdate(form: Form, expectedRevision: number): UpdateCoordinatorSettin
     media: {
       maxFileSizeBytes: toNumber(form.maxFileSizeMb) * megabyte,
       storageQuotaBytes: toNumber(form.storageQuotaMb) * megabyte,
+      imageMaxSide: toNumber(form.imageMaxSide),
+      imageQuality: toNumber(form.imageQuality),
+      allowOriginalImages: form.allowOriginalImages,
+      videoMaxSide: toNumber(form.videoMaxSide),
+      allowOriginalVideos: form.allowOriginalVideos,
     },
     uploads: {
       maxUnattachedPerUser: toNumber(form.maxUnattachedUploads),
@@ -257,7 +272,11 @@ function SettingsForm({ id, saved: latest }: { id: string, saved: CoordinatorSet
         </Alert>
       )}
 
-      <Fieldset legend="General">
+      <nav className="settings-jumps" aria-label="Settings sections">
+        {['General', 'Users', 'Access', 'Heartbeat', 'Media', 'Uploads', 'Rate limits', 'SFU nodes'].map(label => <a key={label} href={`#settings-${label.toLowerCase().replaceAll(' ', '-')}`}>{label}</a>)}
+      </nav>
+
+      <Fieldset legend="General" id="settings-general" className="settings-section">
         <Stack>
           <TextInput label="Name" required value={form.name} onChange={e => set('name')(e.currentTarget.value)}
             error={fieldErrors.take('Name')} />
@@ -281,7 +300,7 @@ function SettingsForm({ id, saved: latest }: { id: string, saved: CoordinatorSet
         </Stack>
       </Fieldset>
 
-      <Fieldset legend="Users">
+      <Fieldset legend="Users" id="settings-users" className="settings-section">
         <Stack>
           <SimpleGrid cols={{ base: 1, sm: 2 }}>
             <NumberInput label="Max online users" description="Further logins are refused while this many are online"
@@ -299,7 +318,7 @@ function SettingsForm({ id, saved: latest }: { id: string, saved: CoordinatorSet
         </Stack>
       </Fieldset>
 
-      <Fieldset legend="Access">
+      <Fieldset legend="Access" id="settings-access" className="settings-section">
         <Stack>
           <div>
             <Group gap="xs" mb={4}>
@@ -323,12 +342,11 @@ function SettingsForm({ id, saved: latest }: { id: string, saved: CoordinatorSet
           <TagsInput label="Allowed IPs" description="When not empty, only these addresses may connect"
             placeholder="Type an IP and press Enter" value={form.allowedIps} onChange={set('allowedIps')}
             error={fieldErrors.take('AccessList.AllowedIps')} />
-          <TagsInput label="Banned IPs" placeholder="Type an IP and press Enter" value={form.bannedIps}
-            onChange={set('bannedIps')} error={fieldErrors.take('AccessList.BannedIps')} />
+
         </Stack>
       </Fieldset>
 
-      <Fieldset legend="Heartbeat">
+      <Fieldset legend="Heartbeat" id="settings-heartbeat" className="settings-section">
         <SimpleGrid cols={{ base: 1, sm: 2 }}>
           <NumberInput label="Check interval, s" required min={1} max={3600} allowDecimal={false}
             value={form.heartbeatInterval} onChange={set('heartbeatInterval')}
@@ -339,7 +357,7 @@ function SettingsForm({ id, saved: latest }: { id: string, saved: CoordinatorSet
         </SimpleGrid>
       </Fieldset>
 
-      <Fieldset legend="Media">
+      <Fieldset legend="Media" id="settings-media" className="settings-section">
         <SimpleGrid cols={{ base: 1, sm: 2 }}>
           <NumberInput label="Max file size, MB" required min={1} allowDecimal={false} thousandSeparator=" "
             value={form.maxFileSizeMb} onChange={set('maxFileSizeMb')}
@@ -347,10 +365,31 @@ function SettingsForm({ id, saved: latest }: { id: string, saved: CoordinatorSet
           <NumberInput label="Storage quota, MB" description="0 leaves the storage unlimited" required min={0}
             allowDecimal={false} thousandSeparator=" " value={form.storageQuotaMb} onChange={set('storageQuotaMb')}
             error={fieldErrors.take('Media.StorageQuotaBytes')} />
+          <NumberInput label="Compressed image side, px"
+            description="Clients reduce images to this longest side when they compress them" required min={320}
+            max={16384} allowDecimal={false} value={form.imageMaxSide} onChange={set('imageMaxSide')}
+            error={fieldErrors.take('Media.ImageMaxSide')} />
+          <NumberInput label="Compressed image quality" description="JPEG or WebP quality, from 30 to 100" required
+            min={30} max={100} allowDecimal={false} value={form.imageQuality} onChange={set('imageQuality')}
+            error={fieldErrors.take('Media.ImageQuality')} />
         </SimpleGrid>
+        <Switch mt="md" label="Allow uncompressed images"
+          description="Off: images larger than the compressed side are refused, so users can only send them compressed"
+          checked={form.allowOriginalImages}
+          onChange={event => set('allowOriginalImages')(event.currentTarget.checked)} />
+        <SimpleGrid cols={{ base: 1, sm: 2 }} mt="md">
+          <NumberInput label="Compressed video side, px"
+            description="Clients reduce videos to this shorter side when they compress them, like 720 for 720p"
+            required min={240} max={2160} allowDecimal={false} value={form.videoMaxSide}
+            onChange={set('videoMaxSide')} error={fieldErrors.take('Media.VideoMaxSide')} />
+        </SimpleGrid>
+        <Switch mt="md" label="Allow uncompressed videos"
+          description="Off: only MP4 videos within the compressed side and its bitrate are taken, so users can only send them compressed"
+          checked={form.allowOriginalVideos}
+          onChange={event => set('allowOriginalVideos')(event.currentTarget.checked)} />
       </Fieldset>
 
-      <Fieldset legend="Uploads">
+      <Fieldset legend="Uploads" id="settings-uploads" className="settings-section">
         <SimpleGrid cols={{ base: 1, sm: 3 }}>
           <NumberInput label="Unattached uploads per user"
             description="Files uploaded but not sent in a message yet" required min={1} max={1000}
@@ -365,7 +404,7 @@ function SettingsForm({ id, saved: latest }: { id: string, saved: CoordinatorSet
         </SimpleGrid>
       </Fieldset>
 
-      <Fieldset legend="Rate limits">
+      <Fieldset legend="Rate limits" id="settings-rate-limits" className="settings-section">
         <Stack>
           <Text size="sm" c="dimmed">
             At most this many requests of a group per period, for each connection. A request over the limit is refused;
@@ -420,7 +459,7 @@ function SettingsForm({ id, saved: latest }: { id: string, saved: CoordinatorSet
         </Stack>
       </Fieldset>
 
-      <Fieldset legend="SFU nodes">
+      <Fieldset legend="SFU nodes" id="settings-sfu-nodes" className="settings-section">
         <QueryState query={sfuNodes}>
           {nodes => (
             <SfuNodesPicker nodes={nodes} value={form.sfuNodeIds} onChange={set('sfuNodeIds')}
@@ -437,7 +476,8 @@ function SettingsForm({ id, saved: latest }: { id: string, saved: CoordinatorSet
           save()
         }} />
 
-      <Group justify="flex-end">
+      <Group justify="flex-end" className="settings-savebar">
+        <Text size="xs" c="dimmed" mr="auto">{isDirty ? 'You have unsaved changes' : 'All changes saved'}</Text>
         <Button variant="default" disabled={!isDirty || update.isPending} onClick={() => setForm(initial)}>
           Reset
         </Button>

@@ -20,7 +20,7 @@ public sealed class RelayPushSender : IPushSender
 
     public async Task<PushSendResult> SendAsync(PushMessage message, CancellationToken cancellationToken = default)
     {
-        var request = new RelayPushRequest(message.Token, message.Platform.ToFcm(), message.KeyId, message.Payload);
+        var request = new RelayPushRequest(message.Token, message.Platform.ToFcm(), message.KeyId, message.Payload, message.TimeToLiveSeconds);
 
         try
         {

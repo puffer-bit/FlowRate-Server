@@ -119,6 +119,11 @@ them is connected; others hear `CoordinatorUserConnectedNotification` when the f
 `CoordinatorUserDisconnectedNotification` when the last one goes. What is sent to the user reaches all their
 devices, and banning or deleting the user closes all of them.
 
+`MaxOnlineUsers` counts distinct users, so additional devices of an online user do not consume another place.
+Each user may have at most five simultaneous connections, including when the online-user limit is disabled.
+A sixth connection is refused with `RateLimited`; existing devices stay connected. Closing one device frees
+a connection place. The same limits apply to identity logins and device-session token logins.
+
 - A connection that is logged in already is answered `AuthFailed` to another `UserAuthRequest`; it stays open and
   keeps its user.
 - In a hybrid session the user takes part from one device. Joining it from another one takes the peer over: the

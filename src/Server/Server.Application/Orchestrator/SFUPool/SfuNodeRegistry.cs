@@ -103,6 +103,8 @@ public class SfuNodeRegistry : ISfuNodeRegistry
 
                 _nodes.TryRemove(id, out _);
                 node.Gateway.StatusChanged -= RaiseNodeStatusChanged;
+                node.Gateway.Connected -= RaiseNodesChangedAsync;
+                node.Gateway.ConnectionLost -= RaiseNodesChangedAsync;
                 isChanged = true;
                 try
                 {
@@ -120,6 +122,8 @@ public class SfuNodeRegistry : ISfuNodeRegistry
                 var node = _nodeFactory.CreateSFUNode(ToNodeModel(nodeSettings));
                 _nodes.TryAdd(nodeSettings.Id, node);
                 node.Gateway.StatusChanged += RaiseNodeStatusChanged;
+                node.Gateway.Connected += RaiseNodesChangedAsync;
+                node.Gateway.ConnectionLost += RaiseNodesChangedAsync;
                 isChanged = true;
                 _logger.LogInformation("SFU node {Name} ({Address}) added to the pool.",
                     nodeSettings.Name, node.Model.Endpoint.Address);
