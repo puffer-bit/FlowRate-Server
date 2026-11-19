@@ -312,6 +312,8 @@ public partial class HybridSessionPeerManager : IHybridSessionPeerManager
                 : Task.FromResult<ErrorCode?>(ErrorCode.PeerNotFound),
             ErrorCode.TimedOut);
 
+    public bool IsAwaitingMove(int userId) => _peers.TryGetValue(userId, out var peer) && peer.IsAwaitingMove;
+
     public bool TryGetPeerConnection(int userId, out string? connectionId)
     {
         var found = _peers.TryGetValue(userId, out var peer);

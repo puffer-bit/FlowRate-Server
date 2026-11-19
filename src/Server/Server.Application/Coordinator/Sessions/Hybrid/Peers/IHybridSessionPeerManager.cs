@@ -73,6 +73,8 @@ public interface IHybridSessionPeerManager : IDisposable
     Task<ErrorCode?> ResumeInboundsAsync(int listenerUserId, IReadOnlyCollection<string> inboundIds);
 
     bool HasPeer(int userId);
+    /// <summary>The user was moved here and the place kept for them is not taken yet.</summary>
+    bool IsAwaitingMove(int userId);
     /// <summary>
     /// False only when the user is a peer from another connection: the media of the peer is not this connection's.
     /// </summary>

@@ -5,6 +5,7 @@ using System.Text.Json.Serialization;
 using Moq;
 using Server.Application.Coordinator.Roles;
 using Server.Application.Coordinator.Sessions.Hybrid;
+using Server.Application.Coordinator.Sessions.Hybrid.Peers;
 using Server.Core.Models.HybridSession;
 using Server.Core.Models.User;
 using Shared.Enums;
@@ -26,9 +27,11 @@ public class RequestAuthorizerTests
     private const int ModeratorId = 2;
     private const int PlainId = 3;
     private const int AdminId = 4;
+    private const int ViewerId = 6;
 
     private readonly Mock<ICoordinatorPermissions> _permissions = new();
     private readonly Mock<IHybridSessionManager> _sessions = new();
+    private readonly Mock<IHybridSessionPeerManager> _peers = new();
     private readonly RequestAuthorizer _authorizer;
 
     public RequestAuthorizerTests()
@@ -38,9 +41,11 @@ public class RequestAuthorizerTests
             [HostId] = Permission.None,
             [ModeratorId] = Permission.KickMembers,
             [PlainId] = Permission.None,
-            [AdminId] = Permission.All
+            [AdminId] = Permission.All,
+            [ViewerId] = Permission.ViewSessions
         };
-        var positions = new Dictionary<int, int> { [HostId] = 0, [ModeratorId] = 1, [PlainId] = 0, [AdminId] = 2 };
+        var positions = new Dictionary<int, int>
+            { [HostId] = 0, [ModeratorId] = 1, [PlainId] = 0, [AdminId] = 2, [ViewerId] = 0 };
 
         _permissions.Setup(p => p.Has(It.IsAny<int>(), It.IsAny<Permission>()))
             .Returns((int userId, Permission permission) => (permissions[userId] & permission) == permission);
@@ -50,6 +55,7 @@ public class RequestAuthorizerTests
         var session = new Mock<IHybridSession>();
         session.SetupGet(s => s.Model)
             .Returns(HybridSessionModel.Create("c", "Room", 10, HostId, WebRTCEngine.Mediasoup));
+        session.SetupGet(s => s.PeerManager).Returns(_peers.Object);
         IHybridSession? found = session.Object;
         _sessions.Setup(s => s.TryGetSession(SessionId, out found)).Returns(true);
 
@@ -64,6 +70,25 @@ public class RequestAuthorizerTests
 
     private static KickFromSessionRequest Kick(int senderId, int targetId, int sessionId = SessionId) =>
         From(senderId, new KickFromSessionRequest(sessionId, targetId, SessionType.Hybrid, null));
+
+    [Theory]
+    [InlineData(true, true)]
+    [InlineData(false, false)]
+    public async Task Join_WithoutJoinSessions_OnlyIntoAPlaceKeptForAMove(bool isAwaitingMove, bool allowed)
+    {
+        _peers.Setup(p => p.IsAwaitingMove(ViewerId)).Returns(isAwaitingMove);
+
+        Assert.Equal(allowed, await _authorizer.IsAllowedAsync(
+            From(ViewerId, new HybridSessionJoinRequest(SessionId))));
+    }
+
+    [Fact]
+    public async Task Join_IntoAKeptPlace_StillNeedsToSeeTheSession()
+    {
+        _peers.Setup(p => p.IsAwaitingMove(PlainId)).Returns(true);
+
+        Assert.False(await _authorizer.IsAllowedAsync(From(PlainId, new HybridSessionJoinRequest(SessionId))));
+    }
 
     [Fact]
     public async Task OpenRequest_IsAllowed()
