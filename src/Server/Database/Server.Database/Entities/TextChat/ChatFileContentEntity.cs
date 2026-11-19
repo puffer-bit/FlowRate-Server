@@ -18,5 +18,14 @@ public class ChatFileContentEntity
     [MaxLength(32)]
     public required string UploadId { get; set; }
 
+    // Set for a file that plays as a video
+    public bool IsVideo { get; set; }
+    public int VideoWidth { get; set; }
+    public int VideoHeight { get; set; }
+    public TimeSpan? VideoDuration { get; set; }
+
+    [MaxLength(32)]
+    public string? PreviewUploadId { get; set; }
+
     public ChatContentType Type => ChatContentType.File;
 }

@@ -198,13 +198,9 @@ public sealed class MediaService : IMediaService
 
     public async Task<MediaFile?> OpenFileAsync(int fileId, CancellationToken cancellationToken = default, int? requestingUserId = null)
     {
-        var file = await _uploads.GetFileAsync(fileId, cancellationToken);
-        if (file == null || file.IsMessageDeleted || !_chats.TryGetSession(file.ChatId, out var chat))
+        var file = await GetReadableFileAsync(fileId, requestingUserId, cancellationToken);
+        if (file == null)
             return null;
-
-        if (chat.IsPrivate && (requestingUserId is not { } member || !chat.MemberIds.Contains(member))) return null;
-        if (requestingUserId is { } reader && _permissions != null
-            && (await _permissions.PermissionsInAsync(reader, chat) & Permission.ViewSessions) == 0) return null;
 
         var upload = await GetOwnAsync(file.UploadId, cancellationToken);
         if (upload is not { Kind: MediaUploadKind.File, State: MediaUploadState.Attached })
@@ -212,6 +208,34 @@ public sealed class MediaService : IMediaService
 
         var content = await _storage.OpenReadAsync(upload.Id, cancellationToken);
         return content == null ? null : new MediaFile(content, upload.MimeType, file.FileName);
+    }
+
+    public async Task<MediaFile?> OpenFilePreviewAsync(int fileId, CancellationToken cancellationToken = default,
+        int? requestingUserId = null)
+    {
+        if (await GetReadableFileAsync(fileId, requestingUserId, cancellationToken) is not { PreviewUploadId: { } previewId })
+            return null;
+
+        var upload = await GetOwnAsync(previewId, cancellationToken);
+        if (upload is not { Kind: MediaUploadKind.ImagePreview, State: MediaUploadState.Attached })
+            return null;
+
+        var content = await _storage.OpenReadAsync(upload.Id, cancellationToken);
+        return content == null ? null : new MediaFile(content, upload.MimeType);
+    }
+
+    /// <summary>A file of a message the reader may see.</summary>
+    private async Task<ChatFileDownloadModel?> GetReadableFileAsync(int fileId, int? requestingUserId,
+        CancellationToken cancellationToken)
+    {
+        var file = await _uploads.GetFileAsync(fileId, cancellationToken);
+        if (file == null || file.IsMessageDeleted || !_chats.TryGetSession(file.ChatId, out var chat))
+            return null;
+
+        if (chat.IsPrivate && (requestingUserId is not { } member || !chat.MemberIds.Contains(member))) return null;
+        if (requestingUserId is { } reader && _permissions != null
+            && (await _permissions.PermissionsInAsync(reader, chat) & Permission.ViewSessions) == 0) return null;
+        return file;
     }
 
     public async Task<bool> AttachAvatarAsync(string uploadId, int userId, CancellationToken cancellationToken = default) =>

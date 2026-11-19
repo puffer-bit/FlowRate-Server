@@ -570,12 +570,19 @@ namespace Server.Database.Sqlite.Migrations
                         .IsRequired()
                         .HasColumnType("TEXT");
 
+                    b.Property<bool>("IsVideo")
+                        .HasColumnType("INTEGER");
+
                     b.Property<int>("MessageId")
                         .HasMaxLength(36)
                         .HasColumnType("INTEGER");
 
                     b.Property<string>("MimeType")
                         .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("PreviewUploadId")
+                        .HasMaxLength(32)
                         .HasColumnType("TEXT");
 
                     b.Property<long>("Size")
@@ -585,6 +592,15 @@ namespace Server.Database.Sqlite.Migrations
                         .IsRequired()
                         .HasMaxLength(32)
                         .HasColumnType("TEXT");
+
+                    b.Property<TimeSpan?>("VideoDuration")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("VideoHeight")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("VideoWidth")
+                        .HasColumnType("INTEGER");
 
                     b.HasKey("Id");
 

@@ -124,7 +124,7 @@ public class MediaUploadRepository : IMediaUploadRepository
             .Where(file => file.Id == fileId)
             .Join(context.ChatMessagesEntities.IgnoreQueryFilters(), file => file.MessageId, message => message.Id,
                 (file, message) => new ChatFileDownloadModel(file.Id, message.ChatId, message.IsDeleted, file.FileName,
-                    file.UploadId))
+                    file.UploadId, file.PreviewUploadId))
             .FirstOrDefaultAsync(cancellationToken);
     }
 

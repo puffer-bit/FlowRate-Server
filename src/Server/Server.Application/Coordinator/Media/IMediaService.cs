@@ -54,6 +54,9 @@ public interface IMediaService : IDisposable
 
     Task<MediaFile?> OpenFileAsync(int fileId, CancellationToken cancellationToken = default, int? requestingUserId = null);
 
+    /// <summary>The frame a video of a message is shown with; null when it has none.</summary>
+    Task<MediaFile?> OpenFilePreviewAsync(int fileId, CancellationToken cancellationToken = default, int? requestingUserId = null);
+
     Task<bool> AttachAvatarAsync(string uploadId, int userId, CancellationToken cancellationToken = default);
     Task RemoveAvatarAsync(string uploadId, CancellationToken cancellationToken = default);
     Task<MediaFile?> OpenAvatarAsync(string uploadId, CancellationToken cancellationToken = default);

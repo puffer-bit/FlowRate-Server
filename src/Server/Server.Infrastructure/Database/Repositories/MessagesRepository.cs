@@ -29,7 +29,8 @@ public class MessagesRepository : IMessagesRepository
         await context.SaveChangesAsync(cancellationToken);
 
         var uploadIds = message.Images.SelectMany(image => new[] { image.UploadId, image.PreviewUploadId })
-            .Concat(message.Files.Select(file => file.UploadId))
+            .Concat(message.Files.SelectMany(file =>
+                file.PreviewUploadId is { } preview ? new[] { file.UploadId, preview } : [file.UploadId]))
             .ToList();
         if (uploadIds.Count > 0)
         {
