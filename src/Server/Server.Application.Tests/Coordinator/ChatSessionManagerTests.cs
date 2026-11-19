@@ -349,22 +349,28 @@ public class ChatSessionManagerTests
         Assert.Equal(ErrorCode.MessageNotFound, (await _manager.FetchWindowAsync(chat, 5, direction, 30)).result);
     }
 
-    [Fact]
-    public async Task Reactions_ArePerUserAndIdempotent_WithoutEditingTheText()
+    [Theory]
+    [InlineData("👍")]
+    [InlineData("🦊")]
+    [InlineData("👍🏽")]
+    [InlineData("👨‍👩‍👧‍👦")]
+    [InlineData("🇷🇺")]
+    public async Task Reactions_ArePerUserAndIdempotent_WithoutEditingTheText(string emoji)
     {
         var chatId = await CreateChat("general");
         StoreMessage(5, chatId);
         _messages.Setup(r => r.UpdateAsync(It.IsAny<ChatMessageModel>(), It.IsAny<CancellationToken>())).ReturnsAsync(9);
 
-        Assert.Null(await _manager.SetReactionAsync(chatId, 5, "👍", true, 2));
-        Assert.Null(await _manager.SetReactionAsync(chatId, 5, "👍", true, 2));
-        Assert.Null(await _manager.SetReactionAsync(chatId, 5, "👍", true, 3));
+        Assert.Null(await _manager.SetReactionAsync(chatId, 5, emoji, true, 2));
+        Assert.Null(await _manager.SetReactionAsync(chatId, 5, emoji, true, 2));
+        Assert.Null(await _manager.SetReactionAsync(chatId, 5, emoji, true, 3));
         Assert.Equal(2, _storedMessages[5].Reactions.Count);
-        Assert.Null(await _manager.SetReactionAsync(chatId, 5, "👍", false, 2));
-        Assert.Null(await _manager.SetReactionAsync(chatId, 5, "👍", false, 2));
+        Assert.Null(await _manager.SetReactionAsync(chatId, 5, emoji, false, 2));
+        Assert.Null(await _manager.SetReactionAsync(chatId, 5, emoji, false, 2));
 
         var reaction = Assert.Single(_storedMessages[5].Reactions);
         Assert.Equal(3, reaction.UserId);
+        Assert.Equal(emoji, reaction.Emoji);
         Assert.Null(_storedMessages[5].EditTime);
         Assert.Equal("hello", _storedMessages[5].TextContent!.Text);
         Assert.Equal(3, _events.Of<ChatSessionMessageEditedEvent>().Count());

@@ -5,6 +5,7 @@ using Server.Application.Coordinator.Messaging;
 using Server.Application.Mappers;
 using Server.Application.Orchestrator.SFUPool;
 using Server.Application.Orchestrator.Settings;
+using Server.Application.Abstractions.Persistence;
 
 namespace Server.Application.Coordinator.Handlers.Settings;
 
@@ -14,17 +15,20 @@ public class CoordinatorSettingsHandler : IMessageHandler<CoordinatorSettingsReq
     private readonly ICoordinatorSettingsService _settingsService;
     private readonly ISfuNodeRegistry _sfuNodes;
     private readonly string _coordinatorInstanceId;
+    private readonly IDatabaseInfo _databaseInfo;
 
     public CoordinatorSettingsHandler(
         IMessageSender messageSender,
         ICoordinatorSettingsService settingsService,
         ISfuNodeRegistry sfuNodes,
-        string coordinatorInstanceId)
+        string coordinatorInstanceId,
+        IDatabaseInfo databaseInfo)
     {
         _sfuNodes = sfuNodes;
         _messageSender = messageSender;
         _settingsService = settingsService;
         _coordinatorInstanceId = coordinatorInstanceId;
+        _databaseInfo = databaseInfo;
     }
 
     public async Task<HandleMessageResult> HandleMessage(CoordinatorSettingsRequest? request, string connectionId)
@@ -39,7 +43,8 @@ public class CoordinatorSettingsHandler : IMessageHandler<CoordinatorSettingsReq
             ? request.ToError(ErrorCode.Internal)
             : request.ToResponse(model.ToSettingsDto(),
                 // A snapshot of the connections: the client shows it as it was when the settings were opened
-                nodes.Select(node => node.ToDto(node.IsEnabled ? _sfuNodes.GetStatus(node.Id) : null)).ToList()));
+                nodes.Select(node => node.ToDto(node.IsEnabled ? _sfuNodes.GetStatus(node.Id) : null)).ToList(),
+                _databaseInfo.Provider));
 
         return HandleMessageResult.NoError;
     }

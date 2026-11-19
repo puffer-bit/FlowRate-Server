@@ -146,6 +146,7 @@ namespace Server.Asp
                     provider.GetRequiredService<IOptions<StorageOptions>>().Value));
             
             services.AddSingleton<ServerCertificate>();
+            services.AddSingleton<IDatabaseInfo, DatabaseInfo>();
             services.AddSingleton(ProtocolJsonContext.Default.Options);
             services.AddSingleton<IMessageSerializer, MessageSerializer>();
             

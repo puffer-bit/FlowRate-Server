@@ -13,6 +13,19 @@ namespace Server.Infrastructure.Tests.Database;
 
 public class DatabaseProviderTests
 {
+    [Theory]
+    [InlineData(DatabaseProvider.Sqlite, "SQLite")]
+    [InlineData(DatabaseProvider.PostgreSql, "PostgreSQL")]
+    public void PublicDatabaseInfo_ContainsOnlyTheProviderName(DatabaseProvider provider, string expected)
+    {
+        var options = Microsoft.Extensions.Options.Options.Create(new DatabaseOptions
+        {
+            Provider = provider,
+            ConnectionString = "Host=private;Database=private;Username=private;Password=secret"
+        });
+        Assert.Equal(expected, new DatabaseInfo(options).Provider);
+    }
+
     [Fact]
     public void DefaultSettingsKeepExistingSqlitePathAndMigrations()
     {
