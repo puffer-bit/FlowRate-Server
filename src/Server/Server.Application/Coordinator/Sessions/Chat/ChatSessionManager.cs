@@ -697,13 +697,29 @@ public class ChatSessionManager : IChatSessionManager
             if (await CheckVideoAsync(upload, file.FileName) is { } rejection)
                 return (rejection, [], []);
 
+            var isVideo = VideoDimensions.IsVideo(upload.MimeType, file.FileName);
+            MediaUploadModel? preview = null;
+            if (file.PreviewUploadId != null)
+            {
+                // Only a video is shown by a frame
+                preview = isVideo
+                    ? await GetUploadAsync(file.PreviewUploadId, chat.Id, senderUserId, MediaUploadKind.ImagePreview)
+                    : null;
+                if (preview == null || preview.State == MediaUploadState.Attached)
+                    return (ErrorCode.AttachmentInvalid, [], []);
+                if (preview.State != MediaUploadState.Completed)
+                    return (ErrorCode.AttachmentNotReady, [], []);
+            }
+
             files.Add(new ChatFileContentModel
             {
                 Id = 0,
                 FileName = file.FileName,
                 Size = upload.Size,
                 MimeType = upload.MimeType,
-                UploadId = upload.Id
+                UploadId = upload.Id,
+                Video = isVideo ? await ReadVideoAsync(upload, preview) : null,
+                PreviewUploadId = preview?.Id
             });
         }
 
@@ -748,6 +764,39 @@ public class ChatSessionManager : IChatSessionManager
         // A video of a moment is mostly its first keyframe, so its bitrate says nothing
         var kbps = duration >= TimeSpan.FromSeconds(2) ? upload.Size * 8 / duration.TotalSeconds / 1000 : 0;
         return kbps > Limits.ChatVideoMaxKbps(settings.VideoMaxSide) ? ErrorCode.VideoNotCompressed : null;
+    }
+
+    /// <summary>
+    /// What a video is shown with before it is played: the sides and the length from the index of the file,
+    /// turned as its frame is, since the index gives them before the rotation; the sides of the frame
+    /// when the file has no index that can be read.
+    /// </summary>
+    private async Task<ChatFileVideoModel> ReadVideoAsync(MediaUploadModel upload, MediaUploadModel? preview)
+    {
+        (int Width, int Height, TimeSpan Duration)? index = null;
+        (int Width, int Height)? frame = null;
+        try
+        {
+            await using (var content = await _mediaStorage.OpenReadAsync(upload.Id))
+                if (content != null)
+                    index = await VideoDimensions.ReadAsync(content);
+            if (preview != null)
+            {
+                await using var content = await _mediaStorage.OpenReadAsync(preview.Id);
+                if (content != null)
+                    frame = await ImageDimensions.ReadAsync(content, preview.MimeType);
+            }
+        }
+        catch (Exception e) when (e is IOException or InvalidDataException)
+        {
+            _logger.LogWarning(e, "Reading the size of video {UploadId} failed.", upload.Id);
+        }
+
+        if (index is not var (width, height, duration))
+            return new ChatFileVideoModel(frame?.Width ?? 0, frame?.Height ?? 0, null);
+        if (frame is var (frameWidth, frameHeight) && frameWidth > frameHeight != width > height && frameWidth != frameHeight)
+            (width, height) = (height, width);
+        return new ChatFileVideoModel(width, height, duration);
     }
 
     private async Task<MediaUploadModel?> GetUploadAsync(string id, int chatId, int ownerUserId, MediaUploadKind kind)

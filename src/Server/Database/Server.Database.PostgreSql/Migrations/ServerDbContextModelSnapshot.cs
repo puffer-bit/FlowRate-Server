@@ -590,6 +590,9 @@ namespace Server.Database.PostgreSql.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<bool>("IsVideo")
+                        .HasColumnType("boolean");
+
                     b.Property<int>("MessageId")
                         .HasMaxLength(36)
                         .HasColumnType("integer");
@@ -598,6 +601,10 @@ namespace Server.Database.PostgreSql.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<string>("PreviewUploadId")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
                     b.Property<long>("Size")
                         .HasColumnType("bigint");
 
@@ -605,6 +612,15 @@ namespace Server.Database.PostgreSql.Migrations
                         .IsRequired()
                         .HasMaxLength(32)
                         .HasColumnType("character varying(32)");
+
+                    b.Property<TimeSpan?>("VideoDuration")
+                        .HasColumnType("interval");
+
+                    b.Property<int>("VideoHeight")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("VideoWidth")
+                        .HasColumnType("integer");
 
                     b.HasKey("Id");
 

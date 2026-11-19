@@ -263,7 +263,12 @@ public static class ChatMessageEntityMapper
             FileName = model.FileName,
             Size = model.Size,
             MimeType = model.MimeType,
-            UploadId = model.UploadId
+            UploadId = model.UploadId,
+            IsVideo = model.Video != null,
+            VideoWidth = model.Video?.Width ?? 0,
+            VideoHeight = model.Video?.Height ?? 0,
+            VideoDuration = model.Video?.Duration,
+            PreviewUploadId = model.PreviewUploadId
         };
     }
 
@@ -276,7 +281,11 @@ public static class ChatMessageEntityMapper
             FileName = entity.FileName,
             Size = entity.Size,
             MimeType = entity.MimeType,
-            UploadId = entity.UploadId
+            UploadId = entity.UploadId,
+            Video = entity.IsVideo
+                ? new ChatFileVideoModel(entity.VideoWidth, entity.VideoHeight, entity.VideoDuration)
+                : null,
+            PreviewUploadId = entity.PreviewUploadId
         };
     }
 

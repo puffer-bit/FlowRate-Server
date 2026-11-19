@@ -171,7 +171,16 @@ public static class ChatMessageMapperExtensions
             Id = model.Id,
             FileName = model.FileName,
             Size = model.Size,
-            MimeType = model.MimeType
+            MimeType = model.MimeType,
+            Video = model.Video is { } video
+                ? new ChatFileVideoDTO
+                {
+                    Width = video.Width,
+                    Height = video.Height,
+                    Duration = video.Duration,
+                    HasPreview = model.PreviewUploadId != null
+                }
+                : null
         };
     }
 

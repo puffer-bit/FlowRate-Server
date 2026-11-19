@@ -43,4 +43,5 @@ public sealed record ChatFileDownloadModel(
     int ChatId,
     bool IsMessageDeleted,
     string FileName,
-    string UploadId);
+    string UploadId,
+    string? PreviewUploadId = null);

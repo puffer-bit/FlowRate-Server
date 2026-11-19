@@ -1,3 +1,4 @@
+using Server.Core.Models.Media;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Sockets;
@@ -241,6 +242,48 @@ public sealed class MediaEndpointsTests : IDisposable
         // An image path does not lead to a file, nor a file path to an image
         Assert.Equal(HttpStatusCode.NotFound,
             (await _http.GetAsync($"{MediaEndpoints.Images}/{fileId}?variant=original")).StatusCode);
+    }
+
+    [Fact]
+    public async Task FrameOfAVideo_IsAttachedWithItAndServedAsItsPreview()
+    {
+        var videoId = await UploadAsync(Png, MediaUploadMetadata.KindFile, "video/mp4");
+        var frameId = await UploadAsync(Jpeg, MediaUploadMetadata.KindImagePreview, "image/jpeg");
+        var message = ChatMessageModel.Create(_chatId, UserId, DateTime.UtcNow, null, files:
+        [
+            new ChatFileContentModel
+            {
+                Id = 0, FileName = "clip.mp4", Size = Png.Length, MimeType = "video/mp4", UploadId = videoId,
+                Video = new ChatFileVideoModel(1280, 720, TimeSpan.FromSeconds(4)), PreviewUploadId = frameId
+            }
+        ]);
+        var file = (await _messages.AddAsync(message)).Files.Single();
+        Assert.Equal(new ChatFileVideoModel(1280, 720, TimeSpan.FromSeconds(4)), file.Video);
+        Assert.Equal(MediaUploadState.Attached, (await _uploads.GetAsync(frameId))!.State);
+
+        var response = await _http.GetAsync($"{MediaEndpoints.Files}/{file.Id}?variant=preview");
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal("image/jpeg", response.Content.Headers.ContentType!.MediaType);
+        Assert.Equal(Jpeg, await response.Content.ReadAsByteArrayAsync());
+
+        Assert.Equal(Png, await _http.GetByteArrayAsync($"{MediaEndpoints.Files}/{file.Id}"));
+        Assert.Equal(HttpStatusCode.BadRequest,
+            (await _http.GetAsync($"{MediaEndpoints.Files}/{file.Id}?variant=poster")).StatusCode);
+
+        // Deleting the message takes the frame too
+        await _messages.DeleteAsync((await _messages.GetBeforeAsync(_chatId, null, 1)).Single().Id);
+        Assert.Equal(HttpStatusCode.NotFound,
+            (await _http.GetAsync($"{MediaEndpoints.Files}/{file.Id}?variant=preview")).StatusCode);
+    }
+
+    [Fact]
+    public async Task FileWithoutAFrame_HasNoPreview()
+    {
+        var uploadId = await UploadAsync(Png, MediaUploadMetadata.KindFile, "video/mp4");
+        var fileId = await SendFileMessageAsync(uploadId, "clip.mp4", Png.Length);
+
+        Assert.Equal(HttpStatusCode.NotFound,
+            (await _http.GetAsync($"{MediaEndpoints.Files}/{fileId}?variant=preview")).StatusCode);
     }
 
     [Fact]

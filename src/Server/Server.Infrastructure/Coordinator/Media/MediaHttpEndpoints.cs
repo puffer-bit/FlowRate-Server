@@ -167,14 +167,19 @@ public sealed class MediaHttpEndpoints : IMediaHttpEndpoints
         if (!await TryAuthorizeReadAsync(context))
             return;
 
-        if (!int.TryParse(context.Request.RouteValues["id"]?.ToString(), NumberStyles.None,
+        var variant = context.Request.Query[MediaEndpoints.VariantParameter].ToString();
+        if (variant is not ("" or MediaEndpoints.VariantOriginal or MediaEndpoints.VariantPreview)
+            || !int.TryParse(context.Request.RouteValues["id"]?.ToString(), NumberStyles.None,
                 CultureInfo.InvariantCulture, out var fileId))
         {
             context.Response.StatusCode = StatusCodes.Status400BadRequest;
             return;
         }
 
-        var file = await _media.OpenFileAsync(fileId, context.RequestAborted, (int)context.Items[UserIdItem]!);
+        var userId = (int)context.Items[UserIdItem]!;
+        var file = variant == MediaEndpoints.VariantPreview
+            ? await _media.OpenFilePreviewAsync(fileId, context.RequestAborted, userId)
+            : await _media.OpenFileAsync(fileId, context.RequestAborted, userId);
         if (file == null)
         {
             context.Response.StatusCode = StatusCodes.Status404NotFound;
