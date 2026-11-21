@@ -5,6 +5,7 @@ using Moq;
 using Shared.Enums;
 using Shared.Models;
 using Shared.Models.Requests.Auth;
+using Shared.Models.Requests.Coordinator;
 using Shared.Models.Requests.SessionActions.Generic;
 using Shared.Models.Requests.SessionActions.Generic.Models;
 using Shared.Models.Requests.SessionActions.Generic.Models.SessionData;
@@ -159,6 +160,28 @@ public class MessageRouterGuardTests
         _router.RejectMalformedMessage("connection-1");
 
         Assert.Equal(ConnectionCloseReason.TooManyRejectedRequests, _connection.CloseReason);
+    }
+
+    [Fact]
+    public void ARequestWithoutAHandler_IsAnsweredAsUnsupported()
+    {
+        var request = new CoordinatorInfoRequest();
+        Route(request);
+
+        var error = Assert.IsType<ErrorResponse>(Assert.Single(_connection.Sent));
+        Assert.Equal(ErrorCode.UnsupportedRequest, error.Code);
+        Assert.Equal(request.RequestId, error.RequestId);
+    }
+
+    [Fact]
+    public void AMalformedRequestThatCanBeNamed_GetsItsRejection()
+    {
+        var rejection = new ErrorResponse(Guid.NewGuid(), ErrorCode.UnsupportedRequest);
+
+        _router.RejectMalformedMessage("connection-1", rejection);
+
+        Assert.Same(rejection, Assert.Single(_connection.Sent));
+        Assert.Null(_connection.CloseReason);
     }
 
     private sealed class FakeConnection(string connectionId, string ip) : IClientConnection

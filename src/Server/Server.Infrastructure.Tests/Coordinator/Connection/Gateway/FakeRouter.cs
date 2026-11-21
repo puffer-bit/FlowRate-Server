@@ -52,7 +52,7 @@ public sealed class FakeRouter : IMessageRouter
             OnMessage?.Invoke(message, gateway);
     }
 
-    public void RejectMalformedMessage(string connectionId) => Interlocked.Increment(ref _malformedCount);
+    public void RejectMalformedMessage(string connectionId, Shared.Models.Responses.ErrorResponse? rejection = null) => Interlocked.Increment(ref _malformedCount);
 
     private static TaskCompletionSource<T> NewSource<T>() => new(TaskCreationOptions.RunContinuationsAsynchronously);
 }

@@ -267,11 +267,11 @@ public sealed class KestrelCoordinatorInstanceGateway : ICoordinatorInstanceGate
             return false;
         }
 
-        var message = _parser.ParseBaseMessage(payload);
+        var message = _parser.ParseBaseMessage(payload, out var rejection);
         if (message == null)
         {
             GatewayMetrics.MalformedMessages.Add(1);
-            _router.RejectMalformedMessage(ConnectionId);
+            _router.RejectMalformedMessage(ConnectionId, rejection);
             return true;
         }
 

@@ -112,7 +112,7 @@ public sealed class DirectCallTests : IDisposable
         await Act(id, DirectCallAction.Start);
 
         Assert.Equal(ErrorCode.NotMember, await _manager.DeclineCallFromPushAsync(id, 1));
-        Assert.Equal(ErrorCode.SessionNotFound, await _manager.DeclineCallFromPushAsync(Guid.NewGuid(), 2));
+        Assert.Equal(ErrorCode.CallNotFound, await _manager.DeclineCallFromPushAsync(Guid.NewGuid(), 2));
         Assert.Null(await _manager.DeclineCallFromPushAsync(id, 2));
 
         Assert.Contains(_history, h => h.Kind == ChatSystemEventKind.CallEnded
@@ -131,7 +131,7 @@ public sealed class DirectCallTests : IDisposable
         await Act(id, DirectCallAction.Start);
         await Act(id, DirectCallAction.Accept, 2, "callee");
 
-        Assert.Equal(ErrorCode.Conflict, await _manager.DeclineCallFromPushAsync(id, 2));
+        Assert.Equal(ErrorCode.CallAnsweredElsewhere, await _manager.DeclineCallFromPushAsync(id, 2));
         Assert.True(_manager.HasDirectCall(2));
     }
 
@@ -246,7 +246,7 @@ public sealed class DirectCallTests : IDisposable
         Assert.Equal("caller", session.Model.CallDevices![1]);
         Assert.Equal("callee", session.Model.CallDevices[2]);
         Assert.Null(_sent.Last(n => n.Device == "callee-other").Call.Session);
-        Assert.Equal(ErrorCode.Conflict, (await Act(id, DirectCallAction.Accept, 2, "callee-other")).Error);
+        Assert.Equal(ErrorCode.CallAnsweredElsewhere, (await Act(id, DirectCallAction.Accept, 2, "callee-other")).Error);
         await Act(id, DirectCallAction.Accept, 2, "callee");
         Assert.Single(_history, h => h.Kind == ChatSystemEventKind.CallStarted);
     }
@@ -302,7 +302,7 @@ public sealed class DirectCallTests : IDisposable
         var results = await Task.WhenAll(Act(Guid.NewGuid(), DirectCallAction.Start),
             Act(Guid.NewGuid(), DirectCallAction.Start, 2, "callee"));
         Assert.Single(results, r => r.Error == null);
-        Assert.Single(results, r => r.Error == ErrorCode.Conflict);
+        Assert.Single(results, r => r.Error == ErrorCode.CallBusy);
     }
 
     [Fact]

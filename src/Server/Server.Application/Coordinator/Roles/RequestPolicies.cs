@@ -43,6 +43,7 @@ public static class RequestPolicies
         CreateSessionRequest { CreateSessionModel.SessionData: Shared.Models.Requests.SessionActions.Generic.Models.SessionData.ChatSessionCreateData { Kind: not ChatKind.ServerChannel, SessionType: SessionType.Chat } } => Open,
         CreateSessionRequest => Require(Permission.CreateSessions),
         ChangeGroupRequest request => InSession(request.SessionId, View),
+        LeaveGroupRequest request => InSession(request.SessionId, View),
         DeleteSessionRequest request => InSession(request.SessionId, Permission.ManageSessions),
         ChangeHybridSessionSettingsRequest request => InSession(request.SessionId, Permission.ManageSessions),
         // Which roles and permissions the sender may change, the handler checks

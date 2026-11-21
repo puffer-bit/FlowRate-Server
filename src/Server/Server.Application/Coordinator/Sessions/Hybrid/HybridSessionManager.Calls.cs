@@ -73,10 +73,10 @@ public partial class HybridSessionManager
 
             if (!_calls.TryGetValue(request.CallId, out var call))
             {
-                if (request.Action != DirectCallAction.Start) return (ErrorCode.SessionNotFound, null);
+                if (request.Action != DirectCallAction.Start) return (ErrorCode.CallNotFound, null);
                 var other = chat.MemberIds.Single(id => id != request.SenderId);
                 if (_calls.Values.Any(c => c.State != DirectCallState.Ended &&
-                    (c.Contains(request.SenderId) || c.Contains(other)))) return (ErrorCode.Conflict, null);
+                    (c.Contains(request.SenderId) || c.Contains(other)))) return (ErrorCode.CallBusy, null);
                 var leaveError = await LeaveVoiceChannelsForCallAsync(request.SenderId);
                 if (leaveError != null) return (leaveError, null);
                 call = new Call(request.CallId, chat.Id, request.SenderId, other, connectionId, _time.GetUtcNow());
@@ -97,7 +97,7 @@ public partial class HybridSessionManager
                     case DirectCallAction.Accept:
                         if (request.SenderId != call.Callee) return (ErrorCode.NotMember, null);
                         if (call.State == DirectCallState.Active)
-                            return call.CalleeDevice == connectionId ? (null, CallDto(call, connectionId)) : (ErrorCode.Conflict, null);
+                            return call.CalleeDevice == connectionId ? (null, CallDto(call, connectionId)) : (ErrorCode.CallAnsweredElsewhere, null);
                         var model = new HybridSessionModel(call.ChatId, _coordinatorInstanceId, chat.Name, 2,
                             call.Caller, WebRTCEngine.Mediasoup)
                         {
@@ -129,8 +129,9 @@ public partial class HybridSessionManager
                         PublishCall(call);
                         break;
                     case DirectCallAction.Decline:
-                        if (request.SenderId != call.Callee || call.State != DirectCallState.Ringing)
-                            return (ErrorCode.Conflict, null);
+                        if (request.SenderId != call.Callee) return (ErrorCode.NotMember, null);
+                        // Ended calls were answered above, so a call that no longer rings was accepted
+                        if (call.State != DirectCallState.Ringing) return (ErrorCode.CallAnsweredElsewhere, null);
                         await FinishCallAsync(call, DirectCallEndReason.Declined, request.SenderId);
                         break;
                     case DirectCallAction.End:
@@ -154,7 +155,7 @@ public partial class HybridSessionManager
         try
         {
             if (_callChats == null) return ErrorCode.FeatureDisabled;
-            if (!_calls.TryGetValue(callId, out var call)) return ErrorCode.SessionNotFound;
+            if (!_calls.TryGetValue(callId, out var call)) return ErrorCode.CallNotFound;
             if (call.Callee != userId) return ErrorCode.NotMember;
             if (call.State == DirectCallState.Ringing && _time.GetUtcNow() >= call.Created.AddSeconds(45))
                 await FinishCallAsync(call, DirectCallEndReason.Missed);
@@ -162,7 +163,7 @@ public partial class HybridSessionManager
             {
                 DirectCallState.Ended => null,
                 // Answered on another device of the user: the notification of this one is late
-                DirectCallState.Active => ErrorCode.Conflict,
+                DirectCallState.Active => ErrorCode.CallAnsweredElsewhere,
                 _ => await DeclineAsync(call)
             };
         }

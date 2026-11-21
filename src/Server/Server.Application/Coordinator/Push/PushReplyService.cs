@@ -81,8 +81,8 @@ public sealed class PushReplyService
             return await calls.DeclineCallFromPushAsync(request.CallId, device!.UserId) switch
             {
                 null => PushReplyResult.Sent,
-                ErrorCode.SessionNotFound => PushReplyResult.ChatNotExists,
-                ErrorCode.NotMember or ErrorCode.Conflict => PushReplyResult.Forbidden,
+                ErrorCode.CallNotFound => PushReplyResult.ChatNotExists,
+                ErrorCode.NotMember or ErrorCode.CallAnsweredElsewhere => PushReplyResult.Forbidden,
                 _ => PushReplyResult.InternalError
             };
         }

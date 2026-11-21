@@ -109,15 +109,23 @@ public class MessageRouter : IMessageRouter
         
         _logger.LogWarning("Handler not found for Type {Type}. Connection Id: {ConnectionId}", 
             messageType, connectionId);
+
+        // A request the server reads but does not serve is answered, so the client does not wait in vain
+        if (message is Request unhandled)
+            connection.Send(unhandled.ToError(ErrorCode.UnsupportedRequest, $"{messageType.Name} is not served."));
     }
 
-    public void RejectMalformedMessage(string connectionId)
+    public void RejectMalformedMessage(string connectionId, ErrorResponse? rejection = null)
     {
         if (!_connectionManager.TryGetConnectionById(connectionId, out var connection))
             return;
 
         if (connection.RequestGuard.RegisterRejection() != RequestGuardVerdict.RejectedTooOften)
+        {
+            if (rejection != null)
+                connection.Send(rejection);
             return;
+        }
 
         _logger.LogWarning("Connection {ConnectionId} from {Ip} sent malformed messages too often. Closing it.",
             connectionId, connection.IpEndpoint);

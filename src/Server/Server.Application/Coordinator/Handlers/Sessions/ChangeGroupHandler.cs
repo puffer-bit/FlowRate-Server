@@ -19,18 +19,29 @@ public sealed class ChangeGroupHandler(IChatSessionManager chats, IUserManager u
             return HandleMessageResult.NoError;
         }
         ErrorCode? result = null;
-        if (!request.Leave)
-            foreach (var id in request.MemberIds)
+        foreach (var id in request.MemberIds)
+        {
+            var user = await users.GetUserAsync(id);
+            if (user == null || user.IsSystem || user.CoordinatorInstanceId != group.CoordinatorInstanceId)
             {
-                var user = await users.GetUserAsync(id);
-                if (user == null || user.IsSystem || user.CoordinatorInstanceId != group.CoordinatorInstanceId)
-                {
-                    result = ErrorCode.InvalidValue;
-                    break;
-                }
+                result = ErrorCode.InvalidValue;
+                break;
             }
+        }
         result ??= await chats.ChangeGroupAsync(request.SessionId, request.Name.Trim(), request.MemberIds,
-            request.OwnerId, request.SenderId, request.Leave);
+            request.OwnerId, request.SenderId, leave: false);
+        sender.SendMessageById(connectionId, request.Answer(result, request.ToResponse));
+        return HandleMessageResult.NoError;
+    }
+}
+
+public sealed class LeaveGroupHandler(IChatSessionManager chats, IMessageSender sender)
+    : IMessageHandler<LeaveGroupRequest>
+{
+    public async Task<HandleMessageResult> HandleMessage(LeaveGroupRequest? request, string connectionId)
+    {
+        if (request == null) return HandleMessageResult.ForbiddenRequest;
+        var result = await chats.ChangeGroupAsync(request.SessionId, string.Empty, [], 0, request.SenderId, leave: true);
         sender.SendMessageById(connectionId, request.Answer(result, request.ToResponse));
         return HandleMessageResult.NoError;
     }

@@ -294,6 +294,7 @@ public class CoordinatorInstanceFactory : ICoordinatorInstanceFactory
         yield return ActivatorUtilities.CreateInstance<LeaveSessionHandler>(_provider, hybridSessionManager, messageSender);
         yield return ActivatorUtilities.CreateInstance<DeleteSessionHandler>(_provider, sessionManager, messageSender);
         yield return new ChangeGroupHandler(chatSessionManager, userManager, messageSender);
+        yield return new LeaveGroupHandler(chatSessionManager, messageSender);
         yield return new ChangeHybridSessionSettingsHandler(hybridSessionManager, messageSender);
         yield return new ChangeSessionPermissionsHandler(sessionManager, permissions, visibility, messageSender);
         yield return new CreateSessionCategoryHandler(sessionLayout, messageSender);
