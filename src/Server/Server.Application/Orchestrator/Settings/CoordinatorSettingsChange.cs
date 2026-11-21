@@ -26,7 +26,6 @@ public sealed record CoordinatorSettingsChange
 
     /// <summary>When not empty, only these IPs may connect.</summary>
     public IReadOnlyList<string> AllowedIps { get; init; } = [];
-    public IReadOnlyList<string> BannedIps { get; init; } = [];
 
     public int HeartbeatIntervalSeconds { get; init; }
     public int HeartbeatTimeoutSeconds { get; init; }

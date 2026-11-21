@@ -30,8 +30,10 @@ public sealed class BanRepositoryTests : IDisposable
             var migrator = db.GetService<IMigrator>();
             await migrator.MigrateAsync("PinnedChatMessages");
             var model = CoordinatorInstanceModel.Create("legacy", "0.0.0.0", 1234, DateTime.UtcNow);
-            model.SetAccessList(new AccessListSettings([], ["::ffff:192.0.2.1", "192.0.2.1", "2001:0db8::1"]));
-            await OldSchemaRows.InsertAsync(db, model.ToEntity());
+            var legacy = model.ToEntity();
+            // The old address list lives on only as a column the migration empties
+            legacy.BannedIPs = ["::ffff:192.0.2.1", "192.0.2.1", "2001:0db8::1"];
+            await OldSchemaRows.InsertAsync(db, legacy);
             await db.Database.ExecuteSqlRawAsync("""
                 INSERT INTO UserEntities (IdentityHash, Username, CoordinatorInstanceId, State, LastStatus,
                     FirstConnectionTime, LastConnectionTime)
@@ -55,7 +57,7 @@ public sealed class BanRepositoryTests : IDisposable
         await using (var db = _factory.CreateDbContext()) await db.Database.MigrateAsync();
         var repository = new BanRepository(_factory);
         var now = DateTime.UtcNow;
-        var ban = new GlobalBan(Guid.NewGuid(), "one", BanKind.Ip, 12, "192.0.2.1", "Abuse", 5, now,
+        var ban = new Ban(Guid.NewGuid(), "one", BanKind.Ip, 12, "192.0.2.1", "Abuse", 5, now,
             now.AddDays(1), UserState.Suspended);
         await repository.AddAsync(ban);
         Assert.Equal(ban, Assert.Single(await new BanRepository(_factory).GetAsync("one")));
@@ -83,7 +85,7 @@ public sealed class BanRepositoryTests : IDisposable
                 """, id, $"user{id}", coordinator.Id);
         var repository = new BanRepository(_factory);
         var now = DateTime.UtcNow;
-        var expired = new GlobalBan(Guid.NewGuid(), coordinator.Id, BanKind.Account, 101, null, "expired", 5,
+        var expired = new Ban(Guid.NewGuid(), coordinator.Id, BanKind.Account, 101, null, "expired", 5,
             now.AddDays(-2), now.AddDays(-1), UserState.Suspended);
         var revoked = expired with { Id = Guid.NewGuid(), UserId = 102, ExpiresAt = null, PreviousState = UserState.Normal };
         var active = expired with { Id = Guid.NewGuid(), UserId = 103, ExpiresAt = null };

@@ -76,7 +76,6 @@ interface Form {
   motdEnabled: boolean
   motdText: string
   allowedIps: string[]
-  bannedIps: string[]
   heartbeatInterval: number | string
   heartbeatTimeout: number | string
   maxFileSizeMb: number | string
@@ -108,7 +107,6 @@ function toForm(settings: CoordinatorSettings): Form {
     motdEnabled: settings.motd.isEnabled ?? false,
     motdText: settings.motd.text ?? '',
     allowedIps: settings.accessList.allowedIps ?? [],
-    bannedIps: settings.accessList.bannedIps ?? [],
     heartbeatInterval: settings.heartbeat.intervalSeconds ?? '',
     heartbeatTimeout: settings.heartbeat.timeoutSeconds ?? '',
     maxFileSizeMb: Math.round((settings.media.maxFileSizeBytes ?? 0) / megabyte),
@@ -147,7 +145,7 @@ function toUpdate(form: Form, expectedRevision: number): UpdateCoordinatorSettin
     maxOnlineUsers: toNumber(form.maxOnlineUsers),
     maxUsers: toNumber(form.maxUsers),
     motd: { isEnabled: form.motdEnabled, text: toOptionalText(form.motdText) },
-    accessList: { allowedIps: form.allowedIps, bannedIps: form.bannedIps },
+    accessList: { allowedIps: form.allowedIps },
     heartbeat: { intervalSeconds: toNumber(form.heartbeatInterval), timeoutSeconds: toNumber(form.heartbeatTimeout) },
     media: {
       maxFileSizeBytes: toNumber(form.maxFileSizeMb) * megabyte,

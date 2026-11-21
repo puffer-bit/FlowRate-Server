@@ -109,14 +109,13 @@ public sealed class RepositoryIntegrationTests : IDisposable
     {
         var repository = new CoordinatorInstanceRepository(_database);
         var model = CoordinatorInstanceModel.Create("node", "127.0.0.1", 26666, Now);
-        model.SetAccessList(new AccessListSettings(["192.0.2.1", "::1"], ["192.0.2.2"]));
+        model.SetAccessList(new AccessListSettings(["192.0.2.1", "::1"]));
         await repository.AddAsync(model);
-        model.SetAccessList(new AccessListSettings(["192.0.2.3"], []));
+        model.SetAccessList(new AccessListSettings(["192.0.2.3"]));
         model.MarkLaunched(Now.AddHours(1));
         await repository.UpdateAsync(model);
         var saved = (await repository.GetByIdAsync(model.Id))!;
         Assert.Equal(["192.0.2.3"], saved.AccessList.AllowedIps);
-        Assert.Empty(saved.AccessList.BannedIps);
         Assert.Equal(model.RateLimits, saved.RateLimits);
         Assert.Equal(Now.AddHours(1), saved.CurrentLaunchTime);
     }
@@ -125,7 +124,7 @@ public sealed class RepositoryIntegrationTests : IDisposable
     public async Task BansAndUploads_PreserveScopeAndStateDuringCleanup()
     {
         var bans = new BanRepository(_database);
-        var ban = new GlobalBan(Guid.NewGuid(), Coordinator, BanKind.Ip, null, "192.0.2.1", "abuse", 1,
+        var ban = new Ban(Guid.NewGuid(), Coordinator, BanKind.Ip, null, "192.0.2.1", "abuse", 1,
             Now, Now.AddDays(1), UserState.Normal);
         await bans.AddAsync(ban);
         Assert.Equal(ban, Assert.Single(await bans.GetAsync(Coordinator)));

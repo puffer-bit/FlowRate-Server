@@ -29,6 +29,7 @@ public static class RequestPolicies
         CoordinatorSetUserStatusRequest => Open,
         // Acting on oneself is refused by the handlers
         CoordinatorSetUserStateRequest request => Require(Permission.BanMembers).Against(request.TargetUserId),
+        CoordinatorBanRequest request => Require(Permission.BanMembers).Against(request.TargetUserId),
         CoordinatorBansRequest or CoordinatorRevokeBanRequest => Require(Permission.BanMembers),
         CoordinatorDeleteUserRequest request => Require(Permission.BanMembers).Against(request.TargetUserId),
         CoordinatorSettingsRequest or CoordinatorUserListRequest => Require(Permission.ViewCoordinatorSettings),

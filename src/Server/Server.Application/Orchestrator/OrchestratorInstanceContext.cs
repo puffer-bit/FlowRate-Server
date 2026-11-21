@@ -41,7 +41,6 @@ namespace Server.Application.Orchestrator
 
         // Security parameters
         public ConcurrentBag<string> AllowedIPs { get; init; } = new();
-        public ConcurrentBag<string> BannedIPs { get; init; } = new();
 
         public OrchestratorInstanceContext(IOptions<OrchestratorOptions> options)
         {

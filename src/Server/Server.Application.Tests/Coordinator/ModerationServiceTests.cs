@@ -69,8 +69,11 @@ public class ModerationServiceTests
         return connection;
     }
 
-    private CoordinatorSetUserStateRequest Ban(BanKind kind = BanKind.Account, DateTime? expires = null) =>
-        new(1, UserState.Banned, kind, "  Abuse in chat  ", expires);
+    private CoordinatorBanRequest Ban(BanKind kind = BanKind.Account, DateTime? expires = null) =>
+        new(1, kind, "  Abuse in chat  ", expires);
+
+    private async Task<ErrorCode?> BanAsync(int actor, CoordinatorBanRequest request) =>
+        (await _service.BanAsync(actor, request)).Error;
 
     private Task<LoginOutcome> Admit(IClientConnection connection, int? id = 1) =>
         _service.AdmitAsync(null, id, connection, () => Task.FromResult(
@@ -82,7 +85,7 @@ public class ModerationServiceTests
         var first = Device(1, "192.0.2.1");
         var second = Device(1, "192.0.2.8");
         var other = Device(2, "192.0.2.1");
-        Assert.Null(await _service.SetStateAsync(10, Ban()));
+        Assert.Null(await BanAsync(10, Ban()));
         var entry = Assert.Single(await _service.ListAsync());
         Assert.Equal("Abuse in chat", entry.Reason);
         Assert.Equal(10, entry.CreatedBy);
@@ -102,7 +105,7 @@ public class ModerationServiceTests
         var blocked = Device(2, "::ffff:192.0.2.1");
         var pending = Device(null, "192.0.2.1");
         var other = Device(1, "192.0.2.8");
-        Assert.Null(await _service.SetStateAsync(-1, Ban(BanKind.Ip)));
+        Assert.Null(await BanAsync(-1, Ban(BanKind.Ip)));
         Assert.NotNull(await _service.CheckAddressAsync("::ffff:192.0.2.1"));
         Assert.Null(await _service.CheckAddressAsync("192.0.2.8"));
         blocked.Verify(x => x.Close(ConnectionCloseReason.Normal), Times.Once);
@@ -118,7 +121,7 @@ public class ModerationServiceTests
     [InlineData((BanKind)99, "reason")]
     public async Task InvalidOrUnimplementedBan_IsRejectedWithoutSaving(BanKind kind, string reason)
     {
-        Assert.Equal(ErrorCode.InvalidValue, await _service.SetStateAsync(10, Ban(kind) with { Reason = reason }));
+        Assert.Equal(ErrorCode.InvalidValue, await BanAsync(10, Ban(kind) with { Reason = reason }));
         Assert.Empty(_bans.Items);
     }
 
@@ -130,7 +133,7 @@ public class ModerationServiceTests
     public async Task OptionalReason_IsStoredEmpty_AndBanStillBlocksAdmission(BanKind kind, string? reason)
     {
         var device = Device(1, "192.0.2.1");
-        Assert.Null(await _service.SetStateAsync(10, Ban(kind) with { Reason = reason }));
+        Assert.Null(await BanAsync(10, Ban(kind) with { Reason = reason }));
         Assert.Equal(string.Empty, Assert.Single(_bans.Items).Reason);
         var denied = await Admit(device.Object);
         Assert.Equal(ErrorCode.Banned, denied.Error);
@@ -141,15 +144,15 @@ public class ModerationServiceTests
     [Fact]
     public async Task OversizedReason_IsRejectedWithoutSaving()
     {
-        Assert.Equal(ErrorCode.InvalidValue, await _service.SetStateAsync(10, Ban() with { Reason = new string('a', 1001) }));
+        Assert.Equal(ErrorCode.InvalidValue, await BanAsync(10, Ban() with { Reason = new string('a', 1001) }));
         Assert.Empty(_bans.Items);
     }
 
     [Fact]
     public async Task InvalidExpiryAndUnknownIp_AreRejected()
     {
-        Assert.Equal(ErrorCode.InvalidValue, await _service.SetStateAsync(10, Ban(expires: _time.GetUtcNow().UtcDateTime)));
-        Assert.Equal(ErrorCode.InvalidValue, await _service.SetStateAsync(10, Ban(BanKind.Ip) with { Address = "invalid" }));
+        Assert.Equal(ErrorCode.InvalidValue, await BanAsync(10, Ban(expires: _time.GetUtcNow().UtcDateTime)));
+        Assert.Equal(ErrorCode.InvalidValue, await BanAsync(10, Ban(BanKind.Ip) with { Address = "invalid" }));
         Assert.Empty(_bans.Items);
     }
 
@@ -157,7 +160,7 @@ public class ModerationServiceTests
     public async Task Expiration_RestoresFrozenState_AndDeletesTheBan()
     {
         _models[1].Suspend();
-        Assert.Null(await _service.SetStateAsync(10, Ban(expires: _time.GetUtcNow().UtcDateTime.AddHours(1))));
+        Assert.Null(await BanAsync(10, Ban(expires: _time.GetUtcNow().UtcDateTime.AddHours(1))));
         _time.Advance(TimeSpan.FromHours(1));
         Assert.Null((await Admit(Device(1, "192.0.2.1").Object)).Error);
         Assert.Equal(UserState.Suspended, _models[1].State);
@@ -168,24 +171,27 @@ public class ModerationServiceTests
     [Fact]
     public async Task Revoke_DeletesTheBan_AndRestoresState()
     {
-        Assert.Null(await _service.SetStateAsync(10, Ban()));
+        Assert.Null(await BanAsync(10, Ban()));
         var ban = Assert.Single(await _service.ListAsync());
         Assert.Null(await _service.RevokeAsync(10, ban.Id));
         _time.Advance(TimeSpan.FromMinutes(1));
-        Assert.Equal(ErrorCode.UserNotFound, await _service.RevokeAsync(10, ban.Id));
+        Assert.Equal(ErrorCode.BanNotFound, await _service.RevokeAsync(10, ban.Id));
         Assert.Empty(await _service.ListAsync());
         Assert.Empty(_bans.Items);
         Assert.False(_models[1].IsBanned);
     }
 
     [Fact]
-    public async Task LegacyUnbanAction_AlsoRestoresPreviousFreeze_AndRefreshesTheIpCache()
+    public async Task RevokingAnAccountBan_RestoresPreviousFreeze_AndStateChangesDoNotLiftIt()
     {
         _models[1].Suspend();
-        Assert.Null(await _service.SetStateAsync(10, Ban()));
-        Assert.Null(await _service.SetStateAsync(10, new CoordinatorSetUserStateRequest(1, UserState.Normal)));
+        Assert.Null(await BanAsync(10, Ban()));
+        Assert.Equal(ErrorCode.Conflict, await _service.SetStateAsync(10, new CoordinatorSetUserStateRequest(1, UserState.Normal)));
+        Assert.Equal(ErrorCode.Conflict, await _service.SetStateAsync(10, new CoordinatorSetUserStateRequest(1, UserState.Suspended)));
+        Assert.True(_models[1].IsBanned);
+        Assert.Null(await _service.RevokeAsync(10, Assert.Single(await _service.ListAsync()).Id));
         Assert.Equal(UserState.Suspended, _models[1].State);
-        Assert.Null(await _service.SetStateAsync(10, Ban(BanKind.Ip)));
+        Assert.Null(await BanAsync(10, Ban(BanKind.Ip)));
         Assert.NotNull(await _service.CheckAddressAsync("192.0.2.1"));
         var entry = Assert.Single(await _service.ListAsync());
         Assert.Null(await _service.RevokeAsync(10, entry.Id));
@@ -196,11 +202,11 @@ public class ModerationServiceTests
     public async Task SharedIp_CannotBeUsedToBanYourselfOrAHigherRole()
     {
         AddUser(10, "192.0.2.1");
-        Assert.Equal(ErrorCode.InsufficientPermissions, await _service.SetStateAsync(10, Ban(BanKind.Ip)));
+        Assert.Equal(ErrorCode.InsufficientPermissions, await BanAsync(10, Ban(BanKind.Ip)));
         _models.Remove(10);
         _permissions.Setup(x => x.HighestPositionOfAsync(2)).ReturnsAsync(6);
         Device(2, "192.0.2.1");
-        Assert.Equal(ErrorCode.InsufficientPermissions, await _service.SetStateAsync(10, Ban(BanKind.Ip)));
+        Assert.Equal(ErrorCode.InsufficientPermissions, await BanAsync(10, Ban(BanKind.Ip)));
         Assert.Empty(_bans.Items);
     }
 
@@ -217,7 +223,7 @@ public class ModerationServiceTests
             return new LoginOutcome(null, _models[1], null, AttachUserResult.Attached, "token");
         });
         await entered.Task;
-        var ban = _service.SetStateAsync(10, Ban());
+        var ban = BanAsync(10, Ban());
         Assert.False(ban.IsCompleted);
         release.SetResult();
         await login;
@@ -231,23 +237,23 @@ public class ModerationServiceTests
     [Fact]
     public async Task Restart_StillChecksPersistedBans_AndRevokeCannotCrossCoordinators()
     {
-        Assert.Null(await _service.SetStateAsync(10, Ban(BanKind.Ip)));
+        Assert.Null(await BanAsync(10, Ban(BanKind.Ip)));
         var id = Assert.Single(_bans.Items).Id;
         var restarted = new ModerationService(Coordinator, _bans, _repository.Object, _users.Object,
             _connections.Object, Mock.Of<IHybridSessionManager>(), _permissions.Object, _time, NullLogger.Instance);
         Assert.NotNull(await restarted.CheckAddressAsync("192.0.2.1"));
         var other = new ModerationService("other", _bans, _repository.Object, _users.Object,
             _connections.Object, Mock.Of<IHybridSessionManager>(), _permissions.Object, _time, NullLogger.Instance);
-        Assert.Equal(ErrorCode.UserNotFound, await other.RevokeAsync(-1, id));
+        Assert.Equal(ErrorCode.BanNotFound, await other.RevokeAsync(-1, id));
         Assert.NotNull(await restarted.CheckAddressAsync("192.0.2.1"));
     }
 
     private class MemoryBans : IBanRepository
     {
-        public List<GlobalBan> Items { get; } = [];
-        public Task<List<GlobalBan>> GetAsync(string coordinatorId, CancellationToken ct = default) =>
+        public List<Ban> Items { get; } = [];
+        public Task<List<Ban>> GetAsync(string coordinatorId, CancellationToken ct = default) =>
             Task.FromResult(Items.Where(x => x.CoordinatorId == coordinatorId).ToList());
-        public Task AddAsync(GlobalBan ban, CancellationToken ct = default) { Items.Add(ban); return Task.CompletedTask; }
+        public Task AddAsync(Ban ban, CancellationToken ct = default) { Items.Add(ban); return Task.CompletedTask; }
         public Task DeleteAsync(string coordinatorId, Guid id, CancellationToken ct = default)
         {
             Items.RemoveAll(x => x.CoordinatorId == coordinatorId && x.Id == id);

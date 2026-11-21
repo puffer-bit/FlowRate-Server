@@ -3,7 +3,7 @@ using Shared.Enums.User;
 
 namespace Server.Core.Models.Moderation;
 
-public record GlobalBan(Guid Id, string CoordinatorId, BanKind Kind, int? UserId, string? Address,
+public record Ban(Guid Id, string CoordinatorId, BanKind Kind, int? UserId, string? Address,
     string Reason, int CreatedBy, DateTime CreatedAt, DateTime? ExpiresAt,
     UserState PreviousState = UserState.Normal)
 {

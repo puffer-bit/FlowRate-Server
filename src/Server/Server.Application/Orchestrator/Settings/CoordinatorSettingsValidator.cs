@@ -47,8 +47,6 @@ public static class CoordinatorSettingsValidator
                 $"The message cannot be longer than {Limits.MOTDTextMaxLength} characters.");
 
         ValidateIps(errors, CoordinatorSettingsFields.AllowedIps, change.AllowedIps);
-        if (change.BannedIps.Count > 0)
-            errors.Add(CoordinatorSettingsFields.BannedIps, "Create a global IP ban with a reason instead.");
 
         if (change.HeartbeatIntervalSeconds is < 1 or > MaxHeartbeatSeconds)
             errors.Add(CoordinatorSettingsFields.HeartbeatInterval,
@@ -163,7 +161,6 @@ public static class CoordinatorSettingsFields
     public const string MaxUsers = "MaxUsers";
     public const string MotdText = "Motd.Text";
     public const string AllowedIps = "AccessList.AllowedIps";
-    public const string BannedIps = "AccessList.BannedIps";
     public const string HeartbeatInterval = "Heartbeat.IntervalSeconds";
     public const string HeartbeatTimeout = "Heartbeat.TimeoutSeconds";
     public const string MaxFileSize = "Media.MaxFileSizeBytes";

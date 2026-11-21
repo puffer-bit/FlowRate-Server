@@ -137,7 +137,6 @@ public sealed class AccessListSettingsDto
 {
     /// <summary>When not empty, only these IPs may connect.</summary>
     public IReadOnlyList<string> AllowedIps { get; init; } = [];
-    public IReadOnlyList<string> BannedIps { get; init; } = [];
 }
 
 public sealed class HeartbeatSettingsDto

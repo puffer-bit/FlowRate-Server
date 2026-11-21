@@ -174,8 +174,8 @@ public class RequestAuthorizerTests
     [Fact]
     public async Task BanOrDeleteUser_NeedsBanMembers_AndAHigherRole()
     {
-        Assert.False(await _authorizer.IsAllowedAsync(From(PlainId, new CoordinatorSetUserStateRequest(HostId, UserState.Banned))));
-        Assert.True(await _authorizer.IsAllowedAsync(From(AdminId, new CoordinatorSetUserStateRequest(PlainId, UserState.Banned))));
+        Assert.False(await _authorizer.IsAllowedAsync(From(PlainId, new CoordinatorBanRequest(HostId, BanKind.Account))));
+        Assert.True(await _authorizer.IsAllowedAsync(From(AdminId, new CoordinatorBanRequest(PlainId, BanKind.Account))));
         Assert.True(await _authorizer.IsAllowedAsync(From(AdminId, new CoordinatorDeleteUserRequest(PlainId))));
         Assert.False(await _authorizer.IsAllowedAsync(From(PlainId, new CoordinatorDeleteUserRequest(HostId))));
     }

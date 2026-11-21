@@ -88,7 +88,7 @@ public class GatewayService : IGatewayService
 
         app.Use(async (context, next) =>
         {
-            var ip = Server.Core.Models.Moderation.GlobalBan.NormalizeAddress(context.Connection.RemoteIpAddress?.ToString()) ?? "";
+            var ip = Server.Core.Models.Moderation.Ban.NormalizeAddress(context.Connection.RemoteIpAddress?.ToString()) ?? "";
             if (CheckAddress != null && await CheckAddress(ip) is { } reason)
             {
                 context.Response.StatusCode = StatusCodes.Status403Forbidden;

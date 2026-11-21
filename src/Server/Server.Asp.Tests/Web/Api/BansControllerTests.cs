@@ -36,7 +36,7 @@ public class BansControllerTests
     public async Task OfflineBans_AreScoped_AndOnlyReturnActiveEntries()
     {
         var now = DateTime.UtcNow;
-        var active = new GlobalBan(Guid.NewGuid(), _coordinator.Id, BanKind.Account, 1, null, "Active reason", 2, now, null);
+        var active = new Ban(Guid.NewGuid(), _coordinator.Id, BanKind.Account, 1, null, "Active reason", 2, now, null);
         var expired = active with { Id = Guid.NewGuid(), Reason = "Expired reason", ExpiresAt = now.AddHours(-1) };
         _repository.Setup(x => x.GetAsync(_coordinator.Id, default)).ReturnsAsync([active, expired]);
         var current = await _controller.Get(_coordinator.Id);
@@ -52,7 +52,7 @@ public class BansControllerTests
         var revoke = Assert.IsType<ObjectResult>(await _controller.Revoke(_coordinator.Id, Guid.NewGuid()));
         Assert.Equal(409, create.StatusCode);
         Assert.Equal(409, revoke.StatusCode);
-        _repository.Verify(x => x.AddAsync(It.IsAny<GlobalBan>(), default), Times.Never);
+        _repository.Verify(x => x.AddAsync(It.IsAny<Ban>(), default), Times.Never);
     }
 
     [Theory]
@@ -61,9 +61,9 @@ public class BansControllerTests
     [InlineData("   ", "")]
     public async Task PanelCreate_UsesTheSameModerationService_AndRecordsReasonExpiryAndSystemActor(string? reason, string expected)
     {
-        var entries = new List<GlobalBan>();
+        var entries = new List<Ban>();
         _repository.Setup(x => x.GetAsync(_coordinator.Id, default)).ReturnsAsync(() => entries.ToList());
-        _repository.Setup(x => x.AddAsync(It.IsAny<GlobalBan>(), default)).Callback((GlobalBan ban, CancellationToken _) => entries.Add(ban)).Returns(Task.CompletedTask);
+        _repository.Setup(x => x.AddAsync(It.IsAny<Ban>(), default)).Callback((Ban ban, CancellationToken _) => entries.Add(ban)).Returns(Task.CompletedTask);
         var user = UserModel.Create(_coordinator.Id, "alice", "192.0.2.1", DateTime.UtcNow);
         user.Id = 1;
         var users = new Mock<IUserManager>();

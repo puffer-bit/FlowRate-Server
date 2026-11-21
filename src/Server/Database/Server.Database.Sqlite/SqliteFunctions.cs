@@ -18,7 +18,7 @@ public static class SqliteFunctions
     {
         if (connection is SqliteConnection sqlite)
         {
-            sqlite.CreateFunction("normalize_ip", (string? value) => Server.Core.Models.Moderation.GlobalBan.NormalizeAddress(value), isDeterministic: true);
+            sqlite.CreateFunction("normalize_ip", (string? value) => Server.Core.Models.Moderation.Ban.NormalizeAddress(value), isDeterministic: true);
             sqlite.CreateFunction("sha256", (string? text) =>
                 text == null ? null : SHA256.HashData(Encoding.UTF8.GetBytes(text)), isDeterministic: true);
         }

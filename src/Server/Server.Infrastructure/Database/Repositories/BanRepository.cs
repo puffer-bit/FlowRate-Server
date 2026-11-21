@@ -8,15 +8,15 @@ namespace Server.Infrastructure.Database.Repositories;
 
 public class BanRepository(IDbContextFactory<ServerDbContext> factory) : IBanRepository
 {
-    public async Task<List<GlobalBan>> GetAsync(string coordinatorId, CancellationToken ct = default)
+    public async Task<List<Ban>> GetAsync(string coordinatorId, CancellationToken ct = default)
     {
         await using var db = await factory.CreateDbContextAsync(ct);
         return (await db.GlobalBans.AsNoTracking().Where(x => x.CoordinatorId == coordinatorId)
-            .OrderByDescending(x => x.CreatedAt).ToListAsync(ct)).Select(x => new GlobalBan(x.Id, x.CoordinatorId,
+            .OrderByDescending(x => x.CreatedAt).ToListAsync(ct)).Select(x => new Ban(x.Id, x.CoordinatorId,
             x.Kind, x.UserId, x.Address, x.Reason, x.CreatedBy, x.CreatedAt, x.ExpiresAt, x.PreviousState)).ToList();
     }
 
-    public async Task AddAsync(GlobalBan ban, CancellationToken ct = default)
+    public async Task AddAsync(Ban ban, CancellationToken ct = default)
     {
         await using var db = await factory.CreateDbContextAsync(ct);
         db.GlobalBans.Add(new BanEntity { Id = ban.Id, CoordinatorId = ban.CoordinatorId, Kind = ban.Kind,

@@ -1,20 +1,19 @@
+using Server.Core.Models.Moderation;
+
 namespace Server.Core.Models.Coordinator.Settings;
 
 public sealed record AccessListSettings
 {
-    public static AccessListSettings Open { get; } = new([], []);
+    public static AccessListSettings Open { get; } = new([]);
 
-    /// <summary>When not empty, only these IPs may connect.</summary>
+    /// <summary>When not empty, only these IPs may connect. Addresses kept out are bans.</summary>
     public IReadOnlyList<string> AllowedIps { get; }
-    public IReadOnlyList<string> BannedIps { get; }
 
-    public AccessListSettings(IEnumerable<string> allowedIps, IEnumerable<string> bannedIps)
+    public AccessListSettings(IEnumerable<string> allowedIps)
     {
         AllowedIps = allowedIps.ToList();
-        BannedIps = bannedIps.ToList();
     }
 
     public bool IsAllowed(string ip) =>
-        !BannedIps.Any(value => Server.Core.Models.Moderation.GlobalBan.NormalizeAddress(value) == Server.Core.Models.Moderation.GlobalBan.NormalizeAddress(ip))
-        && (AllowedIps.Count == 0 || AllowedIps.Any(value => Server.Core.Models.Moderation.GlobalBan.NormalizeAddress(value) == Server.Core.Models.Moderation.GlobalBan.NormalizeAddress(ip)));
+        AllowedIps.Count == 0 || AllowedIps.Any(value => Ban.NormalizeAddress(value) == Ban.NormalizeAddress(ip));
 }

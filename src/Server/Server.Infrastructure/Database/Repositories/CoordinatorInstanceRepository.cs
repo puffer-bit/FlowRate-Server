@@ -64,7 +64,6 @@ public class CoordinatorInstanceRepository : ICoordinatorInstanceRepository
         var updated = model.ToEntity();
         context.Entry(entity).CurrentValues.SetValues(updated);
         entity.AllowedIPs = updated.AllowedIPs;
-        entity.BannedIPs = updated.BannedIPs;
 
         entity.SfuNodes.Clear();
         entity.SfuNodes.AddRange(await LoadSfuNodesAsync(context, model.SfuNodeIds, cancellationToken));

@@ -350,6 +350,7 @@ public class CoordinatorInstanceFactory : ICoordinatorInstanceFactory
         yield return new SetUserStateHandler(messageSender, userManager, moderation);
         yield return new BansHandler(messageSender, moderation);
         yield return new RevokeBanHandler(messageSender, moderation);
+        yield return new BanHandler(messageSender, userManager, moderation);
         yield return new DeleteUserHandler(logger, messageSender, userManager, connectionManager);
         yield return ActivatorUtilities.CreateInstance<RegisterPushTokenHandler>(_provider, logger, messageSender, coordinatorInstanceId);
         yield return ActivatorUtilities.CreateInstance<UnregisterPushTokenHandler>(_provider, logger, messageSender, coordinatorInstanceId);

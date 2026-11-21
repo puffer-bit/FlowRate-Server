@@ -20,7 +20,7 @@ public static class CoordinatorSettingsContractsMapper
         model.MaxOnlineUsers,
         model.MaxUsers,
         new MotdSettingsDto { IsEnabled = model.Motd.IsEnabled, Text = model.Motd.Text },
-        new AccessListSettingsDto { AllowedIps = model.AccessList.AllowedIps, BannedIps = model.AccessList.BannedIps },
+        new AccessListSettingsDto { AllowedIps = model.AccessList.AllowedIps },
         new HeartbeatSettingsDto
         {
             IntervalSeconds = model.Heartbeat.IntervalSeconds, TimeoutSeconds = model.Heartbeat.TimeoutSeconds
@@ -89,7 +89,6 @@ public static class CoordinatorSettingsContractsMapper
         IsMotdEnabled = settings.Motd.IsEnabled,
         MotdText = settings.Motd.Text,
         AllowedIps = settings.AccessList.AllowedIps,
-        BannedIps = settings.AccessList.BannedIps,
         HeartbeatIntervalSeconds = settings.Heartbeat.IntervalSeconds,
         HeartbeatTimeoutSeconds = settings.Heartbeat.TimeoutSeconds,
         MaxFileSizeBytes = settings.Media.MaxFileSizeBytes,

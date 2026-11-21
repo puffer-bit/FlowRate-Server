@@ -15,7 +15,7 @@ public static class CoordinatorEntityMapper
             entity.CreateTime, entity.FirstLaunchTime, entity.CurrentLaunchTime,
             entity.MaxOnlineUsers, entity.MaxUsers,
             new MotdSettings(entity.IsMOTDEnabled, entity.MotdText),
-            new AccessListSettings(entity.AllowedIPs, entity.BannedIPs),
+            new AccessListSettings(entity.AllowedIPs),
             new CoordinatorHeartbeatSettings(entity.HeartbeatIntervalSeconds, entity.HeartbeatTimeoutSeconds),
             new CoordinatorMediaSettings(entity.MediaMaxFileSizeBytes, entity.MediaStorageQuotaBytes,
                 entity.MediaImageMaxSide, entity.MediaImageQuality, entity.MediaAllowOriginalImages,
@@ -49,7 +49,6 @@ public static class CoordinatorEntityMapper
             IsMOTDEnabled = model.Motd.IsEnabled,
             MotdText = model.Motd.Text,
             AllowedIPs = model.AccessList.AllowedIps.ToList(),
-            BannedIPs = model.AccessList.BannedIps.ToList(),
 
             HeartbeatIntervalSeconds = model.Heartbeat.IntervalSeconds,
             HeartbeatTimeoutSeconds = model.Heartbeat.TimeoutSeconds,

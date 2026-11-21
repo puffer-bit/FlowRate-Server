@@ -111,7 +111,7 @@ public class CoordinatorSettingsService : ICoordinatorSettingsService
         model.SetUserLimits(change.MaxOnlineUsers, change.MaxUsers);
         model.SetMotd(new MotdSettings(change.IsMotdEnabled,
             string.IsNullOrWhiteSpace(change.MotdText) ? null : change.MotdText.Trim()));
-        model.SetAccessList(new AccessListSettings(change.AllowedIps.Distinct(), change.BannedIps.Distinct()));
+        model.SetAccessList(new AccessListSettings(change.AllowedIps.Distinct()));
         model.SetHeartbeat(new CoordinatorHeartbeatSettings(change.HeartbeatIntervalSeconds,
             change.HeartbeatTimeoutSeconds));
 

@@ -1095,7 +1095,6 @@ export interface components {
     schemas: {
         AccessListSettingsDto: {
             allowedIps?: string[];
-            bannedIps?: string[];
         };
         BanDTO: {
             /** Format: uuid */

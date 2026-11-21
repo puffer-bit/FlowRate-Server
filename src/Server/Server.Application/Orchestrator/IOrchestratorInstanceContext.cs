@@ -36,7 +36,6 @@ namespace Server.Application.Orchestrator {
         
         // Security parametrs
         ConcurrentBag<string> AllowedIPs { get; init; }
-        ConcurrentBag<string> BannedIPs { get; init; }
         
         // DB actions
         void CreateContext();

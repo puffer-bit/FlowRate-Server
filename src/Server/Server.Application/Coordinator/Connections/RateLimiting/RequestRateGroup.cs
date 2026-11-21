@@ -112,7 +112,7 @@ public sealed class RequestRateLimits
         ApproveUserRequest or RejectUserRequest or KickFromSessionRequest or HybridSessionMovePeerRequest
             or CoordinatorCreateRoleRequest or CoordinatorUpdateRoleRequest or CoordinatorDeleteRoleRequest
             or CoordinatorReorderRolesRequest or CoordinatorAssignRoleRequest or CoordinatorUnassignRoleRequest
-            or CoordinatorSetUserStateRequest or CoordinatorDeleteUserRequest or CoordinatorRevokeBanRequest
+            or CoordinatorSetUserStateRequest or CoordinatorBanRequest or CoordinatorDeleteUserRequest or CoordinatorRevokeBanRequest
             => RequestRateGroup.Moderation,
         SetMessagePinnedRequest or SendMessageRequest or SetMessageReactionRequest or EditMessageRequest or DeleteMessageRequest or ChatTypingRequest
             or HybridSessionPokeRequest => RequestRateGroup.ChatWrite,
