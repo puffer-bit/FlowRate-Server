@@ -1,4 +1,5 @@
 using Server.Core.Models.User;
+using Shared.Enums.User;
 using Shared.Models.DataTransferObjects;
 
 namespace Server.Application.Mappers;
@@ -26,9 +27,14 @@ public static class UserMapperExtensions
             AvatarUrl = entity.AvatarUrl,
             State = entity.State,
             Status = entity.Id == viewerId ? entity.Status : entity.Presence,
+            // Like the status: an invisible user must not show where they are connected from
+            Device = entity.Id == viewerId || entity.Presence != UserStatus.Offline ? entity.Device?.ToDto() : null,
             FirstConnectedAt = entity.FirstConnectionTime,
             LastConnectedAt = entity.LastConnectionTime,
             RoleIds = entity.RoleIds.Order().ToList()
         };
     }
+
+    public static UserDeviceDTO ToDto(this UserDevice device) =>
+        new(device.Platform, device.OsVersion, device.Architecture, device.AppVersion);
 }

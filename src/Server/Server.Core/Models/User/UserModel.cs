@@ -1,4 +1,5 @@
 using Shared.Enums.User;
+using Shared.Models.DataTransferObjects;
 
 namespace Server.Core.Models.User;
 
@@ -26,6 +27,29 @@ public sealed class UserModel
 
     /// <summary>The status others see: offline while the user is not connected or invisible.</summary>
     public UserStatus Presence => IsConnected && Status != UserStatus.Invisible ? Status : UserStatus.Offline;
+
+    /// <summary>
+    /// The device others see, among the connections open now: a phone first, since one is connected only while it is
+    /// used, unlike a computer left on; otherwise the device connected last. Null while not connected. Not saved.
+    /// </summary>
+    public UserDevice? Device
+    {
+        get
+        {
+            lock (_devices)
+            {
+                for (var i = _devices.Count - 1; i >= 0; i--)
+                {
+                    if (DevicePlatforms.IsMobile(_devices[i].Device.Platform))
+                        return _devices[i].Device;
+                }
+                return _devices.Count == 0 ? null : _devices[^1].Device;
+            }
+        }
+    }
+
+    // The devices of the open connections, the last connected at the end
+    private readonly List<(string ConnectionId, UserDevice Device)> _devices = [];
 
     public DateTimeOffset FirstConnectionTime { get; }
     public DateTimeOffset LastConnectionTime { get; private set; }
@@ -76,7 +100,36 @@ public sealed class UserModel
         LastConnectionTime = now;
     }
 
-    public void SetConnected(bool connected) => IsConnected = connected;
+    public void SetConnected(bool connected)
+    {
+        IsConnected = connected;
+        if (!connected)
+            lock (_devices) _devices.Clear();
+    }
+
+    /// <summary>The connection the user connected on has this device; true when <see cref="Device"/> changed.</summary>
+    public bool AddDevice(string connectionId, UserDevice? device)
+    {
+        lock (_devices)
+        {
+            var before = Device;
+            _devices.RemoveAll(entry => entry.ConnectionId == connectionId);
+            if (device != null)
+                _devices.Add((connectionId, device));
+            return before != Device;
+        }
+    }
+
+    /// <summary>The connection closed; true when <see cref="Device"/> changed.</summary>
+    public bool RemoveDevice(string connectionId)
+    {
+        lock (_devices)
+        {
+            var before = Device;
+            _devices.RemoveAll(entry => entry.ConnectionId == connectionId);
+            return before != Device;
+        }
+    }
 
     public void SetStatus(UserStatus status)
     {

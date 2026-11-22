@@ -128,6 +128,7 @@ public class UserManager : IUserManager
             return UserAttachment.Rejected(AttachUserResult.Banned);
 
         bool cameOnline;
+        var deviceChanged = false;
         lock (_attachLock)
         {
             // Closed while the user was looked up: its close had no user to detach, so none is attached
@@ -164,11 +165,17 @@ public class UserManager : IUserManager
                 attached!.MarkConnected(clientConnection.IpEndpoint, DateTimeOffset.UtcNow);
                 user = attached;
             }
+
+            // The device connected last is the one others see
+            if (!user.IsSystem)
+                deviceChanged = user.AddDevice(clientConnection.ConnectionId, clientConnection.Device);
         }
 
         // Raised once the connection is the user's, so what is sent to the user reaches it
         if (cameOnline)
             UserConnected?.Invoke(user);
+        else if (deviceChanged)
+            UserUpdated?.Invoke(user);
         if (!user.IsSystem)
             _logger.LogTrace("User with id {Id} connected on {ConnectionId}.", user.Id, clientConnection.ConnectionId);
 
@@ -356,7 +363,8 @@ public class UserManager : IUserManager
 
     public bool DetachConnection(IClientConnection connection, string reason)
     {
-        UserModel? user;
+        UserModel? user = null;
+        UserModel? stillConnected = null;
         lock (_attachLock)
         {
             if (connection.UserId is not { } userId
@@ -364,17 +372,29 @@ public class UserManager : IUserManager
                 || !connections.Contains(connection.ConnectionId))
                 return false;
 
-            // Still connected from another device
+            // Still connected from another device, which others may see now
             if (connections.Length > 1)
             {
                 _connections.UserConnections[userId] = connections.Where(id => id != connection.ConnectionId).ToArray();
-                return false;
+                if (_context.AttachedUsers.TryGetValue(userId, out var attached)
+                    && attached.RemoveDevice(connection.ConnectionId))
+                    stillConnected = attached;
             }
-
-            _connections.UserConnections.TryRemove(userId, out _);
-            if (!_context.AttachedUsers.TryRemove(userId, out user))
-                return false;
+            else
+            {
+                _connections.UserConnections.TryRemove(userId, out _);
+                if (!_context.AttachedUsers.TryRemove(userId, out user))
+                    return false;
+            }
         }
+
+        if (stillConnected != null)
+        {
+            UserUpdated?.Invoke(stillConnected);
+            return false;
+        }
+        if (user == null)
+            return false;
 
         OnDetached(user, reason);
         return true;

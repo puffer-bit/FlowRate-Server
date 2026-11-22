@@ -193,6 +193,7 @@ public class MessageRouterGuardTests
         public string ConnectionId { get; } = connectionId;
         public int? UserId { get; set; }
         public Guid? UserSessionId { get; set; }
+        public Server.Core.Models.User.UserDevice? Device { get; set; }
         public string IpEndpoint { get; } = ip;
         public bool IsAvailable => CloseReason == null;
         public bool IsClosed => CloseReason != null;
