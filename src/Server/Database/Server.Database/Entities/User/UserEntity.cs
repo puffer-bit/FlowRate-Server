@@ -37,9 +37,9 @@ namespace Server.Database.Entities
         public string? AvatarUrl { get; set; }
         public UserState State { get; set; }
         public UserStatus LastStatus { get; set; }
-        public DateTime FirstConnectionTime { get; set; }
-        public DateTime LastConnectionTime { get; set; }
-        public TimeSpan ConnectionTime => DateTime.UtcNow - LastConnectionTime;
+        public DateTimeOffset FirstConnectionTime { get; set; }
+        public DateTimeOffset LastConnectionTime { get; set; }
+        public TimeSpan ConnectionTime => DateTimeOffset.UtcNow - LastConnectionTime;
         
         public UserSecurityDataEntity SecurityData { get; set; } = null!;
 

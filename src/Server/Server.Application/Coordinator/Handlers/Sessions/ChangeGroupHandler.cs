@@ -29,7 +29,7 @@ public sealed class ChangeGroupHandler(IChatSessionManager chats, IUserManager u
             }
         }
         result ??= await chats.ChangeGroupAsync(request.SessionId, request.Name.Trim(), request.MemberIds,
-            request.OwnerId, request.SenderId, leave: false);
+            request.OwnerUserId, request.SenderId, leave: false);
         sender.SendMessageById(connectionId, request.Answer(result, request.ToResponse));
         return HandleMessageResult.NoError;
     }

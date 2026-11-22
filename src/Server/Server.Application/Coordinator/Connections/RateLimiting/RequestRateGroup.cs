@@ -100,8 +100,8 @@ public sealed class RequestRateLimits
             => RequestRateGroup.SessionManagement,
         CreateSessionCategoryRequest or RenameSessionCategoryRequest or DeleteSessionCategoryRequest
             or MoveSessionRequest or MoveSessionCategoryRequest => RequestRateGroup.SessionLayout,
-        JoinSessionRequest or LeaveSessionRequest
-            or HybridSessionJoinRequest or HybridSessionLeaveRequest or HybridSessionConnectTransportRequest
+        LeaveSessionRequest
+            or HybridSessionJoinRequest or HybridSessionConnectTransportRequest
             or HybridSessionStartVoiceRequest or HybridSessionStopVoiceRequest
             or HybridSessionStartVideoRequest or HybridSessionStopVideoRequest
             or HybridSessionStartScreenShareRequest or HybridSessionStopScreenShareRequest
@@ -116,7 +116,7 @@ public sealed class RequestRateLimits
             => RequestRateGroup.Moderation,
         SetMessagePinnedRequest or SendMessageRequest or SetMessageReactionRequest or EditMessageRequest or DeleteMessageRequest or ChatTypingRequest
             or HybridSessionPokeRequest => RequestRateGroup.ChatWrite,
-        ChatPinnedMessagesRequest or ChatHistoryWindowRequest or ChatSessionHistoryRequest or ChatSessionMessageRequest or ChatSessionHistoryPageRequest
+        ChatPinnedMessagesRequest or ChatHistoryWindowRequest or ChatSessionMessageRequest or ChatSessionHistoryPageRequest
             or ChatSessionChangesRequest or ChatReadStatesRequest or ChatMarkReadRequest or ChatViewersRequest
             or ChatMessageReadersRequest or ChatLinkPreviewRequest => RequestRateGroup.ChatRead,
         RegisterPushTokenRequest or UnregisterPushTokenRequest => RequestRateGroup.PushRegistration,

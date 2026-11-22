@@ -20,6 +20,6 @@ public class MediaUploadEntity
 
     public long Size { get; set; }
     public MediaUploadState State { get; set; }
-    public DateTime CreatedAt { get; set; }
+    public DateTimeOffset CreatedAt { get; set; }
     public int? MessageId { get; set; }
 }

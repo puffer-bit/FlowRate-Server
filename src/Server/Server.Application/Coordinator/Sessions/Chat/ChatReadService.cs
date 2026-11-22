@@ -117,7 +117,7 @@ public sealed class ChatReadService : IEventHandler<ChatSessionMessageAddedEvent
         CancellationToken ct)
     {
         var receipts = chat.Kind != ChatKind.ServerChannel;
-        var now = _time.GetUtcNow().UtcDateTime;
+        var now = _time.GetUtcNow();
         var move = await _repository.MoveAsync(userId, chatId, messageId, receipts ? now : null, ct);
 
         if (receipts && move.Moved)

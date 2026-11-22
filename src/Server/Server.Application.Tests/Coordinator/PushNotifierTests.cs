@@ -36,7 +36,7 @@ public class PushNotifierTests
 
     public PushNotifierTests()
     {
-        ChatSessionModel? chat = new(ChatId, CoordinatorId, "general", 10, AuthorId, AuthorId, ChatSessionOptions.Default);
+        ChatSessionModel? chat = new(ChatId, CoordinatorId, "general", AuthorId, AuthorId, ChatSessionOptions.Default);
         _chats.Setup(c => c.TryGetSession(ChatId, out chat)).Returns(true);
 
         UserModel? online = User(OnlineUserId, "carol");
@@ -54,14 +54,14 @@ public class PushNotifierTests
     }
 
     private static UserModel User(int id, string name) =>
-        new(id, CoordinatorId, name, UserState.Normal, UserStatus.Online, DateTime.UtcNow, DateTime.UtcNow);
+        new(id, CoordinatorId, name, UserState.Normal, UserStatus.Online, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow);
 
     private static PushDeviceModel Device(int userId, string token) =>
         new(CoordinatorId, userId, token, PushPlatform.Android, "0123456789abcdef0123456789abcdef", Key);
 
     private static ChatMessageModel Message(string text, bool system = false)
     {
-        var message = ChatMessageModel.Create(ChatId, AuthorId, new DateTime(2026, 10, 13, 9, 0, 0, DateTimeKind.Utc),
+        var message = ChatMessageModel.Create(ChatId, AuthorId, new DateTimeOffset(2026, 10, 13, 9, 0, 0, TimeSpan.Zero),
             new ChatTextContentModel { Text = text });
         message.Id = 42;
         return system ? Clone(message) : message;

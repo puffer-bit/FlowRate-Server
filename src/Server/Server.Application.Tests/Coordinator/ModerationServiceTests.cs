@@ -55,7 +55,7 @@ public class ModerationServiceTests
 
     private void AddUser(int id, string ip)
     {
-        var user = UserModel.Create(Coordinator, $"user{id}", ip, _time.GetUtcNow().UtcDateTime);
+        var user = UserModel.Create(Coordinator, $"user{id}", ip, _time.GetUtcNow());
         user.Id = id;
         _models[id] = user;
     }
@@ -69,7 +69,7 @@ public class ModerationServiceTests
         return connection;
     }
 
-    private CoordinatorBanRequest Ban(BanKind kind = BanKind.Account, DateTime? expires = null) =>
+    private CoordinatorBanRequest Ban(BanKind kind = BanKind.Account, DateTimeOffset? expires = null) =>
         new(1, kind, "  Abuse in chat  ", expires);
 
     private async Task<ErrorCode?> BanAsync(int actor, CoordinatorBanRequest request) =>
@@ -151,7 +151,7 @@ public class ModerationServiceTests
     [Fact]
     public async Task InvalidExpiryAndUnknownIp_AreRejected()
     {
-        Assert.Equal(ErrorCode.InvalidValue, await BanAsync(10, Ban(expires: _time.GetUtcNow().UtcDateTime)));
+        Assert.Equal(ErrorCode.InvalidValue, await BanAsync(10, Ban(expires: _time.GetUtcNow())));
         Assert.Equal(ErrorCode.InvalidValue, await BanAsync(10, Ban(BanKind.Ip) with { Address = "invalid" }));
         Assert.Empty(_bans.Items);
     }
@@ -160,7 +160,7 @@ public class ModerationServiceTests
     public async Task Expiration_RestoresFrozenState_AndDeletesTheBan()
     {
         _models[1].Suspend();
-        Assert.Null(await BanAsync(10, Ban(expires: _time.GetUtcNow().UtcDateTime.AddHours(1))));
+        Assert.Null(await BanAsync(10, Ban(expires: _time.GetUtcNow().AddHours(1))));
         _time.Advance(TimeSpan.FromHours(1));
         Assert.Null((await Admit(Device(1, "192.0.2.1").Object)).Error);
         Assert.Equal(UserState.Suspended, _models[1].State);

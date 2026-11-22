@@ -8,7 +8,7 @@ namespace Server.Asp.Web.Api.Contracts;
 
 public sealed record PanelOverviewDto(
     string ServerVersion,
-    DateTime StartedAtUtc,
+    DateTimeOffset StartedAtUtc,
     int ActiveSessionsCount,
     int ConnectedUsersCount,
     IReadOnlyList<CoordinatorSummaryDto> Coordinators);
@@ -19,7 +19,7 @@ public sealed record CoordinatorSummaryDto(
     string Ip,
     int Port,
     CoordinatorState State,
-    DateTime StartedAtUtc,
+    DateTimeOffset StartedAtUtc,
     int SessionsCount,
     int ActiveSessionsCount,
     int ConnectedUsersCount);
@@ -33,10 +33,9 @@ public sealed record CoordinatorDetailsDto(
 public sealed record HybridSessionDto(
     int Id,
     string Name,
-    int HostId,
     int? Capacity,
     WebRTCEngine EngineType,
-    bool IsHostMustApprove,
+    bool IsApprovalRequired,
     HybridSessionNodeState State,
     IReadOnlyList<PeerDto> Peers);
 
@@ -53,7 +52,7 @@ public sealed record ConnectedUserDto(
     string Username,
     string? DisplayName,
     UserStatus Status,
-    DateTime ConnectedAtUtc);
+    DateTimeOffset ConnectedAtUtc);
 
 /// <summary>Creates and starts a coordinator using standard heartbeat, media and rate limit settings.</summary>
 public sealed class CreateCoordinatorDto

@@ -26,9 +26,9 @@ public class UserSessionEntity
     [MaxLength(32)]
     public required string AppVersion { get; set; }
 
-    public DateTime CreatedAt { get; set; }
-    public DateTime LastUsedAt { get; set; }
-    public DateTime ExpiresAt { get; set; }
+    public DateTimeOffset CreatedAt { get; set; }
+    public DateTimeOffset LastUsedAt { get; set; }
+    public DateTimeOffset ExpiresAt { get; set; }
 
     [MaxLength(45)]
     public string? LastAddress { get; set; }

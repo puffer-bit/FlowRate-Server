@@ -32,7 +32,7 @@ public sealed class SqlitePostgreSqlImportTests : IDisposable
 {
     private readonly RepositoryTestDatabase _target = new();
     private readonly string _path = Path.Combine(Path.GetTempPath(), $"flowrate-import-{Guid.NewGuid():N}.db");
-    private static readonly DateTime Now = new(2026, 11, 19, 12, 0, 0, DateTimeKind.Utc);
+    private static readonly DateTimeOffset Now = new(2026, 11, 19, 12, 0, 0, TimeSpan.Zero);
     private static readonly Guid SessionId = Guid.Parse("01234567-89ab-cdef-0123-456789abcdef");
     private readonly SqlitePostgreSqlImporter _importer = new();
 

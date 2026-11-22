@@ -23,8 +23,8 @@ public class HybridSessionSettingsTests
     private readonly Mock<IVideoSessionRepository> _repository = new();
     private readonly Dictionary<int, Dictionary<int, PeerSnapshot>> _peers = new();
     private readonly Dictionary<int, Mock<IHybridSessionPeerManager>> _peerManagers = new();
-    private readonly HybridSessionModel _room = new(7, "coordinator", "room", 10, 1, WebRTCEngine.Mediasoup);
-    private readonly HybridSessionModel _hall = new(8, "coordinator", "hall", 10, 1, WebRTCEngine.Mediasoup);
+    private readonly HybridSessionModel _room = new(7, "coordinator", "room", 10, WebRTCEngine.Mediasoup);
+    private readonly HybridSessionModel _hall = new(8, "coordinator", "hall", 10, WebRTCEngine.Mediasoup);
 
     private static readonly HybridMediaSettings LossyMedia = new(CameraCodec: WebRTCVideoCodecs.H264,
         IsAudioNackEnabled: true, OpusPacketLossPercent: 25, VoiceJitterBufferMs: 160);
@@ -120,7 +120,7 @@ public class HybridSessionSettingsTests
         var result = await manager.ChangeSettingsAsync(7, "lounge", 5, true, LossyMedia, 3);
 
         Assert.Equal(null, result);
-        Assert.Equal(("lounge", 5, true), (_room.Name, _room.Capacity, _room.IsHostMustApprove));
+        Assert.Equal(("lounge", 5, true), (_room.Name, _room.Capacity, _room.IsApprovalRequired));
         Assert.Equal(LossyMedia, _room.Media);
         _repository.Verify(r => r.UpdateAsync(_room, It.IsAny<CancellationToken>()), Times.Once);
         var evt = Assert.Single(_events.Of<HybridSessionReconfiguredEvent>());
@@ -184,7 +184,7 @@ public class HybridSessionSettingsTests
         var result = await manager.ChangeSettingsAsync(7, "lounge", 5, true, LossyMedia, 1);
 
         Assert.Equal(ErrorCode.Internal, result);
-        Assert.Equal(("room", 10, false), (_room.Name, _room.Capacity, _room.IsHostMustApprove));
+        Assert.Equal(("room", 10, false), (_room.Name, _room.Capacity, _room.IsApprovalRequired));
         Assert.Equal(HybridMediaSettings.Default, _room.Media);
         Assert.Empty(_events.Events);
     }

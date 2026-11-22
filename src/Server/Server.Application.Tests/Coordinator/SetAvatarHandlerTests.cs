@@ -39,7 +39,7 @@ public class SetAvatarHandlerTests
     private UserModel Attach(int id, string? avatarUrl = null)
     {
         var user = new UserModel(id, CoordinatorId, $"user{id}", UserState.Normal, UserStatus.Online,
-            DateTime.UtcNow, DateTime.UtcNow, avatarUrl: avatarUrl);
+            DateTimeOffset.UtcNow, DateTimeOffset.UtcNow, avatarUrl: avatarUrl);
         _context.AttachedUsers[id] = user;
         return user;
     }

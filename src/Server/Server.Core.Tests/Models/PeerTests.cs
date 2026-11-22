@@ -6,26 +6,25 @@ namespace Server.Core.Tests.Models;
 
 public class PeerTests
 {
-    private const int HostId = 1;
+    private const int ModeratorId = 1;
     private const int GuestId = 2;
 
-    private static HybridSessionModel Session(bool isHostMustApprove) =>
-        HybridSessionModel.Create("coordinator", "room", 10, HostId, WebRTCEngine.Mediasoup, isHostMustApprove);
+    private static HybridSessionModel Session(bool isApprovalRequired) =>
+        HybridSessionModel.Create("coordinator", "room", 10, WebRTCEngine.Mediasoup, isApprovalRequired);
 
     [Fact]
-    public void Host_IsAdmittedWithoutApproval()
+    public void WhoMayApprove_IsAdmittedWithoutApproval()
     {
-        var host = Peer.Join(HostId, Session(isHostMustApprove: true));
+        var moderator = Peer.Join(ModeratorId, Session(isApprovalRequired: true), mayApprove: true);
 
-        Assert.True(host.IsHost);
-        Assert.True(host.IsAdmitted);
-        Assert.Equal(HybridSessionPeerState.Connecting, host.State);
+        Assert.True(moderator.IsAdmitted);
+        Assert.Equal(HybridSessionPeerState.Connecting, moderator.State);
     }
 
     [Fact]
     public void Guest_WaitsForApproval_WhenSessionRequiresIt()
     {
-        var guest = Peer.Join(GuestId, Session(isHostMustApprove: true));
+        var guest = Peer.Join(GuestId, Session(isApprovalRequired: true));
 
         Assert.False(guest.IsAdmitted);
         Assert.Equal(HybridSessionPeerState.WaitingForApprove, guest.State);
@@ -34,7 +33,7 @@ public class PeerTests
     [Fact]
     public void PendingGuest_DoesNotReceiveMedia_UntilApproved()
     {
-        var guest = Peer.Join(GuestId, Session(isHostMustApprove: true));
+        var guest = Peer.Join(GuestId, Session(isApprovalRequired: true));
 
         Assert.Equal(null, guest.MarkTransportConnected());
         Assert.False(guest.CanReceiveMedia);
@@ -48,7 +47,7 @@ public class PeerTests
     [Fact]
     public void Approve_BeforeTransport_LeavesPeerConnecting()
     {
-        var guest = Peer.Join(GuestId, Session(isHostMustApprove: true));
+        var guest = Peer.Join(GuestId, Session(isApprovalRequired: true));
 
         guest.Approve();
 
@@ -57,18 +56,9 @@ public class PeerTests
     }
 
     [Fact]
-    public void Host_CannotBeApprovedOrRejected()
-    {
-        var host = Peer.Join(HostId, Session(isHostMustApprove: true));
-
-        Assert.Equal(ErrorCode.Internal, host.Approve());
-        Assert.Equal(ErrorCode.Internal, host.Reject());
-    }
-
-    [Fact]
     public void Rejected_Peer_CannotBeApproved_RejoinOrConnect()
     {
-        var guest = Peer.Join(GuestId, Session(isHostMustApprove: true));
+        var guest = Peer.Join(GuestId, Session(isApprovalRequired: true));
 
         Assert.Equal(null, guest.Reject());
 
@@ -81,7 +71,7 @@ public class PeerTests
     [Fact]
     public void Approved_Peer_CannotBeRejected()
     {
-        var guest = Peer.Join(GuestId, Session(isHostMustApprove: true));
+        var guest = Peer.Join(GuestId, Session(isApprovalRequired: true));
         guest.Approve();
 
         Assert.Equal(ErrorCode.AlreadyApproved, guest.Reject());
@@ -91,7 +81,7 @@ public class PeerTests
     [Fact]
     public void Rejoin_ResetsTransportAndMicrophone_AndKeepsAdmission()
     {
-        var guest = Peer.Join(GuestId, Session(isHostMustApprove: false));
+        var guest = Peer.Join(GuestId, Session(isApprovalRequired: false));
         guest.MarkTransportConnected();
         guest.SetMicrophoneMuted(true);
 
@@ -105,7 +95,7 @@ public class PeerTests
     [Fact]
     public void WaitForServer_DoesNotReopenClosedPeer()
     {
-        var guest = Peer.Join(GuestId, Session(isHostMustApprove: false));
+        var guest = Peer.Join(GuestId, Session(isApprovalRequired: false));
         guest.Close();
 
         guest.WaitForServer();
@@ -116,7 +106,7 @@ public class PeerTests
     [Fact]
     public void SetMicrophoneMuted_ReportsWhetherStateChanged()
     {
-        var guest = Peer.Join(GuestId, Session(isHostMustApprove: false));
+        var guest = Peer.Join(GuestId, Session(isApprovalRequired: false));
 
         Assert.True(guest.IsMicrophoneMuted);
         Assert.False(guest.SetMicrophoneMuted(true));

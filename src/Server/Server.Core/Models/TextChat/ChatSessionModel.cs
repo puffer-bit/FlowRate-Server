@@ -32,7 +32,7 @@ public sealed class ChatSessionModel : SessionModel
     }
 
     public int CreatorUserId { get; }
-    public int AdminUserId { get; private set; }
+    public int OwnerUserId { get; private set; }
     public string? Description { get; private set; }
     public string? IconPath { get; private set; }
     public ChatSessionOptions Options { get; private set; }
@@ -42,13 +42,13 @@ public sealed class ChatSessionModel : SessionModel
 
     public override SessionType SessionType => SessionType.Chat;
 
-    public ChatSessionModel(int id, string coordinatorInstanceId, string name, int capacity,
+    public ChatSessionModel(int id, string coordinatorInstanceId, string name,
         int creatorUserId, int adminUserId, ChatSessionOptions options,
         string? description = null, string? iconPath = null, bool isArchived = false)
-        : base(id, coordinatorInstanceId, name, capacity)
+        : base(id, coordinatorInstanceId, name)
     {
         CreatorUserId = creatorUserId;
-        AdminUserId = adminUserId;
+        OwnerUserId = adminUserId;
         Options = options;
         Description = description;
         IconPath = iconPath;
@@ -58,11 +58,11 @@ public sealed class ChatSessionModel : SessionModel
     /// <summary>A new chat that is not saved yet. The creator becomes its admin.</summary>
     public static ChatSessionModel Create(string coordinatorInstanceId, string name, int creatorUserId,
         ChatSessionOptions? options = null) =>
-        new(0, coordinatorInstanceId, name, NoCapacityLimit, creatorUserId, creatorUserId,
+        new(0, coordinatorInstanceId, name, creatorUserId, creatorUserId,
             options ?? ChatSessionOptions.Default);
 
     public bool IsAdmin(int userId) =>
-        Kind != ChatKind.Direct && (userId == AdminUserId || (_users.TryGetValue(userId, out var user) && user.IsAdmin));
+        Kind != ChatKind.Direct && (userId == OwnerUserId || (_users.TryGetValue(userId, out var user) && user.IsAdmin));
 
     public bool CanDeleteMessage(ChatMessageModel message, int userId) =>
         message.IsSentBy(userId) || IsAdmin(userId);
@@ -73,7 +73,7 @@ public sealed class ChatSessionModel : SessionModel
 
     public bool RemoveUser(int userId) => _users.Remove(userId);
 
-    public void ChangeAdmin(int userId) => AdminUserId = userId;
+    public void ChangeAdmin(int userId) => OwnerUserId = userId;
 
     public void Describe(string? description, string? iconPath)
     {

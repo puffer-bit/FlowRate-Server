@@ -164,7 +164,7 @@ public class OrchestratorSettingsChangeTests
         _orchestrator.CoordinatorChanged += changed.Add;
         _takenPorts.Add(5000);
         _store.Seed(Coordinator());
-        _store.Seed(CoordinatorInstanceModel.Create("other", "127.0.0.1", 5001, DateTime.UtcNow));
+        _store.Seed(CoordinatorInstanceModel.Create("other", "127.0.0.1", 5001, DateTimeOffset.UtcNow));
 
         await _orchestrator.StartAsync();
 
@@ -283,10 +283,10 @@ public class OrchestratorSettingsChangeTests
     // A restart runs off the change, so its outcome is waited for
     private static async Task WaitUntil(Func<bool> condition)
     {
-        var deadline = DateTime.UtcNow.AddSeconds(5);
+        var deadline = DateTimeOffset.UtcNow.AddSeconds(5);
         while (!condition())
         {
-            Assert.True(DateTime.UtcNow < deadline, "The restart did not finish in time.");
+            Assert.True(DateTimeOffset.UtcNow < deadline, "The restart did not finish in time.");
             await Task.Delay(10);
         }
     }
@@ -300,7 +300,7 @@ public class OrchestratorSettingsChangeTests
     }
 
     private static CoordinatorInstanceModel Coordinator() =>
-        CoordinatorInstanceModel.Create("coordinator", "127.0.0.1", 5000, DateTime.UtcNow);
+        CoordinatorInstanceModel.Create("coordinator", "127.0.0.1", 5000, DateTimeOffset.UtcNow);
 
     // The store hands out copies, as the database does
     private static CoordinatorInstanceModel Copy(CoordinatorInstanceModel m) =>

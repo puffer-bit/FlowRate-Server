@@ -19,8 +19,8 @@ namespace Server.Application.Orchestrator {
 
         // Time properties
         string TimeZoneId { get; set; }
-        DateTime FirstLaunchTime { get; set; }
-        DateTime CurrentLaunchTime { get; set; }
+        DateTimeOffset FirstLaunchTime { get; set; }
+        DateTimeOffset CurrentLaunchTime { get; set; }
 
         // Hardware and Software parametrs
         string OperatingSystem { get; set; }

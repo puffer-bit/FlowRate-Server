@@ -18,7 +18,7 @@ public sealed class SessionLayoutService : ISessionLayoutService
     private readonly string _coordinatorInstanceId;
     private readonly SemaphoreSlim _lock = new(1, 1);
 
-    private volatile LayoutState _state = new(new SessionLayoutModel(), DateTime.UtcNow.Ticks);
+    private volatile LayoutState _state = new(new SessionLayoutModel(), DateTimeOffset.UtcNow.Ticks);
 
     public SessionLayoutService(ILogger logger, ISessionLayoutRepository repository, IMessageSender messageSender,
         string coordinatorInstanceId)

@@ -49,8 +49,8 @@ public class TwoStageLoginTests
         _sender.Setup(s => s.SendMessageById(ConnectionId, It.IsAny<BaseMessage>()))
             .Callback((string _, BaseMessage message) => _sent.Add(message));
 
-        var user = new UserModel(UserId, "coordinator", "user", UserState.Normal, UserStatus.Online, DateTime.UtcNow,
-            DateTime.UtcNow);
+        var user = new UserModel(UserId, "coordinator", "user", UserState.Normal, UserStatus.Online, DateTimeOffset.UtcNow,
+            DateTimeOffset.UtcNow);
         _users.Setup(u => u.AttachUser(It.IsAny<string?>(), It.IsAny<IClientConnection>()))
             .Callback((string? _, IClientConnection attached) => attached.UserId = UserId)
             .ReturnsAsync(new UserAttachment(AttachUserResult.Attached, user, Identity));

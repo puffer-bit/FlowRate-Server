@@ -22,7 +22,6 @@ public static class SessionMapperExtensions
             Id = entity.Id,
             CoordinatorInstanceId = entity.CoordinatorInstanceId,
             Name = entity.Name,
-            Capacity = entity.Capacity,
             SessionType = entity.SessionType,
             PermissionOverrides = entity.PermissionOverrides.ToDtos()
         }
@@ -52,11 +51,10 @@ public static class SessionMapperExtensions
             MemberIds = model.MemberIds.Order().ToArray(),
             LastMessage = model.LastMessage?.ToDto(),
             CreatorUserId = model.CreatorUserId,
-            AdminUserId = model.AdminUserId,
+            OwnerUserId = model.OwnerUserId,
             Name = model.Name,
             Description = model.Description,
             IconPath = model.IconPath,
-            Capacity = model.Capacity,
             Users = model.Users.ToDictionary(
                 x => x.Key,
                 x => new TextChatUserDTO { UserId = x.Value.UserId, IsAdmin = x.Value.IsAdmin }),
@@ -88,10 +86,9 @@ public static class SessionMapperExtensions
             CoordinatorInstanceId = entity.CoordinatorInstanceId,
             Name = entity.Name,
             EngineType = entity.EngineType,
-            HostId = entity.HostId,
             Capacity = entity.Capacity,
             SessionType = entity.SessionType,
-            IsHostMustApprove = entity.IsHostMustApprove,
+            IsApprovalRequired = entity.IsApprovalRequired,
             State = entity.State,
             Media = entity.Media.ToDto(),
             PermissionOverrides = entity.PermissionOverrides.ToDtos()

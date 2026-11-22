@@ -16,12 +16,12 @@ public sealed class UserPasskey
     public uint SignatureCounter { get; private set; }
     public string Label { get; private set; }
     public Guid AaGuid { get; }
-    public DateTime CreatedAt { get; }
-    public DateTime? LastUsedAt { get; private set; }
+    public DateTimeOffset CreatedAt { get; }
+    public DateTimeOffset? LastUsedAt { get; private set; }
     public bool IsEnabled { get; private set; }
 
     public UserPasskey(int id, int userId, byte[] credentialId, byte[] publicKey, uint signatureCounter, string label,
-        Guid aaGuid, DateTime createdAt, DateTime? lastUsedAt, bool isEnabled)
+        Guid aaGuid, DateTimeOffset createdAt, DateTimeOffset? lastUsedAt, bool isEnabled)
     {
         if (credentialId is not { Length: > 0 })
             throw new ArgumentException("A passkey needs its credential id.", nameof(credentialId));
@@ -42,10 +42,10 @@ public sealed class UserPasskey
 
     /// <summary>A newly registered passkey; not saved yet.</summary>
     public static UserPasskey Create(int userId, byte[] credentialId, byte[] publicKey, uint signatureCounter,
-        string? label, Guid aaGuid, DateTime createdAt) =>
+        string? label, Guid aaGuid, DateTimeOffset createdAt) =>
         new(0, userId, credentialId, publicKey, signatureCounter, label ?? DefaultLabel, aaGuid, createdAt, null, true);
 
-    public void RecordUse(uint signatureCounter, DateTime usedAt)
+    public void RecordUse(uint signatureCounter, DateTimeOffset usedAt)
     {
         SignatureCounter = signatureCounter;
         LastUsedAt = usedAt;

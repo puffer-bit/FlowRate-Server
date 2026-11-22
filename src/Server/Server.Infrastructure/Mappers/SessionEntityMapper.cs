@@ -17,7 +17,7 @@ public static class SessionEntityMapper
         ArgumentNullException.ThrowIfNull(entity);
 
         return new HybridSessionModel(entity.Id, entity.CoordinatorInstanceId, entity.Name, ToCapacity(entity.Capacity),
-            entity.HostId, entity.EngineType, entity.IsHostMustApprove, entity.ToMedia());
+            entity.EngineType, entity.IsHostMustApprove, entity.ToMedia());
     }
 
     private static HybridMediaSettings ToMedia(this HybridSessionEntity entity) => new(
@@ -71,10 +71,9 @@ public static class SessionEntityMapper
             CoordinatorInstanceId = model.CoordinatorInstanceId,
             Name = model.Name,
             EngineType = model.EngineType,
-            HostId = model.HostId,
             Capacity = model.Capacity,
-            IsHostMustApprove = model.IsHostMustApprove,
-            CreatedAt = DateTime.UtcNow
+            IsHostMustApprove = model.IsApprovalRequired,
+            CreatedAt = DateTimeOffset.UtcNow
         };
         entity.SetMedia(model.Media);
         return entity;
@@ -95,7 +94,7 @@ public static class SessionEntityMapper
             entity.IsVideoMessagesAllowed,
             entity.IsDelayedMessagesAllowed);
 
-        var model = new ChatSessionModel(entity.Id, entity.CoordinatorInstanceId, entity.Name, SessionModel.NoCapacityLimit,
+        var model = new ChatSessionModel(entity.Id, entity.CoordinatorInstanceId, entity.Name,
             entity.CreatorUserId, entity.AdminUserId, options, entity.Description, entity.IconPath, entity.IsArchived);
         model.SetAudience(entity.Kind, entity.Members.Select(member => member.UserId));
         return model;
@@ -121,16 +120,15 @@ public static class SessionEntityMapper
                 ChatSessionId = model.Id,
                 UserId = userId,
                 AccountId = userId,
-                JoinedAt = DateTime.UtcNow
+                JoinedAt = DateTimeOffset.UtcNow
             }).ToList(),
             DirectKey = model.Kind == Shared.Enums.ChatKind.Direct
                 ? model.CoordinatorInstanceId + ":" + string.Join(":", model.MemberIds.Order()) : null,
             CreatorUserId = model.CreatorUserId,
-            AdminUserId = model.AdminUserId,
+            AdminUserId = model.OwnerUserId,
             Name = model.Name,
             Description = model.Description,
             IconPath = model.IconPath,
-            Capacity = model.Capacity,
             IsReadOnly = model.Options.IsReadOnly,
             IsArchived = model.IsArchived,
             IsAttachmentsAllowed = model.Options.IsAttachmentsAllowed,
@@ -153,5 +151,5 @@ public static class SessionEntityMapper
     };
 
     // Rows written before capacity was validated may hold 0 or another non-positive value
-    private static int ToCapacity(int capacity) => capacity > 0 ? capacity : SessionModel.NoCapacityLimit;
+    private static int ToCapacity(int capacity) => capacity > 0 ? capacity : HybridSessionModel.NoCapacityLimit;
 }

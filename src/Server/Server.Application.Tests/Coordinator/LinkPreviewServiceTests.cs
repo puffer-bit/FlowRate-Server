@@ -36,7 +36,7 @@ public sealed class LinkPreviewServiceTests : IDisposable
     {
         public readonly List<ChatLinkPreviewModel> Rows = [];
 
-        public Task<ChatLinkPreviewModel?> GetNewestAsync(string coordinatorInstanceId, string url, DateTime fetchedAfter,
+        public Task<ChatLinkPreviewModel?> GetNewestAsync(string coordinatorInstanceId, string url, DateTimeOffset fetchedAfter,
             CancellationToken cancellationToken = default) => Task.FromResult(Rows
                 .Where(x => x.CoordinatorInstanceId == coordinatorInstanceId && x.Url == url && x.FetchedAt >= fetchedAfter)
                 .MaxBy(x => x.FetchedAt));
@@ -54,7 +54,7 @@ public sealed class LinkPreviewServiceTests : IDisposable
             }
         }
 
-        public Task<IReadOnlyList<int>> RemoveUnusedAsync(string coordinatorInstanceId, DateTime fetchedBefore,
+        public Task<IReadOnlyList<int>> RemoveUnusedAsync(string coordinatorInstanceId, DateTimeOffset fetchedBefore,
             CancellationToken cancellationToken = default) => Task.FromResult<IReadOnlyList<int>>([]);
     }
 
@@ -164,7 +164,7 @@ public sealed class LinkPreviewServiceTests : IDisposable
             .Returns(Task.CompletedTask);
         _service.Watch(chats.Object);
 
-        var message = ChatMessageModel.Create(7, 1, DateTime.UtcNow, new ChatTextContentModel { Text = "see https://example.com/a" });
+        var message = ChatMessageModel.Create(7, 1, DateTimeOffset.UtcNow, new ChatTextContentModel { Text = "see https://example.com/a" });
         message.Id = 5;
         await _service.HandleAsync(new ChatSessionMessageAddedEvent(7, message));
 
@@ -179,9 +179,9 @@ public sealed class LinkPreviewServiceTests : IDisposable
         _service.Watch(chats.Object);
 
         await _service.HandleAsync(new ChatSessionMessageAddedEvent(7,
-            ChatMessageModel.Create(7, 1, DateTime.UtcNow, new ChatTextContentModel { Text = "no link" })));
+            ChatMessageModel.Create(7, 1, DateTimeOffset.UtcNow, new ChatTextContentModel { Text = "no link" })));
         await _service.HandleAsync(new ChatSessionMessageAddedEvent(7,
-            ChatMessageModel.Create(7, 1, DateTime.UtcNow, new ChatTextContentModel { Text = "https://example.com" },
+            ChatMessageModel.Create(7, 1, DateTimeOffset.UtcNow, new ChatTextContentModel { Text = "https://example.com" },
                 isLinkPreviewDisabled: true)));
         await Task.Delay(100);
 

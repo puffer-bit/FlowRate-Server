@@ -1,5 +1,6 @@
 using Server.Application.Coordinator.Events;
 using Shared.Models;
+using Shared.Models.Media;
 using Server.Application.Mappers;
 using Shared.Models.Notifications.SessionInfo;
 using Server.Application.Coordinator.Messaging;
@@ -156,34 +157,35 @@ public class HybridSessionNotifier :
     public Task HandleAsync(HybridSessionPeerStartedVideoShareEvent evt, CancellationToken ct = default)
     {
         SendToPeer(evt.ListenerUserId, evt.ListenerConnectionId,
-            new HybridSessionPeerStartedVideoShareNotification(evt.SessionId, evt.UserId, evt.Inbound));
+            new HybridSessionPeerMediaChangedNotification(evt.SessionId, evt.UserId, MediaSourceType.Camera, true, evt.Inbound));
         return Task.CompletedTask;
     }
 
     public Task HandleAsync(HybridSessionPeerStoppedVideoShareEvent evt, CancellationToken ct = default)
     {
-        _visibility.Send(evt.SessionId, new HybridSessionPeerStoppedVideoShareNotification(evt.SessionId,
-            evt.UserId, evt.InitiatorUserId));
+        _visibility.Send(evt.SessionId, new HybridSessionPeerMediaChangedNotification(evt.SessionId,
+            evt.UserId, MediaSourceType.Camera, false, InitiatorUserId: evt.InitiatorUserId));
         return Task.CompletedTask;
     }
 
     public Task HandleAsync(HybridSessionPeerStartedVoiceShareEvent evt, CancellationToken ct = default)
     {
         SendToPeer(evt.ListenerUserId, evt.ListenerConnectionId,
-            new HybridSessionPeerStartedVoiceShareNotification(evt.SessionId, evt.UserId, evt.Inbound));
+            new HybridSessionPeerMediaChangedNotification(evt.SessionId, evt.UserId, MediaSourceType.Microphone, true, evt.Inbound));
         return Task.CompletedTask;
     }
 
     public Task HandleAsync(HybridSessionPeerStoppedVoiceShareEvent evt, CancellationToken ct = default)
     {
-        _visibility.Send(evt.SessionId, new HybridSessionPeerStoppedVoiceShareNotification(evt.SessionId, evt.UserId, evt.InitiatorUserId));
+        _visibility.Send(evt.SessionId, new HybridSessionPeerMediaChangedNotification(evt.SessionId, evt.UserId, MediaSourceType.Microphone, false,
+            InitiatorUserId: evt.InitiatorUserId));
         return Task.CompletedTask;
     }
 
     public Task HandleAsync(HybridSessionPeerStartedScreenShareEvent evt, CancellationToken ct = default)
     {
-        var notification = new HybridSessionPeerStartedScreenShareNotification(evt.SessionId, evt.UserId, evt.Inbound,
-            evt.HasAudio);
+        var notification = new HybridSessionPeerMediaChangedNotification(evt.SessionId, evt.UserId, MediaSourceType.Screen, true,
+            evt.Inbound, evt.HasAudio);
 
         if (evt.ListenerUserId is { } listenerUserId)
             _messageSender.SendMessageByUserId(listenerUserId, notification);
@@ -195,7 +197,8 @@ public class HybridSessionNotifier :
 
     public Task HandleAsync(HybridSessionPeerStoppedScreenShareEvent evt, CancellationToken ct = default)
     {
-        _visibility.Send(evt.SessionId, new HybridSessionPeerStoppedScreenShareNotification(evt.SessionId, evt.UserId, evt.InitiatorUserId));
+        _visibility.Send(evt.SessionId, new HybridSessionPeerMediaChangedNotification(evt.SessionId, evt.UserId, MediaSourceType.Screen, false,
+            InitiatorUserId: evt.InitiatorUserId));
         return Task.CompletedTask;
     }
 

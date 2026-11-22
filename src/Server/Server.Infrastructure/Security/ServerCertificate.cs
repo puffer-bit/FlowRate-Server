@@ -75,7 +75,7 @@ public class ServerCertificate
         if (File.Exists(certificateFile) && File.Exists(keyFile))
         {
             var existing = LoadPem(certificateFile, keyFile);
-            if (existing.NotAfter.ToUniversalTime() - DateTime.UtcNow > RenewBefore)
+            if (existing.NotAfter.ToUniversalTime() - DateTimeOffset.UtcNow > RenewBefore)
             {
                 _logger.LogInformation(
                     "No certificate configured, using the generated self-signed certificate {Path}. " +

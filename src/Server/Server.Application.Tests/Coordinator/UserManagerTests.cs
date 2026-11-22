@@ -202,7 +202,7 @@ public class UserManagerTests
     [Fact]
     public async Task AttachUser_BannedUser_IsRejected()
     {
-        var alice = UserModel.Create(CoordinatorId, "alice", null, DateTime.UtcNow);
+        var alice = UserModel.Create(CoordinatorId, "alice", null, DateTimeOffset.UtcNow);
         alice.Id = 1;
         alice.Ban();
         _users.Setup(r => r.GetByIdentityAsync(It.IsAny<string>(), "#alice", It.IsAny<CancellationToken>())).ReturnsAsync(alice);
@@ -263,7 +263,7 @@ public class UserManagerTests
     [Fact]
     public async Task AttachAndDetach_ShowTheUserOnlineThenOffline()
     {
-        var alice = UserModel.Create(CoordinatorId, "alice", null, DateTime.UtcNow);
+        var alice = UserModel.Create(CoordinatorId, "alice", null, DateTimeOffset.UtcNow);
         alice.Id = 1;
         alice.SetStatus(UserStatus.Away);
         _users.Setup(r => r.GetByIdentityAsync(It.IsAny<string>(), "#alice", It.IsAny<CancellationToken>())).ReturnsAsync(alice);
@@ -283,7 +283,7 @@ public class UserManagerTests
     [Fact]
     public async Task DetachConnection_UserOnAnotherDevice_StaysOnlineUntilTheLastConnectionCloses()
     {
-        var alice = UserModel.Create(CoordinatorId, "alice", null, DateTime.UtcNow);
+        var alice = UserModel.Create(CoordinatorId, "alice", null, DateTimeOffset.UtcNow);
         alice.Id = 1;
         _users.Setup(r => r.GetByIdentityAsync(It.IsAny<string>(), "#alice", It.IsAny<CancellationToken>())).ReturnsAsync(alice);
         var phone = Connection("phone");
@@ -381,7 +381,7 @@ public class UserManagerTests
 
     private UserModel Stored(int id, string username, string coordinatorId)
     {
-        var user = UserModel.Create(coordinatorId, username, null, DateTime.UtcNow);
+        var user = UserModel.Create(coordinatorId, username, null, DateTimeOffset.UtcNow);
         user.Id = id;
         _users.Setup(r => r.GetByIdAsync(id, It.IsAny<CancellationToken>())).ReturnsAsync(user);
         return user;
@@ -389,7 +389,7 @@ public class UserManagerTests
 
     private UserModel Attach(int id, string username)
     {
-        var user = UserModel.Create(CoordinatorId, username, null, DateTime.UtcNow);
+        var user = UserModel.Create(CoordinatorId, username, null, DateTimeOffset.UtcNow);
         user.Id = id;
         user.SetConnected(true);
         _context.AttachedUsers[id] = user;

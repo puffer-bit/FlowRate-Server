@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Server.Database.Entities;
 using Server.Database.Entities.TextChat;
 
@@ -34,6 +35,19 @@ public class ServerDbContext : DbContext
     public ServerDbContext(DbContextOptions<ServerDbContext> options) : base(options)
     {
     }
+
+    /// <summary>
+    /// Times are DateTimeOffset in code and stored as UTC timestamps, the column type every migration created.
+    /// SQLite returns them without a kind, so a read marks them UTC.
+    /// </summary>
+    protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)
+    {
+        configurationBuilder.Properties<DateTimeOffset>().HaveConversion<UtcTimestampConverter>();
+        configurationBuilder.Properties<DateTimeOffset?>().HaveConversion<UtcTimestampConverter>();
+    }
+
+    private sealed class UtcTimestampConverter() : ValueConverter<DateTimeOffset, DateTime>(
+        value => value.UtcDateTime, value => new DateTimeOffset(DateTime.SpecifyKind(value, DateTimeKind.Utc)));
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

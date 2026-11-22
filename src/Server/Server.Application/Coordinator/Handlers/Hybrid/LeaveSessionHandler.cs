@@ -36,8 +36,4 @@ public class LeaveSessionHandler : HybridSessionRequestHandler<LeaveSessionReque
 
     protected override async Task<BaseMessage> HandleAsync(LeaveSessionRequest request, IHybridSession session) =>
         request.Answer(await session.PeerManager.RemovePeerAsync(request.SenderId), request.ToResponse);
-
-    // Only hybrid sessions support this request, so an id of another session type is never found
-    protected override ErrorCode SessionNotFound(LeaveSessionRequest request) =>
-        request.SessionType == SessionType.Hybrid ? ErrorCode.SessionNotFound : ErrorCode.WrongSessionType;
 }

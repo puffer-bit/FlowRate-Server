@@ -56,7 +56,7 @@ public sealed class ChatViewersHandlerTests : IDisposable
 
     private static UserModel User(int id, string name, UserState state = UserState.Normal,
         params int[] roles) => new(id, "coordinator", name, state, UserStatus.Online,
-            DateTime.UtcNow, DateTime.UtcNow, ip: "private-ip", roleIds: roles);
+            DateTimeOffset.UtcNow, DateTimeOffset.UtcNow, ip: "private-ip", roleIds: roles);
 
     private Task<HandleMessageResult> Subscribe(Guid? id = null, bool active = true) =>
         _handler.HandleMessage(new ChatViewersRequest(7, id ?? Guid.NewGuid(), active) { SenderId = 1 }, "device");

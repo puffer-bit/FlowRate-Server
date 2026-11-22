@@ -1,5 +1,4 @@
 using Microsoft.EntityFrameworkCore;
-using Shared.Models.DataTransferObjects.ChatSession.Messages;
 
 namespace Server.Database.Entities.TextChat;
 
@@ -13,5 +12,4 @@ public class ChatTextContentEntity
     public int? CommandMaximum { get; init; }
     public int? CommandValue { get; init; }
 
-    public ChatContentType Type => ChatContentType.Text;
 }

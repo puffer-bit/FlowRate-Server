@@ -1212,11 +1212,9 @@ export interface components {
             id: number;
             name: string;
             /** Format: int32 */
-            hostId: number;
-            /** Format: int32 */
             capacity: null | number;
             engineType: components["schemas"]["WebRTCEngine"];
-            isHostMustApprove: boolean;
+            isApprovalRequired: boolean;
             state: components["schemas"]["HybridSessionNodeState"];
             peers: components["schemas"]["PeerDto"][];
         };

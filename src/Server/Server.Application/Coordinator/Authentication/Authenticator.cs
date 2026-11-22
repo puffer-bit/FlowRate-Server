@@ -152,7 +152,7 @@ public class Authenticator : IAuthenticator
         if (counter == null)
             return false;
 
-        passkey.RecordUse(counter.Value, DateTime.UtcNow);
+        passkey.RecordUse(counter.Value, DateTimeOffset.UtcNow);
         await _userPasskeyRepository.UpdateAsync(passkey);
         return true;
     }

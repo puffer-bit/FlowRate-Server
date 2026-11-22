@@ -76,7 +76,7 @@ public class ConfigurationSeeder
             return;
 
         var model = CoordinatorInstanceModel.Create(DefaultCoordinatorName, DefaultCoordinatorIp,
-            DefaultCoordinatorPort, DateTime.UtcNow, isDefault: true);
+            DefaultCoordinatorPort, DateTimeOffset.UtcNow, isDefault: true);
         model.SetUserLimits(DefaultMaxOnlineUsers, DefaultMaxUsers);
         model.SetHeartbeat(new CoordinatorHeartbeatSettings(DefaultHeartbeatIntervalSeconds,
             DefaultHeartbeatTimeoutSeconds));

@@ -117,9 +117,6 @@ public partial class HybridSessionManager : IHybridSessionManager
     public async Task<(ErrorCode? result, HybridSessionModel? session)> CreateAsync(CreateSessionModel request,
         int userId)
     {
-        if (request.Capacity <= 1)
-            return (ErrorCode.InvalidValue, null);
-
         if (request.SessionData is not HybridSessionCreateData hybridData)
             return (ErrorCode.InvalidValue, null);
 
@@ -132,7 +129,7 @@ public partial class HybridSessionManager : IHybridSessionManager
                 return (ErrorCode.NameTaken, null);
             }
 
-            var model = HybridSessionModel.Create(_coordinatorInstanceId, request.Name, request.Capacity, userId,
+            var model = HybridSessionModel.Create(_coordinatorInstanceId, request.Name, hybridData.Capacity,
                 hybridData.EngineType, media: hybridData.Media?.ToModel());
             model.Id = await _sessionRepository.AddAsync(model);
 
@@ -196,7 +193,7 @@ public partial class HybridSessionManager : IHybridSessionManager
     }
 
     public async Task<ErrorCode?> ChangeSettingsAsync(int sessionId, string name, int capacity,
-        bool isHostMustApprove, HybridMediaSettings media, int userId)
+        bool isApprovalRequired, HybridMediaSettings media, int userId)
     {
         await _lifecycleLock.WaitAsync();
         try
@@ -216,12 +213,12 @@ public partial class HybridSessionManager : IHybridSessionManager
             }
 
             var model = session.Model;
-            var (oldName, oldCapacity, oldIsHostMustApprove, oldMedia) =
-                (model.Name, model.Capacity, model.IsHostMustApprove, model.Media);
+            var (oldName, oldCapacity, oldIsApprovalRequired, oldMedia) =
+                (model.Name, model.Capacity, model.IsApprovalRequired, model.Media);
 
             model.Rename(name);
             model.ChangeCapacity(capacity);
-            model.SetHostMustApprove(isHostMustApprove);
+            model.SetApprovalRequired(isApprovalRequired);
             model.SetMedia(media);
 
             try
@@ -233,7 +230,7 @@ public partial class HybridSessionManager : IHybridSessionManager
                 // The session in memory stays as it is saved
                 model.Rename(oldName);
                 model.ChangeCapacity(oldCapacity);
-                model.SetHostMustApprove(oldIsHostMustApprove);
+                model.SetApprovalRequired(oldIsApprovalRequired);
                 model.SetMedia(oldMedia);
                 throw;
             }

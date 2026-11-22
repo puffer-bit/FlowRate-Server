@@ -131,7 +131,7 @@ public class ChatSessionManager : IChatSessionManager
         {
             if (!_sessions.TryGetValue(sessionId, out var chat))
                 return ErrorCode.SessionNotFound;
-            if (chat.IsPrivate && (chat.Kind != ChatKind.Group || chat.AdminUserId != userId))
+            if (chat.IsPrivate && (chat.Kind != ChatKind.Group || chat.OwnerUserId != userId))
                 return ErrorCode.InsufficientPermissions;
 
             await _chatSessionRepository.RemoveAsync(sessionId);
@@ -165,16 +165,16 @@ public class ChatSessionManager : IChatSessionManager
                 return ErrorCode.ChatNotFound;
             if (!chat.MemberIds.Contains(userId)) return ErrorCode.InsufficientPermissions;
             var members = leave ? chat.MemberIds.Where(id => id != userId).ToArray() : memberIds.Distinct().ToArray();
-            if (leave && chat.AdminUserId == userId) return ErrorCode.Conflict;
-            if (!leave && chat.AdminUserId != userId) return ErrorCode.InsufficientPermissions;
-            if (members.Length is < 1 or > 100 || !members.Contains(leave ? chat.AdminUserId : ownerId))
+            if (leave && chat.OwnerUserId == userId) return ErrorCode.Conflict;
+            if (!leave && chat.OwnerUserId != userId) return ErrorCode.InsufficientPermissions;
+            if (members.Length is < 1 or > 100 || !members.Contains(leave ? chat.OwnerUserId : ownerId))
                 return ErrorCode.InvalidValue;
             var changed = new ChatSessionModel(chat.Id, chat.CoordinatorInstanceId, leave ? chat.Name : name,
-                chat.Capacity, chat.CreatorUserId, leave ? chat.AdminUserId : ownerId, chat.Options,
+                chat.CreatorUserId, leave ? chat.OwnerUserId : ownerId, chat.Options,
                 chat.Description, chat.IconPath, chat.IsArchived);
             changed.SetAudience(ChatKind.Group, members);
             changed.SetLastMessage(chat.LastMessage);
-            var now = DateTime.UtcNow;
+            var now = DateTimeOffset.UtcNow;
             var messages = members.Except(chat.MemberIds).Order().Select(id =>
                 ChatMessageModel.CreateSystem(sessionId, new ChatSystemContentModel
                 {
@@ -188,7 +188,7 @@ public class ChatSessionManager : IChatSessionManager
             var stored = await _chatSessionRepository.UpdateWithSystemMessagesAsync(changed, messages);
             chat.SetAudience(ChatKind.Group, members);
             chat.Rename(changed.Name);
-            chat.ChangeAdmin(changed.AdminUserId);
+            chat.ChangeAdmin(changed.OwnerUserId);
             // Revoke removed members before delivering any of the new messages.
             await _coordinatorEventBus.PublishAsync(new ChatSessionReconfiguredEvent(chat, userId));
             foreach (var message in stored)
@@ -310,7 +310,7 @@ public class ChatSessionManager : IChatSessionManager
             if (attachmentsResult != null)
                 return attachmentsResult;
 
-            var messageModel = message.ToModel(senderUserId, DateTime.UtcNow, images, files);
+            var messageModel = message.ToModel(senderUserId, DateTimeOffset.UtcNow, images, files);
             if (command != null) messageModel.ExecuteCommand(command.ToModel());
 
             if (message.ReplyToMessageId is { } replyToMessageId)
@@ -361,7 +361,7 @@ public class ChatSessionManager : IChatSessionManager
         try
         {
             if (!_sessions.TryGetValue(sessionId, out var chat)) return ErrorCode.ChatNotFound;
-            var message = ChatMessageModel.CreateSystem(sessionId, content.ToModel(), DateTime.UtcNow);
+            var message = ChatMessageModel.CreateSystem(sessionId, content.ToModel(), DateTimeOffset.UtcNow);
             var stored = await _messagesRepository.AddAsync(message);
             await PublishAddedMessageAsync(chat, stored, content.ActorUserId ?? UserModel.SystemUserId);
             return null;
@@ -400,7 +400,7 @@ public class ChatSessionManager : IChatSessionManager
             // Bound the independently loaded list of pins.
             if (pinned && (await _messagesRepository.GetPinnedAsync(sessionId)).Count >= 100)
                 return ErrorCode.InvalidRequest;
-            message.SetPinned(pinned, userId, DateTime.UtcNow);
+            message.SetPinned(pinned, userId, DateTimeOffset.UtcNow);
             message.MarkChanged(await _messagesRepository.UpdateAsync(message));
             if (_sessions.TryGetValue(sessionId, out var changedChat) && changedChat.LastMessage?.Id == message.Id)
             {
@@ -502,7 +502,7 @@ public class ChatSessionManager : IChatSessionManager
                 if (message.IsSystem || message.IsReadOnly)
                     return ErrorCode.InsufficientPermissions;
 
-                var changed = isAdded ? message.AddReaction(userId, emoji, DateTime.UtcNow) : message.RemoveReaction(userId, emoji);
+                var changed = isAdded ? message.AddReaction(userId, emoji, DateTimeOffset.UtcNow) : message.RemoveReaction(userId, emoji);
                 if (!changed)
                     return null;
 
@@ -543,7 +543,7 @@ public class ChatSessionManager : IChatSessionManager
                 if (message == null)
                     return ErrorCode.MessageNotFound;
 
-                var result = message.Edit(userId, text, DateTime.UtcNow, isLinkPreviewDisabled);
+                var result = message.Edit(userId, text, DateTimeOffset.UtcNow, isLinkPreviewDisabled);
                 if (result != null)
                     return result;
 
@@ -646,20 +646,22 @@ public class ChatSessionManager : IChatSessionManager
         IReadOnlyList<ChatFileContentModel> files)> ResolveAttachmentsAsync(
         ChatSessionModel chat, NewChatMessageModel message, int senderUserId)
     {
-        if (message.Images.Count + message.Video.Count + message.Files.Count == 0)
+        if (message.Files.Count == 0)
             return (null, [], []);
 
         if (!chat.Options.IsAttachmentsAllowed)
             return (ErrorCode.AttachmentsNotAllowed, [], []);
 
-        if (message.Video.Count > 0)
-            return (ErrorCode.AttachmentInvalid, [], []);
+        // Images and other files are stored apart
+        var newImages = message.Files.OfType<NewChatImageModel>().ToList();
+        var newFiles = message.Files.Where(file => file is not NewChatImageModel).ToList();
 
-        var images = new List<ChatImageContentModel>(message.Images.Count);
-        foreach (var image in message.Images)
+        var images = new List<ChatImageContentModel>(newImages.Count);
+        foreach (var image in newImages)
         {
             var original = await GetUploadAsync(image.UploadId, chat.Id, senderUserId, MediaUploadKind.Image);
-            var preview = await GetUploadAsync(image.PreviewUploadId, chat.Id, senderUserId, MediaUploadKind.ImagePreview);
+            // The validator makes sure an image has its reduced copy
+            var preview = await GetUploadAsync(image.PreviewUploadId!, chat.Id, senderUserId, MediaUploadKind.ImagePreview);
             if (original == null || preview == null)
                 return (ErrorCode.AttachmentInvalid, [], []);
 
@@ -685,8 +687,8 @@ public class ChatSessionManager : IChatSessionManager
             });
         }
 
-        var files = new List<ChatFileContentModel>(message.Files.Count);
-        foreach (var file in message.Files)
+        var files = new List<ChatFileContentModel>(newFiles.Count);
+        foreach (var file in newFiles)
         {
             var upload = await GetUploadAsync(file.UploadId, chat.Id, senderUserId, MediaUploadKind.File);
             if (upload == null || upload.State == MediaUploadState.Attached)

@@ -103,7 +103,7 @@ public sealed class PrivateChatPermissionsTests
         permissions.Setup(p => p.Has(It.IsAny<int>(), It.IsAny<Permission>())).Returns(true);
         permissions.Setup(p => p.HasIn(It.IsAny<int>(), chat, It.IsAny<Permission>())).Returns(true);
         var authorizer = new RequestAuthorizer(permissions.Object, Mock.Of<IHybridSessionManager>(), sessions.Object);
-        Assert.False(await authorizer.IsAllowedAsync(new ChatSessionHistoryRequest(5, 10, 0) { SenderId = 99 }));
-        Assert.True(await authorizer.IsAllowedAsync(new ChatSessionHistoryRequest(5, 10, 0) { SenderId = 2 }));
+        Assert.False(await authorizer.IsAllowedAsync(new ChatSessionHistoryPageRequest(5, null, 10) { SenderId = 99 }));
+        Assert.True(await authorizer.IsAllowedAsync(new ChatSessionHistoryPageRequest(5, null, 10) { SenderId = 2 }));
     }
 }

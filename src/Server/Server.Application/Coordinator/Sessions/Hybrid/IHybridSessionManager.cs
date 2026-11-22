@@ -29,7 +29,7 @@ public interface IHybridSessionManager : IDisposable
 
     /// <summary>Replaces the settings of the session, saves them and tells every client.</summary>
     Task<ErrorCode?> ChangeSettingsAsync(int sessionId, string name, int capacity,
-        bool isHostMustApprove, HybridMediaSettings media, int userId);
+        bool isApprovalRequired, HybridMediaSettings media, int userId);
     bool TryGetSession(int sessionId, [NotNullWhen(true)] out IHybridSession? session);
     IReadOnlyCollection<IHybridSession> GetAllSessions();
 

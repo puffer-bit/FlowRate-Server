@@ -92,7 +92,7 @@ public sealed class DirectCallTests : IDisposable
         peers.Setup(p => p.HasPeer(It.IsAny<int>())).Returns((int user) => members.Contains(user));
         peers.Setup(p => p.RemovePeerAsync(It.IsAny<int>()))
             .Callback((int user) => members.Remove(user)).ReturnsAsync((ErrorCode?)null);
-        var model = HybridSessionModel.Create("server", "Voice", 10, 1, Shared.Enums.WebRTC.WebRTCEngine.Mediasoup);
+        var model = HybridSessionModel.Create("server", "Voice", 10, Shared.Enums.WebRTC.WebRTCEngine.Mediasoup);
         model.Id = 20;
         var channel = new Mock<IHybridSession>();
         channel.Setup(s => s.Model).Returns(model);

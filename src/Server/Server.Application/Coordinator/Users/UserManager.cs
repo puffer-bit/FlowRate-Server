@@ -89,12 +89,12 @@ public class UserManager : IUserManager
         }
         else if (userIdentity == "system")
         {
-            user = UserModel.CreateSystem(_coordinatorInstanceId, clientConnection.IpEndpoint, DateTime.UtcNow);
+            user = UserModel.CreateSystem(_coordinatorInstanceId, clientConnection.IpEndpoint, DateTimeOffset.UtcNow);
         }
         else if (await _userRepository.GetByIdentityAsync(_coordinatorInstanceId, userIdentity) is { } foundUser)
         {
             user = foundUser;
-            user.MarkConnected(clientConnection.IpEndpoint, DateTime.UtcNow);
+            user.MarkConnected(clientConnection.IpEndpoint, DateTimeOffset.UtcNow);
         }
         else
         {
@@ -114,7 +114,7 @@ public class UserManager : IUserManager
         if (user == null || user.CoordinatorInstanceId != _coordinatorInstanceId || user.IsSystem)
             return UserAttachment.Rejected(AttachUserResult.UnknownIdentity);
 
-        user.MarkConnected(clientConnection.IpEndpoint, DateTime.UtcNow);
+        user.MarkConnected(clientConnection.IpEndpoint, DateTimeOffset.UtcNow);
         var attachment = Attach(user, null, clientConnection);
         if (attachment.Result == AttachUserResult.Attached) await _userRepository.UpdateAsync(attachment.User!);
         return attachment;
@@ -161,7 +161,7 @@ public class UserManager : IUserManager
             }
             else
             {
-                attached!.MarkConnected(clientConnection.IpEndpoint, DateTime.UtcNow);
+                attached!.MarkConnected(clientConnection.IpEndpoint, DateTimeOffset.UtcNow);
                 user = attached;
             }
         }
@@ -457,7 +457,7 @@ public class UserManager : IUserManager
                 .ToHashSet();
 
             var newUser = UserModel.Create(_coordinatorInstanceId,
-                _nameProvider.GenerateBaseName(namePattern, takenNames), clientConnection.IpEndpoint, DateTime.UtcNow);
+                _nameProvider.GenerateBaseName(namePattern, takenNames), clientConnection.IpEndpoint, DateTimeOffset.UtcNow);
 
             newUser.Id = await _userRepository.AddAsync(newUser, userIdentity);
             return newUser;

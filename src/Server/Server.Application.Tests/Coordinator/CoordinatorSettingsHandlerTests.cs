@@ -18,7 +18,7 @@ public sealed class CoordinatorSettingsHandlerTests
     [InlineData("PostgreSQL")]
     public async Task SettingsResponse_ReportsTheServerDatabaseAlongsideEditableSettings(string provider)
     {
-        var model = CoordinatorInstanceModel.Create("Server", "127.0.0.1", 5000, DateTime.UtcNow);
+        var model = CoordinatorInstanceModel.Create("Server", "127.0.0.1", 5000, DateTimeOffset.UtcNow);
         var settings = new Mock<ICoordinatorSettingsService>();
         settings.Setup(service => service.GetAsync(model.Id, It.IsAny<CancellationToken>())).ReturnsAsync(model);
         settings.Setup(service => service.GetSfuNodesAsync(It.IsAny<CancellationToken>())).ReturnsAsync([]);

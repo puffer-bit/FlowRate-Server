@@ -11,9 +11,9 @@ public sealed class CoordinatorInstanceModel
     public string Ip { get; private set; }
     public int Port { get; private set; }
     public string? PasswordHash { get; private set; } 
-    public DateTime CreateTime { get; }
-    public DateTime FirstLaunchTime { get; }
-    public DateTime CurrentLaunchTime { get; private set; }
+    public DateTimeOffset CreateTime { get; }
+    public DateTimeOffset FirstLaunchTime { get; }
+    public DateTimeOffset CurrentLaunchTime { get; private set; }
     /// <summary>How many users may be connected at once; <see cref="NoUserLimit"/> for any number.</summary>
     public int MaxOnlineUsers { get; private set; }
     /// <summary>How many users the coordinator may register; <see cref="NoUserLimit"/> for any number.</summary>
@@ -35,7 +35,7 @@ public sealed class CoordinatorInstanceModel
     public long Revision { get; private set; }
 
     public CoordinatorInstanceModel(string id, string name, bool isDefault, string ip, int port,
-        DateTime createTime, DateTime firstLaunchTime, DateTime currentLaunchTime,
+        DateTimeOffset createTime, DateTimeOffset firstLaunchTime, DateTimeOffset currentLaunchTime,
         int maxOnlineUsers, int maxUsers,
         MotdSettings motd, AccessListSettings accessList, CoordinatorHeartbeatSettings heartbeat,
         CoordinatorMediaSettings media, CoordinatorUploadSettings uploads, CoordinatorRateLimitSettings rateLimits,
@@ -63,7 +63,7 @@ public sealed class CoordinatorInstanceModel
         Revision = revision;
     }
 
-    public static CoordinatorInstanceModel Create(string name, string ip, int port, DateTime now, bool isDefault = false, string? passwordHash = null) =>
+    public static CoordinatorInstanceModel Create(string name, string ip, int port, DateTimeOffset now, bool isDefault = false, string? passwordHash = null) =>
         new(Guid.NewGuid().ToString(), name, isDefault, ip, port,now, now, now,
             maxOnlineUsers: 0, maxUsers: 0,
             MotdSettings.Disabled, AccessListSettings.Open, new CoordinatorHeartbeatSettings(0, 0),
@@ -93,7 +93,7 @@ public sealed class CoordinatorInstanceModel
 
     public void AssignSfuNodes(IEnumerable<int> sfuNodeIds) => SfuNodeIds = sfuNodeIds.Distinct().ToList();
 
-    public void MarkLaunched(DateTime now) => CurrentLaunchTime = now;
+    public void MarkLaunched(DateTimeOffset now) => CurrentLaunchTime = now;
 
     public void NextRevision() => Revision++;
 

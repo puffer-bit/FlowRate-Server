@@ -6,7 +6,7 @@ namespace Server.Core.Tests.Models;
 public class ChatMessageLinkPreviewTests
 {
     private const int AuthorId = 1;
-    private static readonly DateTime Now = new(2026, 1, 1, 12, 0, 0, DateTimeKind.Utc);
+    private static readonly DateTimeOffset Now = new(2026, 1, 1, 12, 0, 0, TimeSpan.Zero);
 
     private static ChatMessageModel Message(string text, bool disabled = false) =>
         ChatMessageModel.Create(7, AuthorId, Now, new ChatTextContentModel { Text = text }, isLinkPreviewDisabled: disabled);

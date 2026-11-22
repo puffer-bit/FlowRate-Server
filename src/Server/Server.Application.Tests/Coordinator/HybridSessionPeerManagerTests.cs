@@ -19,10 +19,10 @@ public class HybridSessionPeerManagerTests
     private readonly FakeSfuGateway _gateway = new();
     private readonly RecordingEventBus _events = new();
 
-    private async Task<HybridSessionPeerManager> CreateManager(bool isHostMustApprove = false,
+    private async Task<HybridSessionPeerManager> CreateManager(bool isApprovalRequired = false,
         HybridSessionModel? model = null)
     {
-        model ??= HybridSessionModel.Create("coordinator", "room", 10, HostId, WebRTCEngine.Mediasoup, isHostMustApprove);
+        model ??= HybridSessionModel.Create("coordinator", "room", 10, WebRTCEngine.Mediasoup, isApprovalRequired);
         model.Id = 7;
 
         var manager = new HybridSessionPeerManager(NullLogger.Instance, _events, model);
@@ -86,7 +86,7 @@ public class HybridSessionPeerManagerTests
     [Fact]
     public async Task Camera_WaitingForAdmissionCannotPublish()
     {
-        var manager = await CreateManager(isHostMustApprove: true);
+        var manager = await CreateManager(isApprovalRequired: true);
         await manager.AddPeerAsync(GuestId, "epoch");
         Assert.Equal(ErrorCode.NotAdmitted, (await manager.StartVideoShareAsync(GuestId)).result);
         Assert.Empty(_events.Of<HybridSessionPeerStartedVideoShareEvent>());
@@ -99,7 +99,7 @@ public class HybridSessionPeerManagerTests
     [InlineData(false)]
     public async Task AddPeer_AtCapacity_RejectsNewPeersButAllowsRejoiningAndReusesFreedSlots(bool ready)
     {
-        var model = HybridSessionModel.Create("coordinator", "room", 2, HostId, WebRTCEngine.Mediasoup, true);
+        var model = HybridSessionModel.Create("coordinator", "room", 2, WebRTCEngine.Mediasoup, true);
         var manager = await CreateManager(model: model);
         _gateway.IsConnected = ready;
         Assert.Null((await manager.AddPeerAsync(HostId, "epoch", "host")).result);
@@ -125,7 +125,7 @@ public class HybridSessionPeerManagerTests
     [Fact]
     public async Task AddPeer_ConcurrentJoins_CannotExceedCapacity()
     {
-        var model = HybridSessionModel.Create("coordinator", "room", 2, HostId, WebRTCEngine.Mediasoup);
+        var model = HybridSessionModel.Create("coordinator", "room", 2, WebRTCEngine.Mediasoup);
         var manager = await CreateManager(model: model);
         await manager.AddPeerAsync(HostId, "epoch");
 
@@ -140,7 +140,7 @@ public class HybridSessionPeerManagerTests
     [Fact]
     public async Task AddPeer_UsesUpdatedCapacity()
     {
-        var model = HybridSessionModel.Create("coordinator", "room", 2, HostId, WebRTCEngine.Mediasoup);
+        var model = HybridSessionModel.Create("coordinator", "room", 2, WebRTCEngine.Mediasoup);
         var manager = await CreateManager(model: model);
         await JoinAndConnect(manager, HostId, GuestId);
         model.ChangeCapacity(1);
@@ -410,7 +410,7 @@ public class HybridSessionPeerManagerTests
     [Fact]
     public async Task AddPeer_RejectedPeer_WaitsForApprovalAgain()
     {
-        var manager = await CreateManager(isHostMustApprove: true);
+        var manager = await CreateManager(isApprovalRequired: true);
         await manager.AddPeerAsync(HostId, "epoch");
         await manager.AddPeerAsync(GuestId, "epoch");
         await manager.RejectPeerAsync(HostId, GuestId);
@@ -483,7 +483,7 @@ public class HybridSessionPeerManagerTests
     [InlineData(false)]
     public async Task WaitingForNode_DoesNotBypassHostAdmission(bool approve)
     {
-        var manager = await CreateManager(isHostMustApprove: true);
+        var manager = await CreateManager(isApprovalRequired: true);
         await manager.ChangeGatewayAsync(null);
         await manager.AddPeerAsync(GuestId, "epoch");
 
@@ -639,7 +639,7 @@ public class HybridSessionPeerManagerTests
     [Fact]
     public async Task ApprovePeer_PendingGuest_BecomesConnectedAndIsAnnouncedOnce()
     {
-        var manager = await CreateManager(isHostMustApprove: true);
+        var manager = await CreateManager(isApprovalRequired: true);
         await JoinAndConnect(manager, HostId);
         await manager.AddPeerAsync(GuestId, "epoch");
         await manager.ConnectPeerAsync(GuestId, FakeSfuGateway.Dtls());
@@ -656,7 +656,7 @@ public class HybridSessionPeerManagerTests
     [Fact]
     public async Task ApprovePeer_GuestThatNeedsNoApproval_IsNotAnnounced()
     {
-        var manager = await CreateManager(isHostMustApprove: false);
+        var manager = await CreateManager(isApprovalRequired: false);
         await JoinAndConnect(manager, HostId, GuestId);
 
         Assert.Equal(null, await manager.ApprovePeerAsync(HostId, GuestId));
@@ -667,7 +667,7 @@ public class HybridSessionPeerManagerTests
     [Fact]
     public async Task RejectPeer_RemovesThePeerAndClosesItsTransport()
     {
-        var manager = await CreateManager(isHostMustApprove: true);
+        var manager = await CreateManager(isApprovalRequired: true);
         await manager.AddPeerAsync(HostId, "epoch");
         await manager.AddPeerAsync(GuestId, "epoch");
 
@@ -681,7 +681,7 @@ public class HybridSessionPeerManagerTests
     [Fact]
     public async Task PendingGuest_CannotShareMedia_UntilApproved()
     {
-        var manager = await CreateManager(isHostMustApprove: true);
+        var manager = await CreateManager(isApprovalRequired: true);
         await JoinAndConnect(manager, HostId);
         await manager.AddPeerAsync(GuestId, "epoch");
         await manager.ConnectPeerAsync(GuestId, FakeSfuGateway.Dtls());
@@ -701,7 +701,7 @@ public class HybridSessionPeerManagerTests
     [Fact]
     public async Task AddPeer_PastCapacity_JoinsAFullSession_ButStillWaitsForApproval()
     {
-        var model = HybridSessionModel.Create("coordinator", "room", 2, HostId, WebRTCEngine.Mediasoup, true);
+        var model = HybridSessionModel.Create("coordinator", "room", 2, WebRTCEngine.Mediasoup, true);
         var manager = await CreateManager(model: model);
         await JoinAndConnect(manager, HostId);
         await manager.AddPeerAsync(GuestId, "epoch");
@@ -1143,7 +1143,7 @@ public class HybridSessionPeerManagerTests
     [Fact]
     public async Task RestartScreenShare_AfterMediaSettingsChange_ReplacesTracksInsideTheSameTransport()
     {
-        var model = HybridSessionModel.Create("coordinator", "room", 10, HostId, WebRTCEngine.Mediasoup);
+        var model = HybridSessionModel.Create("coordinator", "room", 10, WebRTCEngine.Mediasoup);
         var manager = await CreateManager(model: model);
         await JoinAndConnect(manager, HostId, GuestId);
         var (_, firstVideo, firstAudio) = await manager.StartScreenShareAsync(HostId, withAudio: true);
@@ -1180,7 +1180,7 @@ public class HybridSessionPeerManagerTests
     [Fact]
     public async Task RestartScreenShare_AfterOnlyBufferingChanges_ReplacesPausedConsumers()
     {
-        var model = HybridSessionModel.Create("coordinator", "room", 10, HostId, WebRTCEngine.Mediasoup);
+        var model = HybridSessionModel.Create("coordinator", "room", 10, WebRTCEngine.Mediasoup);
         var manager = await CreateManager(model: model);
         await JoinAndConnect(manager, HostId, GuestId);
         await manager.StartScreenShareAsync(HostId, withAudio: false);
@@ -1488,10 +1488,10 @@ public class HybridSessionPeerManagerTests
 
     private static async Task WaitUntil(Func<bool> condition)
     {
-        var deadline = DateTime.UtcNow.AddSeconds(5);
+        var deadline = DateTimeOffset.UtcNow.AddSeconds(5);
         while (!condition())
         {
-            if (DateTime.UtcNow > deadline)
+            if (DateTimeOffset.UtcNow > deadline)
                 throw new TimeoutException("The condition was not met in time.");
             await Task.Delay(10);
         }

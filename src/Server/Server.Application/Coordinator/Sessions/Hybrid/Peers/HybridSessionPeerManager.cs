@@ -86,7 +86,7 @@ public partial class HybridSessionPeerManager : IHybridSessionPeerManager
     });
 
     public Task<(ErrorCode? result, TransportData? transportData)> AddPeerAsync(int userId,
-        string clientEpoch, string? connectionId = null, bool pastCapacity = false) => LockedAsync<(ErrorCode? result, TransportData? transportData)>(async () =>
+        string clientEpoch, string? connectionId = null, bool pastCapacity = false, bool mayApprove = false) => LockedAsync<(ErrorCode? result, TransportData? transportData)>(async () =>
     {
         if (Model.CallDevices is { } devices &&
             (!devices.TryGetValue(userId, out var selected) || selected != connectionId))
@@ -97,7 +97,7 @@ public partial class HybridSessionPeerManager : IHybridSessionPeerManager
             if (!pastCapacity && Model.IsFull(_peers.Count))
                 return (ErrorCode.SessionFull, null);
 
-            peer = Peer.Join(userId, Model, connectionId);
+            peer = Peer.Join(userId, Model, connectionId, mayApprove);
         }
         else
         {

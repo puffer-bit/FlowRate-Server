@@ -110,7 +110,8 @@ namespace Server.Application.Orchestrator
                 _logger.LogInformation("Orchestrator successfully started.");
         }
 
-        public async Task StopAsync(CancellationToken ct = default)
+        public async Task StopAsync(CancellationToken ct = default,
+            Shared.Models.Notifications.Heartbeat.ServerRestartNotification? notice = null)
         {
             if (State is ServerState.Closing or ServerState.Offline)
                 return;
@@ -125,7 +126,7 @@ namespace Server.Application.Orchestrator
 
             foreach (var coordinatorId in CoordinatorsPool.Keys)
             {
-                await DetachCoordinatorInstanceAsync(coordinatorId);
+                await DetachCoordinatorInstanceAsync(coordinatorId, notice);
             }
 
             State = ServerState.Offline;
@@ -182,7 +183,7 @@ namespace Server.Application.Orchestrator
             throw new NotImplementedException();
         }
 
-        public void SetLaunchTime(DateTime utcTime)
+        public void SetLaunchTime(DateTimeOffset utcTime)
         {
             throw new NotImplementedException();
         }
@@ -229,7 +230,7 @@ namespace Server.Application.Orchestrator
                     || !_endpointProbe.IsPortFree(address, change.Port))
                     return Invalid(CoordinatorSettingsFields.Port, $"Port {change.Port} is already taken on {change.Ip}.");
 
-                var model = CoordinatorInstanceModel.Create(change.Name, change.Ip, change.Port, DateTime.UtcNow);
+                var model = CoordinatorInstanceModel.Create(change.Name, change.Ip, change.Port, DateTimeOffset.UtcNow);
                 model.SetUserLimits(change.MaxOnlineUsers, change.MaxUsers);
                 model.SetHeartbeat(new CoordinatorHeartbeatSettings(change.HeartbeatIntervalSeconds,
                     change.HeartbeatTimeoutSeconds));
@@ -292,14 +293,15 @@ namespace Server.Application.Orchestrator
             }
         }
 
-        public async Task DetachCoordinatorInstanceAsync(string coordinatorInstanceId)
+        public async Task DetachCoordinatorInstanceAsync(string coordinatorInstanceId,
+            Shared.Models.Notifications.Heartbeat.ServerRestartNotification? notice = null)
         {
             if (!CoordinatorsPool.TryRemove(coordinatorInstanceId, out var coordinatorInstance))
                 return;
 
             try
             {
-                await coordinatorInstance.CloseAsync();
+                await coordinatorInstance.CloseAsync(notice);
             }
             catch (Exception ex)
             {

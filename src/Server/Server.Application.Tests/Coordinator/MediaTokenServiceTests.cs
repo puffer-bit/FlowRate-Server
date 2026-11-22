@@ -26,7 +26,7 @@ public class MediaTokenServiceTests
 
         Assert.True(_tokens.TryValidate(token, out var userId));
         Assert.Equal(42, userId);
-        Assert.Equal(_clock.Now.AddMinutes(10).UtcDateTime, expiresAt);
+        Assert.Equal(_clock.Now.AddMinutes(10), expiresAt);
     }
 
     [Fact]

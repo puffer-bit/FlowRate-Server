@@ -15,7 +15,7 @@ namespace Server.Asp.Tests.Web.Api;
 
 public class PanelControllerTests
 {
-    private static readonly DateTime LaunchedAt = new(2026, 10, 1, 12, 0, 0, DateTimeKind.Utc);
+    private static readonly DateTimeOffset LaunchedAt = new(2026, 10, 1, 12, 0, 0, TimeSpan.Zero);
 
     private readonly Mock<IOrchestratorInstance> _orchestrator = new();
     private readonly PanelController _controller;
@@ -80,9 +80,9 @@ public class PanelControllerTests
         IReadOnlyList<HybridSessionSnapshot> sessions, IReadOnlyList<ConnectedUserSnapshot> users) =>
         new(id, id, "127.0.0.1", 5000, CoordinatorState.Online, LaunchedAt, sessions, users);
 
-    private static HybridSessionSnapshot Session(int id, int capacity = SessionModel.NoCapacityLimit,
+    private static HybridSessionSnapshot Session(int id, int capacity = HybridSessionModel.NoCapacityLimit,
         IReadOnlyList<PeerSnapshot>? peers = null) =>
-        new(id, $"session{id}", 1, capacity, WebRTCEngine.Mediasoup, false, HybridSessionNodeState.Active, peers ?? []);
+        new(id, $"session{id}", capacity, WebRTCEngine.Mediasoup, false, HybridSessionNodeState.Active, peers ?? []);
 
     private static PeerSnapshot Peer(int userId) =>
         new(userId, HybridSessionPeerState.Connected, true, true, false, false);

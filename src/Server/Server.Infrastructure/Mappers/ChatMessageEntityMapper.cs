@@ -120,7 +120,7 @@ public static class ChatMessageEntityMapper
         ImageHeight = entity.ImageHeight,
         ImageSize = entity.ImageSize,
         IsLargeImage = entity.IsLargeImage,
-        FetchedAt = DateTime.SpecifyKind(entity.FetchedAt, DateTimeKind.Utc)
+        FetchedAt = entity.FetchedAt
     };
 
     public static LinkPreviewEntity ToEntity(this ChatLinkPreviewModel model) => new()
@@ -307,7 +307,7 @@ public static class ChatMessageEntityMapper
         {
             Emoji = entity.Emoji,
             UserId = entity.UserId,
-            ReactedAt = entity.ReactedAt is { } at ? DateTime.SpecifyKind(at, DateTimeKind.Utc) : null
+            ReactedAt = entity.ReactedAt is { } at ? at : null
         };
     }
 }

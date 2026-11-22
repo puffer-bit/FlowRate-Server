@@ -104,7 +104,7 @@ public class ChatSessionRepository : IChatSessionRepository
                 ChatSessionId = instance.Id,
                 UserId = userId,
                 AccountId = userId,
-                JoinedAt = DateTime.UtcNow
+                JoinedAt = DateTimeOffset.UtcNow
             });
         return entity;
     }

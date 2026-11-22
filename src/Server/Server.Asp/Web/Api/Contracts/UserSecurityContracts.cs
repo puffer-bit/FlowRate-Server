@@ -13,7 +13,7 @@ public sealed record UserSecurityDto(
     bool PasskeysAvailable,
     IReadOnlyList<PasskeyDto> Passkeys);
 
-public sealed record PasskeyDto(int Id, string Label, DateTime CreatedAtUtc, DateTime? LastUsedAtUtc, bool IsEnabled);
+public sealed record PasskeyDto(int Id, string Label, DateTimeOffset CreatedAtUtc, DateTimeOffset? LastUsedAtUtc, bool IsEnabled);
 
 public sealed class SetPasswordDto
 {

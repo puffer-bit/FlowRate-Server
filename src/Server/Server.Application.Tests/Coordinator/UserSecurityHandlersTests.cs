@@ -28,7 +28,7 @@ public class UserSecurityHandlersTests
     private const string Connection = "connection";
 
     private readonly CoordinatorInstanceModel _coordinator =
-        CoordinatorInstanceModel.Create("Main", "127.0.0.1", 5000, DateTime.UtcNow);
+        CoordinatorInstanceModel.Create("Main", "127.0.0.1", 5000, DateTimeOffset.UtcNow);
     private readonly InMemoryUserSecurityDataRepository _security = new();
     private readonly InMemoryUserPasskeyRepository _passkeys = new();
     private readonly Mock<IPasskeyService> _passkeyService = new();
@@ -42,8 +42,8 @@ public class UserSecurityHandlersTests
         coordinators.Setup(c => c.GetAsync(_coordinator.Id, It.IsAny<CancellationToken>())).ReturnsAsync(_coordinator);
         var users = new Mock<IUserRepository>();
         users.Setup(u => u.GetByIdAsync(UserId, It.IsAny<CancellationToken>())).ReturnsAsync(() =>
-            new UserModel(UserId, _coordinator.Id, "alice", UserState.Normal, UserStatus.Online, DateTime.UtcNow,
-                DateTime.UtcNow));
+            new UserModel(UserId, _coordinator.Id, "alice", UserState.Normal, UserStatus.Online, DateTimeOffset.UtcNow,
+                DateTimeOffset.UtcNow));
         var hasher = new Mock<IPasswordHasher>();
         hasher.Setup(h => h.HashPassword(It.IsAny<string?>())).Returns((string? raw) => "hash:" + raw);
         hasher.Setup(h => h.VerifyPassword(It.IsAny<string?>(), It.IsAny<string?>()))
@@ -176,7 +176,7 @@ public class UserSecurityHandlersTests
     [Fact]
     public async Task Passkey_IsRemovedWithTheProof()
     {
-        await _passkeys.AddAsync(UserPasskey.Create(UserId, [1], [2], 0, "Key", Guid.Empty, DateTime.UtcNow));
+        await _passkeys.AddAsync(UserPasskey.Create(UserId, [1], [2], 0, "Key", Guid.Empty, DateTimeOffset.UtcNow));
         await SetPassword(null, "first secret");
         var delete = new UserPasskeyDeleteHandler(_sender.Object, _replies);
         var id = _passkeys.All[0].Id;

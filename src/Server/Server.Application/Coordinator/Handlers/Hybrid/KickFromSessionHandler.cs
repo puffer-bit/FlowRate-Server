@@ -21,8 +21,4 @@ public class KickFromSessionHandler : HybridSessionRequestHandler<KickFromSessio
 
     protected override async Task<BaseMessage> HandleAsync(KickFromSessionRequest request, IHybridSession session) =>
         request.Answer(await session.PeerManager.KickPeerAsync(request.SenderId, request.TargetUserId, request.Reason), request.ToResponse);
-
-    // Only hybrid sessions support this request, so an id of another session type is never found
-    protected override ErrorCode SessionNotFound(KickFromSessionRequest request) =>
-        request.SessionType == SessionType.Hybrid ? ErrorCode.SessionNotFound : ErrorCode.WrongSessionType;
 }

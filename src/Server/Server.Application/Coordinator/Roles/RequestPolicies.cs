@@ -54,7 +54,6 @@ public static class RequestPolicies
             or MoveSessionCategoryRequest => Require(Permission.ManageSessions),
         // A session the sender may not see shows only to roles that see it; leaving is never refused
         MoveSessionRequest request => InSession(request.SessionId, Permission.ManageSessions),
-        JoinSessionRequest request => InSession(request.SessionId, Permission.ViewSessions),
         LeaveSessionRequest or SessionInfoRequest => Open,
 
         KickFromSessionRequest request =>
@@ -73,7 +72,7 @@ public static class RequestPolicies
         HybridSessionSetScreenShareWatchRequest request => InSession(request.SessionId, View),
         HybridSessionResumeInboundsRequest request => InSession(request.SessionId, View),
         // Stopping and muting only take away, so they stay open to whoever is inside
-        HybridSessionLeaveRequest or HybridSessionStopVideoRequest or HybridSessionStopScreenShareRequest
+        HybridSessionStopVideoRequest or HybridSessionStopScreenShareRequest
             or HybridSessionStopVoiceRequest or HybridSessionSetMicrophoneMuteRequest
             or HybridSessionSetSoundMuteRequest or HybridSessionSetAfkRequest => Open,
         HybridSessionPokeRequest request => InSession(request.SessionId, View | Permission.PokeMembers),
@@ -92,7 +91,6 @@ public static class RequestPolicies
         EditMessageRequest request => InSession(request.ChatId, View | Permission.SendMessages),
         // Deleting messages of others needs ManageMessages; the chat checks it, knowing the author
         DeleteMessageRequest request => InSession(request.ChatId, View),
-        ChatSessionHistoryRequest request => InSession(request.ChatId, View),
         ChatSessionMessageRequest request => InSession(request.ChatId, View),
         ChatSessionHistoryPageRequest request => InSession(request.ChatId, View),
         ChatSessionChangesRequest request => InSession(request.ChatId, View),
@@ -120,10 +118,9 @@ public static class RequestPolicies
             or CoordinatorSettingsRequest or CoordinatorUserListRequest or CoordinatorRolesRequest or CoordinatorBansRequest
             or RegisterPushTokenRequest or UnregisterPushTokenRequest or MediaTokenRequest => true,
 
-        JoinSessionRequest request => request.SessionType == SessionType.Chat,
-        LeaveSessionRequest or SessionInfoRequest or HybridSessionLeaveRequest => true,
+        LeaveSessionRequest or SessionInfoRequest => true,
 
-        ChatPinnedMessagesRequest or ChatHistoryWindowRequest or ChatSessionHistoryRequest or ChatSessionMessageRequest or ChatSessionHistoryPageRequest
+        ChatPinnedMessagesRequest or ChatHistoryWindowRequest or ChatSessionMessageRequest or ChatSessionHistoryPageRequest
             or ChatSessionChangesRequest or ChatReadStatesRequest or ChatMarkReadRequest or ChatViewersRequest
             or ChatMessageReadersRequest => true,
 
@@ -141,7 +138,7 @@ public static class RequestPolicies
     // An invalid request has no message, and is refused before it is handled
     private static bool HasAttachments(SendMessageRequest request) =>
         request.Message is { } message
-        && (message.Images.Count > 0 || message.Video.Count > 0 || message.Files.Count > 0);
+        && message.Files.Count > 0;
 
     private static RequestPolicy OnUser(int senderId, int? userId) =>
         userId is { } id && id != senderId ? Require(Permission.ManageUsers).Against(id) : Open;

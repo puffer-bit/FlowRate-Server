@@ -73,7 +73,7 @@ public sealed class MediaService : IMediaService
 
     public void Start() => _cleanUpLoop ??= Task.Run(CleanUpLoopAsync);
 
-    public (string Token, DateTime ExpiresAt) IssueToken(int userId) => _tokens.Issue(userId);
+    public (string Token, DateTimeOffset ExpiresAt) IssueToken(int userId) => _tokens.Issue(userId);
 
     public bool TryAuthorize(string? token, out int userId) => _tokens.TryValidate(token, out userId);
 
@@ -145,7 +145,7 @@ public sealed class MediaService : IMediaService
     public Task RegisterUploadAsync(string id, int userId, NewMediaUpload upload,
         CancellationToken cancellationToken = default) =>
         _uploads.AddAsync(new MediaUploadModel(id, _coordinatorInstanceId, userId, upload.ChatId, upload.Kind,
-            upload.MimeType, upload.Size, MediaUploadState.Uploading, _timeProvider.GetUtcNow().UtcDateTime),
+            upload.MimeType, upload.Size, MediaUploadState.Uploading, _timeProvider.GetUtcNow()),
             cancellationToken);
 
     public async Task<bool> CompleteUploadAsync(string id, CancellationToken cancellationToken = default)
@@ -261,7 +261,7 @@ public sealed class MediaService : IMediaService
 
     public async Task CleanUpAsync(CancellationToken cancellationToken = default)
     {
-        var createdBefore = _timeProvider.GetUtcNow().UtcDateTime - UnattachedLifetime;
+        var createdBefore = _timeProvider.GetUtcNow() - UnattachedLifetime;
         var removed = await _uploads.RemoveUnattachedAsync(_coordinatorInstanceId, createdBefore, cancellationToken);
         foreach (var id in removed)
             await DeleteFileAsync(id, cancellationToken);

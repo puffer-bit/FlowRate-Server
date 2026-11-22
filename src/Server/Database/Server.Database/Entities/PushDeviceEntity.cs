@@ -26,5 +26,5 @@ public class PushDeviceEntity
     [MaxLength(32)]
     public byte[]? ReplyTokenHash { get; set; }
 
-    public DateTime UpdatedTime { get; set; }
+    public DateTimeOffset UpdatedTime { get; set; }
 }

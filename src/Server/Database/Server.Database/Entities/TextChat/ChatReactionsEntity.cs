@@ -9,5 +9,5 @@ public class ChatReactionEntity
 
     public required string Emoji { get; init; }
 
-    public DateTime? ReactedAt { get; set; }
+    public DateTimeOffset? ReactedAt { get; set; }
 }

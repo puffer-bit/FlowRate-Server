@@ -24,7 +24,7 @@ public class UserSessionRepository(IDbContextFactory<ServerDbContext> contextFac
         await context.SaveChangesAsync(cancellationToken);
     }
 
-    public async Task<UserSession?> FindByTokenAsync(string coordinatorInstanceId, byte[] tokenHash, DateTime now,
+    public async Task<UserSession?> FindByTokenAsync(string coordinatorInstanceId, byte[] tokenHash, DateTimeOffset now,
         CancellationToken cancellationToken = default)
     {
         await using var context = await contextFactory.CreateDbContextAsync(cancellationToken);
@@ -36,7 +36,7 @@ public class UserSessionRepository(IDbContextFactory<ServerDbContext> contextFac
     }
 
     public async Task<IReadOnlyList<UserSession>> GetByUserAsync(string coordinatorInstanceId, int userId,
-        DateTime now, CancellationToken cancellationToken = default)
+        DateTimeOffset now, CancellationToken cancellationToken = default)
     {
         await using var context = await contextFactory.CreateDbContextAsync(cancellationToken);
 
@@ -69,7 +69,7 @@ public class UserSessionRepository(IDbContextFactory<ServerDbContext> contextFac
         return ids;
     }
 
-    public async Task DeleteExpiredAsync(DateTime now, CancellationToken cancellationToken = default)
+    public async Task DeleteExpiredAsync(DateTimeOffset now, CancellationToken cancellationToken = default)
     {
         await using var context = await contextFactory.CreateDbContextAsync(cancellationToken);
 

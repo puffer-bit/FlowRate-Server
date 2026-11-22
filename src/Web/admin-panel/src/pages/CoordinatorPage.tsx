@@ -63,7 +63,6 @@ function SessionsTable({ sessions }: { sessions: HybridSession[] }) {
           <Table.Tr>
             <Table.Th>ID</Table.Th>
             <Table.Th>Name</Table.Th>
-            <Table.Th>Host</Table.Th>
             <Table.Th>Engine</Table.Th>
             <Table.Th ta="right">Peers</Table.Th>
             <Table.Th>Members</Table.Th>
@@ -75,10 +74,9 @@ function SessionsTable({ sessions }: { sessions: HybridSession[] }) {
               <Table.Td>{session.id}</Table.Td>
               <Table.Td>
                 {session.name}
-                {session.isHostMustApprove && <Badge ml="xs" size="xs" variant="outline">approval</Badge>}
+                {session.isApprovalRequired && <Badge ml="xs" size="xs" variant="outline">approval</Badge>}
                 {session.state === 'WaitingForSFUNode' && <Badge ml="xs" size="xs" color="orange">waiting for SFU node</Badge>}
               </Table.Td>
-              <Table.Td>#{session.hostId}</Table.Td>
               <Table.Td>{session.engineType}</Table.Td>
               <Table.Td ta="right">{session.peers.length} / {session.capacity ?? '∞'}</Table.Td>
               <Table.Td>

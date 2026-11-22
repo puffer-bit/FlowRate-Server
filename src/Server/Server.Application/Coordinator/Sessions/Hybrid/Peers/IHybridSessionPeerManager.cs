@@ -27,8 +27,9 @@ public interface IHybridSessionPeerManager : IDisposable
     /// previous connection is out (<see cref="HybridSessionPeerReplacedEvent"/>).
     /// </param>
     /// <param name="pastCapacity">The user may join although the session is full.</param>
+    /// <param name="mayApprove">The user may let joiners in, so a session asking for approval admits them at once.</param>
     Task<(ErrorCode? result, TransportData? transportData)> AddPeerAsync(int userId, string clientEpoch,
-        string? connectionId = null, bool pastCapacity = false);
+        string? connectionId = null, bool pastCapacity = false, bool mayApprove = false);
     Task<ErrorCode?> ConnectPeerAsync(int userId, DTLSParameters dtlsParameters);
     Task<ErrorCode?> ApprovePeerAsync(int initiatorId, int userId);
     Task<ErrorCode?> RejectPeerAsync(int initiatorId, int userId, string? reason = null);

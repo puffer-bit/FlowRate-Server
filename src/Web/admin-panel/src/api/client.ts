@@ -167,3 +167,15 @@ export type CreateGlobalBan = Schemas['CreateBan']
 export const getBans = (id: string) => get<GlobalBan[]>(`${coordinatorPath(id)}/bans`)
 export const createBan = (id: string, ban: CreateGlobalBan) => send<void>('POST', `${coordinatorPath(id)}/bans`, ban)
 export const revokeBan = (id: string, banId: string) => send<void>('DELETE', `${coordinatorPath(id)}/bans/${encodeURIComponent(banId)}`)
+
+/** Why the server goes down; the users are warned with it. */
+export type RestartReason = 'Restart' | 'Update' | 'Shutdown'
+export type RestartNotice = { reason: RestartReason, at: string, message?: string | null, restartsAtEnd: boolean }
+export type AnnounceRestart = { reason: RestartReason, delayMinutes: number, message?: string, restartsAtEnd: boolean }
+
+/** The warning that stands, or null (204) when there is none. */
+export const getRestartNotice = async () => (await get<RestartNotice | undefined>('/restart-notice')) ?? null
+export const announceRestart = (value: AnnounceRestart) => send<RestartNotice>('POST', '/restart-notice', value)
+export const cancelRestartNotice = () => send<void>('DELETE', '/restart-notice')
+/** Stops the server at once for its supervisor to start it again; the users get only the going-down notice. */
+export const restartNow = (message?: string) => send<void>('POST', '/restart-notice/now', { message })

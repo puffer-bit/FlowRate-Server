@@ -9,8 +9,8 @@ public class UserPasskeyEntity
     public uint SignatureCounter { get; set; }
     public string Label { get; set; } = "Passkey";
     public Guid AaGuid { get; set; }
-    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
-    public DateTime? LastUsedAt { get; set; }
+    public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
+    public DateTimeOffset? LastUsedAt { get; set; }
     
     public bool IsEnabled { get; set; }
 }

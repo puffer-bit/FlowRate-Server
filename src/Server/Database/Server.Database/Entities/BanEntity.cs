@@ -11,7 +11,7 @@ public class BanEntity
     public string? Address { get; set; }
     public required string Reason { get; set; }
     public int CreatedBy { get; set; }
-    public DateTime CreatedAt { get; set; }
-    public DateTime? ExpiresAt { get; set; }
+    public DateTimeOffset CreatedAt { get; set; }
+    public DateTimeOffset? ExpiresAt { get; set; }
     public UserState PreviousState { get; set; }
 }

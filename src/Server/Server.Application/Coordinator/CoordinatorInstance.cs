@@ -115,7 +115,7 @@ public partial class CoordinatorInstance : ICoordinatorInstance
         }
     }
 
-    public async Task CloseAsync()
+    public async Task CloseAsync(ServerRestartNotification? notice = null)
     {
         if (State is CoordinatorState.Closing or CoordinatorState.Closed)
             return;
@@ -127,7 +127,7 @@ public partial class CoordinatorInstance : ICoordinatorInstance
         {
             RunCloseStep($"detaching user {user.Id}", () =>
             {
-                _messageSender.SendMessageByUserId(user.Id, new HeartbeatServerClosingNotification(Context.Id));
+                _messageSender.SendMessageByUserId(user.Id, notice ?? new ServerRestartNotification(Shared.Enums.ServerRestartReason.Restart));
                 _userManager.DetachUser(user.Id, "Server shutting down");
             });
         }
@@ -155,6 +155,8 @@ public partial class CoordinatorInstance : ICoordinatorInstance
         _logger.LogInformation("Coordinator {Name} closed.", Context.Name);
     }
 
+    public void Broadcast(Shared.Models.BaseMessage message) => _messageSender.BroadcastMessage(message);
+
     public void ApplySettings(CoordinatorInstanceModel model)
     {
         if (_settingsApplier == null)
@@ -169,10 +171,9 @@ public partial class CoordinatorInstance : ICoordinatorInstance
             .Select(session => new HybridSessionSnapshot(
                 session.Model.Id,
                 session.Model.Name,
-                session.Model.HostId,
                 session.Model.Capacity,
                 session.Model.EngineType,
-                session.Model.IsHostMustApprove,
+                session.Model.IsApprovalRequired,
                 session.Model.State,
                 session.PeerManager.GetAllPeerSnapshots().Values.OrderBy(peer => peer.UserId).ToList()))
             .OrderBy(session => session.Id)

@@ -44,7 +44,7 @@ public sealed class LinkPreviewService : IEventHandler<ChatSessionMessageAddedEv
 
     private readonly SemaphoreSlim _fetchSlots = new(MaxConcurrentFetches, MaxConcurrentFetches);
     private readonly ConcurrentDictionary<string, Task<ChatLinkPreviewModel?>> _inFlight = new();
-    private readonly ConcurrentDictionary<string, DateTime> _failures = new();
+    private readonly ConcurrentDictionary<string, DateTimeOffset> _failures = new();
     private readonly ConcurrentDictionary<int, UserBudget> _budgets = new();
     // Messages waiting for their preview, by message id and address, so that one is not fetched twice
     private readonly ConcurrentDictionary<(int MessageId, string Url), byte> _pending = new();
@@ -80,7 +80,7 @@ public sealed class LinkPreviewService : IEventHandler<ChatSessionMessageAddedEv
             return null;
 
         var key = LinkPreviewAddress.KeyOf(url);
-        var now = _time.GetUtcNow().UtcDateTime;
+        var now = _time.GetUtcNow();
 
         if (_failures.TryGetValue(key, out var failedAt))
         {
@@ -201,7 +201,7 @@ public sealed class LinkPreviewService : IEventHandler<ChatSessionMessageAddedEv
                 ImageHeight = fetched.Image?.Height ?? 0,
                 ImageSize = fetched.Image?.Content.LongLength ?? 0,
                 IsLargeImage = fetched.Image != null && fetched.IsLargeImage,
-                FetchedAt = _time.GetUtcNow().UtcDateTime
+                FetchedAt = _time.GetUtcNow()
             }, _stopping.Token);
 
             if (fetched.Image != null)
@@ -226,10 +226,10 @@ public sealed class LinkPreviewService : IEventHandler<ChatSessionMessageAddedEv
         // Many different failing addresses should not grow the memory without end
         if (_failures.Count >= MaxRememberedFailures)
             _failures.Clear();
-        _failures[key] = _time.GetUtcNow().UtcDateTime;
+        _failures[key] = _time.GetUtcNow();
     }
 
-    private bool TryTakeBudget(int userId, DateTime now)
+    private bool TryTakeBudget(int userId, DateTimeOffset now)
     {
         var budget = _budgets.GetOrAdd(userId, _ => new UserBudget(UserFetchBurst, now));
         lock (budget)
@@ -246,7 +246,7 @@ public sealed class LinkPreviewService : IEventHandler<ChatSessionMessageAddedEv
 
     public async Task CleanUpAsync(CancellationToken cancellationToken = default)
     {
-        var now = _time.GetUtcNow().UtcDateTime;
+        var now = _time.GetUtcNow();
         var removed = await _repository.RemoveUnusedAsync(_coordinatorInstanceId, now - UnusedLifetime, cancellationToken);
         foreach (var id in removed)
         {
@@ -302,9 +302,9 @@ public sealed class LinkPreviewService : IEventHandler<ChatSessionMessageAddedEv
         (_fetcher as IDisposable)?.Dispose();
     }
 
-    private sealed class UserBudget(double tokens, DateTime updatedAt)
+    private sealed class UserBudget(double tokens, DateTimeOffset updatedAt)
     {
         public double Tokens { get; set; } = tokens;
-        public DateTime UpdatedAt { get; set; } = updatedAt;
+        public DateTimeOffset UpdatedAt { get; set; } = updatedAt;
     }
 }

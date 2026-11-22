@@ -309,13 +309,13 @@ public class UserManagerLimitsTests
 
     private static UserModel User(int id)
     {
-        var user = UserModel.Create(CoordinatorId, $"user{id}", "127.0.0.1", DateTime.UtcNow);
+        var user = UserModel.Create(CoordinatorId, $"user{id}", "127.0.0.1", DateTimeOffset.UtcNow);
         user.Id = id;
         return user;
     }
 
     private static CoordinatorInstanceModel Model(int maxOnlineUsers, int maxUsers) =>
-        new(CoordinatorId, "coordinator", true, "127.0.0.1", 5000, DateTime.UtcNow, DateTime.UtcNow, DateTime.UtcNow,
+        new(CoordinatorId, "coordinator", true, "127.0.0.1", 5000, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow,
             maxOnlineUsers, maxUsers, MotdSettings.Disabled, AccessListSettings.Open,
             new CoordinatorHeartbeatSettings(5, 40),
             CoordinatorMediaSettings.Default, CoordinatorUploadSettings.Default, CoordinatorRateLimitSettings.Default, []);

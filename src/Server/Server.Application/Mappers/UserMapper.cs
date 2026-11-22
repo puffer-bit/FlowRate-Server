@@ -26,8 +26,8 @@ public static class UserMapperExtensions
             AvatarUrl = entity.AvatarUrl,
             State = entity.State,
             Status = entity.Id == viewerId ? entity.Status : entity.Presence,
-            FirstConnectionTime = entity.FirstConnectionTime,
-            LastConnectionTime = entity.LastConnectionTime,
+            FirstConnectedAt = entity.FirstConnectionTime,
+            LastConnectedAt = entity.LastConnectionTime,
             RoleIds = entity.RoleIds.Order().ToList()
         };
     }

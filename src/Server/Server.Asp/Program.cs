@@ -157,6 +157,7 @@ namespace Server.Asp
             services.AddSingleton<ISfuNodeRegistry, SfuNodeRegistry>();
             services.AddSingleton<IOrchestratorInstanceContext, OrchestratorInstanceContext>();
             services.AddSingleton<IOrchestratorInstance, OrchestratorInstance>();
+            services.AddSingleton<Server.Application.Orchestrator.Restart.IServerRestartNotice, Server.Application.Orchestrator.Restart.ServerRestartNotice>();
             services.AddSingleton<ConfigurationSeeder>();
             services.AddSingleton<ICoordinatorSettingsStore, CoordinatorSettingsStore>();
             services.AddSingleton<ISfuNodeStore, SfuNodeStore>();
@@ -213,10 +214,17 @@ namespace Server.Asp
         public class OrchestratorService(
             IOrchestratorInstance orchestratorInstance,
             IHostApplicationLifetime lifetime,
+            Server.Application.Orchestrator.Restart.IServerRestartNotice restartNotice,
             ILogger logger) : BackgroundService
         {
             protected override async Task ExecuteAsync(CancellationToken stoppingToken)
             {
+                // An announced restart that restarts by itself stops the process; its supervisor starts it again
+                restartNotice.Due += () =>
+                {
+                    logger.Information("The announced restart is due. Stopping the server.");
+                    lifetime.StopApplication();
+                };
                 try
                 {
                     await orchestratorInstance.Configure();
@@ -237,7 +245,7 @@ namespace Server.Asp
             {
                 try
                 {
-                    await orchestratorInstance.StopAsync(cancellationToken);
+                    await orchestratorInstance.StopAsync(cancellationToken, restartNotice.GoingDown());
                 }
                 catch (Exception e)
                 {

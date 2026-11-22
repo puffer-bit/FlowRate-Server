@@ -18,7 +18,7 @@ public class RateLimitingTests
     private readonly FakeTimeProvider _time = new();
 
     private static CreateSessionRequest CreateSession() =>
-        new(new CreateSessionModel("room", 10, new ChatSessionCreateData()));
+        new(new CreateSessionModel("room", new ChatSessionCreateData()));
 
     [Fact]
     public void TokenBucket_RefillsOverTime()
@@ -90,7 +90,7 @@ public class RateLimitingTests
 
         _time.Advance(TimeSpan.FromSeconds(5));
         for (var i = 0; i < 10; i++)
-            Assert.Equal(RequestGuardVerdict.Allowed, guard.Check(new HybridSessionLeaveRequest(1), out _));
+            Assert.Equal(RequestGuardVerdict.Allowed, guard.Check(new LeaveSessionRequest(1), out _));
     }
 
     [Fact]
@@ -124,7 +124,7 @@ public class RateLimitingTests
         for (var i = 0; i < 400; i++)
         {
             if (guard.Check(new SessionInfoRequest(null), out _) == RequestGuardVerdict.Allowed) allowed++;
-            if (guard.Check(new ChatSessionHistoryRequest(1, 10, 0), out _) == RequestGuardVerdict.Allowed) allowed++;
+            if (guard.Check(new ChatSessionHistoryPageRequest(1, null, 10), out _) == RequestGuardVerdict.Allowed) allowed++;
             _time.Advance(TimeSpan.FromMilliseconds(1));
         }
 

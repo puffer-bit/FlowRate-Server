@@ -13,7 +13,7 @@ public sealed record CoordinatorSnapshot(
     string Ip,
     int Port,
     CoordinatorState State,
-    DateTime StartedAtUtc,
+    DateTimeOffset StartedAtUtc,
     IReadOnlyList<HybridSessionSnapshot> HybridSessions,
     IReadOnlyList<ConnectedUserSnapshot> ConnectedUsers)
 {
@@ -24,10 +24,9 @@ public sealed record CoordinatorSnapshot(
 public sealed record HybridSessionSnapshot(
     int Id,
     string Name,
-    int HostId,
     int Capacity,
     WebRTCEngine EngineType,
-    bool IsHostMustApprove,
+    bool IsApprovalRequired,
     HybridSessionNodeState State,
     IReadOnlyList<PeerSnapshot> Peers);
 
@@ -36,4 +35,4 @@ public sealed record ConnectedUserSnapshot(
     string Username,
     string? DisplayName,
     UserStatus Status,
-    DateTime LastConnectionTime);
+    DateTimeOffset LastConnectionTime);

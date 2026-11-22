@@ -29,8 +29,8 @@ public class ChatReadServiceTests
         chat.Id = ChatId;
         _chats.Setup(c => c.TryGetSession(ChatId, out chat)).Returns(true);
         _chats.Setup(c => c.GetAllSessions()).Returns([chat]);
-        _repository.Setup(r => r.MoveAsync(UserId, ChatId, It.IsAny<int>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((int _, int _, int messageId, DateTime? _, CancellationToken _) => new ChatReadMove(messageId, true));
+        _repository.Setup(r => r.MoveAsync(UserId, ChatId, It.IsAny<int>(), It.IsAny<DateTimeOffset?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((int _, int _, int messageId, DateTimeOffset? _, CancellationToken _) => new ChatReadMove(messageId, true));
         _repository.Setup(r => r.GetLastMessageIdAsync(ChatId, It.IsAny<CancellationToken>())).ReturnsAsync(30);
 
         _service = new ChatReadService(NullLogger.Instance, _repository.Object, _sender.Object);
@@ -93,18 +93,18 @@ public class ChatReadServiceTests
     [Fact]
     public async Task OwnMessage_MovesThePositionOfItsSender()
     {
-        var message = ChatMessageModel.Create(ChatId, UserId, DateTime.UtcNow, new ChatTextContentModel { Text = "hi" });
+        var message = ChatMessageModel.Create(ChatId, UserId, DateTimeOffset.UtcNow, new ChatTextContentModel { Text = "hi" });
         message.Id = 31;
 
         await _service.HandleAsync(new ChatSessionMessageAddedEvent(ChatId, message));
 
-        _repository.Verify(r => r.MoveAsync(UserId, ChatId, 31, It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()), Times.Once);
+        _repository.Verify(r => r.MoveAsync(UserId, ChatId, 31, It.IsAny<DateTimeOffset?>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     private const int GroupId = 8;
     private const int FriendId = 6;
     private const int StrangerId = 9;
-    private static readonly DateTime Now = new(2026, 11, 13, 12, 0, 0, DateTimeKind.Utc);
+    private static readonly DateTimeOffset Now = new(2026, 11, 13, 12, 0, 0, TimeSpan.Zero);
 
     private (ChatReadService service, ChatSessionModel group) WithGroup(int peerPosition = 0, bool moved = true)
     {
@@ -113,9 +113,9 @@ public class ChatReadServiceTests
         group.SetAudience(ChatKind.Group, [UserId, FriendId, StrangerId]);
         _chats.Setup(c => c.TryGetSession(GroupId, out group)).Returns(true);
         _repository.Setup(r => r.GetLastMessageIdAsync(GroupId, It.IsAny<CancellationToken>())).ReturnsAsync(30);
-        _repository.Setup(r => r.MoveAsync(UserId, GroupId, It.IsAny<int>(), It.IsAny<DateTime?>(),
+        _repository.Setup(r => r.MoveAsync(UserId, GroupId, It.IsAny<int>(), It.IsAny<DateTimeOffset?>(),
                 It.IsAny<CancellationToken>()))
-            .ReturnsAsync((int _, int _, int messageId, DateTime? _, CancellationToken _) => new ChatReadMove(messageId, moved));
+            .ReturnsAsync((int _, int _, int messageId, DateTimeOffset? _, CancellationToken _) => new ChatReadMove(messageId, moved));
         _repository.Setup(r => r.GetUnreadAsync(GroupId, UserId, It.IsAny<int>(), It.IsAny<int>(),
             It.IsAny<CancellationToken>())).ReturnsAsync([]);
         _repository.Setup(r => r.GetPeerPositionsAsync(UserId, It.IsAny<IReadOnlyCollection<int>>(),
@@ -232,8 +232,8 @@ public class ChatReadServiceTests
             Times.Never);
     }
 
-    private sealed class FixedTime(DateTime now) : TimeProvider
+    private sealed class FixedTime(DateTimeOffset now) : TimeProvider
     {
-        public override DateTimeOffset GetUtcNow() => new(now);
+        public override DateTimeOffset GetUtcNow() => now;
     }
 }

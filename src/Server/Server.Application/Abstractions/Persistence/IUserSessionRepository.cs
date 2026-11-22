@@ -8,11 +8,11 @@ public interface IUserSessionRepository
     Task UpdateAsync(UserSession session, CancellationToken cancellationToken = default);
 
     /// <summary>The session the token, or the one before it, belongs to; expired sessions are not found.</summary>
-    Task<UserSession?> FindByTokenAsync(string coordinatorInstanceId, byte[] tokenHash, DateTime now,
+    Task<UserSession?> FindByTokenAsync(string coordinatorInstanceId, byte[] tokenHash, DateTimeOffset now,
         CancellationToken cancellationToken = default);
 
     /// <summary>The sessions of the user that have not expired, the latest used first.</summary>
-    Task<IReadOnlyList<UserSession>> GetByUserAsync(string coordinatorInstanceId, int userId, DateTime now,
+    Task<IReadOnlyList<UserSession>> GetByUserAsync(string coordinatorInstanceId, int userId, DateTimeOffset now,
         CancellationToken cancellationToken = default);
 
     /// <summary>Deletes the session when it is the user's; false when there was none.</summary>
@@ -23,5 +23,5 @@ public interface IUserSessionRepository
     Task<IReadOnlyList<Guid>> DeleteAllButAsync(string coordinatorInstanceId, int userId, Guid? keep,
         CancellationToken cancellationToken = default);
 
-    Task DeleteExpiredAsync(DateTime now, CancellationToken cancellationToken = default);
+    Task DeleteExpiredAsync(DateTimeOffset now, CancellationToken cancellationToken = default);
 }

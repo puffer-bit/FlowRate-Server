@@ -69,7 +69,7 @@ public sealed class PrivateChatRepositoryTests : IDisposable
         group.Id = await _repository.AddAsync(group);
         group.SetAudience(ChatKind.Group, [1, 3]);
         ChatMessageModel Message(ChatSystemEventKind kind, int subject) => ChatMessageModel.CreateSystem(group.Id,
-            new ChatSystemContentModel { Kind = kind, ActorUserId = 1, SubjectUserId = subject }, DateTime.UtcNow);
+            new ChatSystemContentModel { Kind = kind, ActorUserId = 1, SubjectUserId = subject }, DateTimeOffset.UtcNow);
         var stored = await _repository.UpdateWithSystemMessagesAsync(group,
             [Message(ChatSystemEventKind.MemberAdded, 3), Message(ChatSystemEventKind.MemberRemoved, 2)]);
         Assert.True((await _repository.GetByIdAsync(group.Id))!.MemberIds.SetEquals([1, 3]));
@@ -126,7 +126,7 @@ public sealed class PrivateChatRepositoryTests : IDisposable
         var users = new Mock<IUserManager>();
         users.Setup(manager => manager.GetUserAsync(It.IsAny<int>())).ReturnsAsync((int id) =>
             new UserModel(id, "coordinator", $"User {id}", UserState.Normal, UserStatus.Online,
-                DateTime.UtcNow, DateTime.UtcNow));
+                DateTimeOffset.UtcNow, DateTimeOffset.UtcNow));
         BaseMessage? answer = null;
         var sender = new Mock<IMessageSender>();
         sender.Setup(s => s.SendMessageById("device", It.IsAny<BaseMessage>()))
@@ -135,10 +135,11 @@ public sealed class PrivateChatRepositoryTests : IDisposable
         var authorizer = new RequestAuthorizer(Mock.Of<ICoordinatorPermissions>(), Mock.Of<IHybridSessionManager>(), sessions);
         for (var index = 0; index < 2; index++)
         {
-            BaseMessage request = new CreateSessionRequest(new CreateSessionModel("Friends", -1,
-                new ChatSessionCreateData(Kind: ChatKind.Group, MemberIds: peers))) { SenderId = 1 };
+            BaseMessage request = new CreateSessionRequest(new CreateSessionModel("Friends",
+                new ChatSessionCreateData(Kind: ChatKind.Group, MemberIds: peers)));
             var json = JsonSerializer.Serialize(request, ProtocolJsonContext.Default.BaseMessage);
             var decoded = Assert.IsType<CreateSessionRequest>(JsonSerializer.Deserialize(json, ProtocolJsonContext.Default.BaseMessage));
+            decoded.SenderId = 1; // the gateway stamps the sender after parsing
             Assert.True(MessageValidator.TryValidate(decoded, out var errors), string.Join("; ", errors));
             Assert.True(await authorizer.IsAllowedAsync(decoded));
             await handler.HandleMessage(decoded, "device");
@@ -150,7 +151,7 @@ public sealed class PrivateChatRepositoryTests : IDisposable
             Assert.Equal(peers.Prepend(1), group.MemberIds);
             var saved = await _repository.GetByIdAsync(group.Id);
             Assert.True(saved!.MemberIds.SetEquals(peers.Prepend(1)));
-            Assert.Equal(1, saved.AdminUserId);
+            Assert.Equal(1, saved.OwnerUserId);
         }
         var reloaded = Chats();
         await reloaded.LoadAsync();
@@ -201,7 +202,7 @@ public sealed class PrivateChatRepositoryTests : IDisposable
         var group = ChatSessionModel.Create("coordinator", "Friends", 1);
         group.SetAudience(ChatKind.Group, [1, 2]);
         group.Id = await _repository.AddAsync(group);
-        var joined = new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        var joined = new DateTimeOffset(2025, 1, 1, 0, 0, 0, TimeSpan.Zero);
         await using (var context = _factory.CreateDbContext())
         {
             var membership = await context.ChatSessionMembers.SingleAsync(member => member.ChatSessionId == group.Id && member.UserId == 1);
@@ -223,7 +224,7 @@ public sealed class PrivateChatRepositoryTests : IDisposable
             Assert.Equal(42, await context.ChatSessionEntities.Where(chat => chat.Id == group.Id).Select(chat => chat.LastRevision).SingleAsync());
         }
         var saved = await _repository.GetByIdAsync(group.Id);
-        Assert.Equal(3, saved!.AdminUserId);
+        Assert.Equal(3, saved!.OwnerUserId);
         Assert.Equal("Renamed", saved.Name);
         Assert.True(saved.MemberIds.SetEquals([1, 3]));
     }

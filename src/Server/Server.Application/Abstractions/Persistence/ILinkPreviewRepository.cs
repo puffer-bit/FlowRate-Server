@@ -5,7 +5,7 @@ namespace Server.Application.Abstractions.Persistence;
 public interface ILinkPreviewRepository
 {
     /// <summary>The newest preview of the address fetched at or after <paramref name="fetchedAfter"/>.</summary>
-    Task<ChatLinkPreviewModel?> GetNewestAsync(string coordinatorInstanceId, string url, DateTime fetchedAfter,
+    Task<ChatLinkPreviewModel?> GetNewestAsync(string coordinatorInstanceId, string url, DateTimeOffset fetchedAfter,
         CancellationToken cancellationToken = default);
 
     Task<ChatLinkPreviewModel?> GetAsync(string coordinatorInstanceId, int id, CancellationToken cancellationToken = default);
@@ -17,6 +17,6 @@ public interface ILinkPreviewRepository
     /// Removes the previews fetched before <paramref name="fetchedBefore"/> that no message shows.
     /// </summary>
     /// <returns>The ids of the removed previews, whose images are to be deleted.</returns>
-    Task<IReadOnlyList<int>> RemoveUnusedAsync(string coordinatorInstanceId, DateTime fetchedBefore,
+    Task<IReadOnlyList<int>> RemoveUnusedAsync(string coordinatorInstanceId, DateTimeOffset fetchedBefore,
         CancellationToken cancellationToken = default);
 }

@@ -49,7 +49,7 @@ public class SfuNodeRecoveryTests
     {
         var registry = await CreateRegistry();
         var pool = new CoordinatorSfuPool(registry, [1, 2]);
-        var model = HybridSessionModel.Create("coordinator", "room", 10, 1, WebRTCEngine.Mediasoup);
+        var model = HybridSessionModel.Create("coordinator", "room", 10, WebRTCEngine.Mediasoup);
         model.Id = 1;
         var events = new RecordingEventBus();
         using var session = new HybridSession(model,

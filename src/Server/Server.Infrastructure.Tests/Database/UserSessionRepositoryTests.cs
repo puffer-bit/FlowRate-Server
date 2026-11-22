@@ -18,7 +18,7 @@ public sealed class UserSessionRepositoryTests : IDisposable
 
     private readonly string _databasePath = Path.Combine(Path.GetTempPath(), $"sessions-{Guid.NewGuid():N}.db");
     private readonly TestContextFactory _factory;
-    private readonly DateTime _now = new(2026, 10, 28, 12, 0, 0, DateTimeKind.Utc);
+    private readonly DateTimeOffset _now = new(2026, 10, 28, 12, 0, 0, TimeSpan.Zero);
 
     public UserSessionRepositoryTests()
     {
@@ -62,7 +62,7 @@ public sealed class UserSessionRepositoryTests : IDisposable
         return await context.UserEntities.Select(x => x.Id).SingleAsync();
     }
 
-    private UserSession Session(int userId, string token, DateTime? expiresAt = null) =>
+    private UserSession Session(int userId, string token, DateTimeOffset? expiresAt = null) =>
         new(Guid.NewGuid(), Coordinator, userId, SecretHash.Of(token), null, "desk", "Linux", "0.8.0", _now, _now,
             expiresAt ?? _now.AddDays(90), "10.0.0.1");
 

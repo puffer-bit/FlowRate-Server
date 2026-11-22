@@ -4,10 +4,10 @@ using Shared.Enums.User;
 namespace Server.Core.Models.Moderation;
 
 public record Ban(Guid Id, string CoordinatorId, BanKind Kind, int? UserId, string? Address,
-    string Reason, int CreatedBy, DateTime CreatedAt, DateTime? ExpiresAt,
+    string Reason, int CreatedBy, DateTimeOffset CreatedAt, DateTimeOffset? ExpiresAt,
     UserState PreviousState = UserState.Normal)
 {
-    public bool IsActive(DateTime now) => ExpiresAt == null || ExpiresAt > now;
+    public bool IsActive(DateTimeOffset now) => ExpiresAt == null || ExpiresAt > now;
 
     public static string? NormalizeAddress(string? value)
     {

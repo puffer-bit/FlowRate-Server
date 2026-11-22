@@ -11,7 +11,7 @@ public class ChatMessageModelTests
     private const int ChatId = 7;
     private const int AuthorId = 1;
     private const int OtherUserId = 2;
-    private static readonly DateTime Now = new(2026, 1, 1, 12, 0, 0, DateTimeKind.Utc);
+    private static readonly DateTimeOffset Now = new(2026, 1, 1, 12, 0, 0, TimeSpan.Zero);
 
     private static ChatMessageModel Message(int chatId = ChatId) =>
         ChatMessageModel.Create(chatId, AuthorId, Now, new ChatTextContentModel { Text = "hello" });

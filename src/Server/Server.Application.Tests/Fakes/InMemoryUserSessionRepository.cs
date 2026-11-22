@@ -21,13 +21,13 @@ public sealed class InMemoryUserSessionRepository : IUserSessionRepository
         return Task.CompletedTask;
     }
 
-    public Task<UserSession?> FindByTokenAsync(string coordinatorInstanceId, byte[] tokenHash, DateTime now,
+    public Task<UserSession?> FindByTokenAsync(string coordinatorInstanceId, byte[] tokenHash, DateTimeOffset now,
         CancellationToken cancellationToken = default) =>
         Task.FromResult(_sessions.Values.FirstOrDefault(x => x.CoordinatorInstanceId == coordinatorInstanceId
             && x.ExpiresAt > now
             && (x.TokenHash.SequenceEqual(tokenHash) || x.PreviousTokenHash?.SequenceEqual(tokenHash) == true)));
 
-    public Task<IReadOnlyList<UserSession>> GetByUserAsync(string coordinatorInstanceId, int userId, DateTime now,
+    public Task<IReadOnlyList<UserSession>> GetByUserAsync(string coordinatorInstanceId, int userId, DateTimeOffset now,
         CancellationToken cancellationToken = default) =>
         Task.FromResult<IReadOnlyList<UserSession>>(_sessions.Values
             .Where(x => x.CoordinatorInstanceId == coordinatorInstanceId && x.UserId == userId && x.ExpiresAt > now)
@@ -51,7 +51,7 @@ public sealed class InMemoryUserSessionRepository : IUserSessionRepository
         return Task.FromResult<IReadOnlyList<Guid>>(ids);
     }
 
-    public Task DeleteExpiredAsync(DateTime now, CancellationToken cancellationToken = default)
+    public Task DeleteExpiredAsync(DateTimeOffset now, CancellationToken cancellationToken = default)
     {
         foreach (var session in _sessions.Values.Where(x => x.ExpiresAt <= now).ToList())
             _sessions.Remove(session.Id);

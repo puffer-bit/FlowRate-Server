@@ -42,7 +42,7 @@ public class PushDeviceRepository : IPushDeviceRepository
         entity.KeyId = device.KeyId;
         entity.Key = device.Key;
         entity.ReplyTokenHash = device.ReplyTokenHash;
-        entity.UpdatedTime = _timeProvider.GetUtcNow().UtcDateTime;
+        entity.UpdatedTime = _timeProvider.GetUtcNow();
 
         await context.SaveChangesAsync(cancellationToken);
     }

@@ -10,9 +10,9 @@ namespace Server.Database.Entities
         public bool IsDefault { get; set; }
         public required string Ip { get; set; }
         public int Port { get; set; }
-        public DateTime CreateTime { get; set; }
-        public DateTime FirstLaunchTime { get; set; }
-        public DateTime CurrentLaunchTime { get; set; }
+        public DateTimeOffset CreateTime { get; set; }
+        public DateTimeOffset FirstLaunchTime { get; set; }
+        public DateTimeOffset CurrentLaunchTime { get; set; }
         public int MaxOnlineUsers { get; set; }
         public int MaxUsers { get; set; }
         public long Revision { get; set; }

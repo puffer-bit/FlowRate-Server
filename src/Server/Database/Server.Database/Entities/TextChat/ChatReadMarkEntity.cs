@@ -10,7 +10,7 @@ public class ChatReadMarkEntity
     public int ChatId { get; set; }
     public int UserId { get; set; }
     public int UpToMessageId { get; set; }
-    public DateTime ReadAt { get; set; }
+    public DateTimeOffset ReadAt { get; set; }
 
     public ChatSessionEntity ChatSession { get; set; } = null!;
 }

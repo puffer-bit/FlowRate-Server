@@ -23,7 +23,7 @@ namespace Server.Infrastructure.Tests.Database;
 public sealed class RepositoryIntegrationTests : IDisposable
 {
     private readonly RepositoryTestDatabase _database = new();
-    private static readonly DateTime Now = new(2026, 11, 19, 12, 0, 0, DateTimeKind.Utc);
+    private static readonly DateTimeOffset Now = new(2026, 11, 19, 12, 0, 0, TimeSpan.Zero);
     private const string Coordinator = "coordinator";
 
     public RepositoryIntegrationTests()
@@ -166,10 +166,11 @@ public sealed class RepositoryIntegrationTests : IDisposable
         await using var reader = _database.CreateDbContext();
         var read = await reader.LinkPreviews.SingleAsync(x => x.Id == preview.Id);
         Assert.Equal(preview.FetchedAt, read.FetchedAt);
+        Assert.Equal(TimeSpan.Zero, read.FetchedAt.Offset); // so DateTimeOffset keeps the moment
         Assert.Equal(context.Database.IsNpgsql() ? Now : Now.AddTicks(7), read.FetchedAt);
-        preview.FetchedAt = DateTime.MaxValue;
+        preview.FetchedAt = DateTimeOffset.MaxValue;
         if (synchronous) context.SaveChanges(); else await context.SaveChangesAsync();
-        Assert.Equal(DateTime.MaxValue, await reader.LinkPreviews.AsNoTracking()
+        Assert.Equal(DateTimeOffset.MaxValue, await reader.LinkPreviews.AsNoTracking()
             .Where(x => x.Id == preview.Id).Select(x => x.FetchedAt).SingleAsync());
     }
 

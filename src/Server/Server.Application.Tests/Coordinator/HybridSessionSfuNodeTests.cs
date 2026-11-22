@@ -37,7 +37,7 @@ public class HybridSessionSfuNodeTests
     private async Task<(HybridSession session, CoordinatorSfuPool pool)> CreateSession(params int[] nodeIds)
     {
         var pool = new CoordinatorSfuPool(_registry.Object, nodeIds);
-        var model = HybridSessionModel.Create("coordinator", "room", 10, 1, WebRTCEngine.Mediasoup);
+        var model = HybridSessionModel.Create("coordinator", "room", 10, WebRTCEngine.Mediasoup);
         model.Id = 7;
 
         var session = new HybridSession(model, new HybridSessionPeerManager(NullLogger.Instance, _events, model), pool,

@@ -32,7 +32,7 @@ public interface IMediaService : IDisposable
 
     void Start();
 
-    (string Token, DateTime ExpiresAt) IssueToken(int userId);
+    (string Token, DateTimeOffset ExpiresAt) IssueToken(int userId);
     bool TryAuthorize(string? token, out int userId);
 
     /// <summary>

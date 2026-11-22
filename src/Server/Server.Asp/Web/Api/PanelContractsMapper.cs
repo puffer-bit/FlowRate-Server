@@ -1,6 +1,7 @@
 using Server.Application.Coordinator.Snapshots;
 using Server.Asp.Web.Api.Contracts;
 using Server.Core.Models;
+using Server.Core.Models.HybridSession;
 
 namespace Server.Asp.Web.Api;
 
@@ -25,10 +26,9 @@ public static class PanelContractsMapper
     private static HybridSessionDto ToDto(HybridSessionSnapshot session) => new(
         session.Id,
         session.Name,
-        session.HostId,
-        session.Capacity == SessionModel.NoCapacityLimit ? null : session.Capacity,
+        session.Capacity == HybridSessionModel.NoCapacityLimit ? null : session.Capacity,
         session.EngineType,
-        session.IsHostMustApprove,
+        session.IsApprovalRequired,
         session.State,
         session.Peers
             .Select(peer => new PeerDto(

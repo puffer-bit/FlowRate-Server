@@ -34,7 +34,7 @@ public static class PushPayload
             if (isMention)
                 writer.WriteBoolean("mention", true);
             writer.WriteNumber("attachment", (int)AttachmentOf(message));
-            writer.WriteNumber("sentTime", new DateTimeOffset(message.SentTime, TimeSpan.Zero).ToUnixTimeMilliseconds());
+            writer.WriteNumber("sentTime", message.SentTime.ToUnixTimeMilliseconds());
             writer.WriteEndObject();
         }
 

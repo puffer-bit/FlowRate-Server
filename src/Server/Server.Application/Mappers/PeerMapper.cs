@@ -13,7 +13,6 @@ public static class PeerMapperExtensions
         {
             UserId = peer.UserId,
             State = peer.State,
-            IsNegotiated = peer.IsTransportConnected,
             IsConnected = peer.IsTransportConnected,
             IsApproved = peer.IsApproved,
             IsRejected = peer.IsRejected,

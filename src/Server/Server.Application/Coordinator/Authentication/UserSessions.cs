@@ -21,7 +21,7 @@ public sealed class UserSessions(
 
     private const string UnknownDevice = "Unknown";
 
-    private DateTime Now => timeProvider.GetUtcNow().UtcDateTime;
+    private DateTimeOffset Now => timeProvider.GetUtcNow();
 
     public Task<UserSession?> FindAsync(string token) =>
         repository.FindByTokenAsync(coordinatorInstanceId, SecretHash.Of(token), Now);

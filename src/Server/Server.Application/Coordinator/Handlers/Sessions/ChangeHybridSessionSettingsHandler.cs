@@ -24,7 +24,7 @@ public class ChangeHybridSessionSettingsHandler : IMessageHandler<ChangeHybridSe
             return HandleMessageResult.ForbiddenRequest;
 
         var result = await _sessionManager.ChangeSettingsAsync(request.SessionId, request.Name.Trim(),
-            request.Capacity, request.IsHostMustApprove, request.Media.ToModel(), request.SenderId);
+            request.Capacity, request.IsApprovalRequired, request.Media.ToModel(), request.SenderId);
         _messageSender.SendMessageById(connectionId, request.Answer(result, request.ToResponse));
 
         return HandleMessageResult.NoError;

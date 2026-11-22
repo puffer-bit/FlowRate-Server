@@ -36,18 +36,18 @@ public sealed class VideoSessionRepositoryTests : IDisposable
     [Fact]
     public async Task Update_SavesTheSettingsAndKeepsTheCreationTime()
     {
-        var model = HybridSessionModel.Create("coordinator", "room", 10, 1, WebRTCEngine.Mediasoup);
+        var model = HybridSessionModel.Create("coordinator", "room", 10, WebRTCEngine.Mediasoup);
         model.Id = await _repository.AddAsync(model);
         var createdAt = await CreatedAt(model.Id);
 
         model.Rename("lounge");
         model.ChangeCapacity(5);
-        model.SetHostMustApprove(true);
+        model.SetApprovalRequired(true);
         await _repository.UpdateAsync(model);
 
         var saved = await _repository.GetByIdAsync(model.Id);
         Assert.NotNull(saved);
-        Assert.Equal(("lounge", 5, true), (saved.Name, saved.Capacity, saved.IsHostMustApprove));
+        Assert.Equal(("lounge", 5, true), (saved.Name, saved.Capacity, saved.IsApprovalRequired));
         Assert.Equal(createdAt, await CreatedAt(model.Id));
     }
 
@@ -56,7 +56,7 @@ public sealed class VideoSessionRepositoryTests : IDisposable
     {
         var media = new HybridMediaSettings(ScreenCodec: WebRTCVideoCodecs.VP8, IsOpusFecEnabled: false,
             KeyFrameRequestDelayMs: 500, VideoJitterBufferMs: 300);
-        var model = HybridSessionModel.Create("coordinator", "room", 10, 1, WebRTCEngine.Mediasoup, media: media);
+        var model = HybridSessionModel.Create("coordinator", "room", 10, WebRTCEngine.Mediasoup, media: media);
         model.Id = await _repository.AddAsync(model);
 
         Assert.Equal(media, (await _repository.GetByIdAsync(model.Id))?.Media);
@@ -68,7 +68,7 @@ public sealed class VideoSessionRepositoryTests : IDisposable
         Assert.Equal(changed, (await _repository.GetByIdAsync(model.Id))?.Media);
     }
 
-    private async Task<DateTime> CreatedAt(int sessionId)
+    private async Task<DateTimeOffset> CreatedAt(int sessionId)
     {
         await using var context = _factory.CreateDbContext();
         return (await context.VideoSessionsEntities.SingleAsync(s => s.Id == sessionId)).CreatedAt;

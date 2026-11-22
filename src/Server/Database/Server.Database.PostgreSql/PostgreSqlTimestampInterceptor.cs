@@ -30,8 +30,8 @@ public sealed class PostgreSqlTimestampInterceptor : SaveChangesInterceptor
         foreach (var entry in context.ChangeTracker.Entries().Where(e => e.State is EntityState.Added or EntityState.Modified))
         foreach (var property in entry.Properties)
         {
-            if (property.CurrentValue is DateTime time && time != DateTime.MaxValue && time.Ticks % 10 != 0)
-                property.CurrentValue = new DateTime(time.Ticks - time.Ticks % 10, time.Kind);
+            if (property.CurrentValue is DateTimeOffset time && time != DateTimeOffset.MaxValue && time.Ticks % 10 != 0)
+                property.CurrentValue = new DateTimeOffset(time.Ticks - time.Ticks % 10, time.Offset);
         }
     }
 }

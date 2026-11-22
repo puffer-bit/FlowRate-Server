@@ -6,5 +6,5 @@ public sealed record ChatReactionModel
     public required string Emoji { get; init; }
 
     /// <summary>Null for reactions set before the time was kept.</summary>
-    public DateTime? ReactedAt { get; init; }
+    public DateTimeOffset? ReactedAt { get; init; }
 }

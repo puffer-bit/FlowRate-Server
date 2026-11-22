@@ -22,8 +22,8 @@
 
         // Time properties
         public string? TimeZoneId { get; set; }
-        public DateTime FirstLaunchTime { get; set; }
-        public DateTime CurrentLaunchTime { get; set; }
+        public DateTimeOffset FirstLaunchTime { get; set; }
+        public DateTimeOffset CurrentLaunchTime { get; set; }
 
         // Hardware and Software parametrs
         public string? OperatingSystem { get; set; }

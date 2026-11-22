@@ -24,7 +24,7 @@ public class BansControllerTests
     private readonly Mock<IBanRepository> _repository = new();
     private readonly Mock<ICoordinatorSettingsService> _settings = new();
     private readonly BansController _controller;
-    private readonly CoordinatorInstanceModel _coordinator = CoordinatorInstanceModel.Create("test", "127.0.0.1", 5000, DateTime.UtcNow);
+    private readonly CoordinatorInstanceModel _coordinator = CoordinatorInstanceModel.Create("test", "127.0.0.1", 5000, DateTimeOffset.UtcNow);
 
     public BansControllerTests()
     {
@@ -35,7 +35,7 @@ public class BansControllerTests
     [Fact]
     public async Task OfflineBans_AreScoped_AndOnlyReturnActiveEntries()
     {
-        var now = DateTime.UtcNow;
+        var now = DateTimeOffset.UtcNow;
         var active = new Ban(Guid.NewGuid(), _coordinator.Id, BanKind.Account, 1, null, "Active reason", 2, now, null);
         var expired = active with { Id = Guid.NewGuid(), Reason = "Expired reason", ExpiresAt = now.AddHours(-1) };
         _repository.Setup(x => x.GetAsync(_coordinator.Id, default)).ReturnsAsync([active, expired]);
@@ -64,7 +64,7 @@ public class BansControllerTests
         var entries = new List<Ban>();
         _repository.Setup(x => x.GetAsync(_coordinator.Id, default)).ReturnsAsync(() => entries.ToList());
         _repository.Setup(x => x.AddAsync(It.IsAny<Ban>(), default)).Callback((Ban ban, CancellationToken _) => entries.Add(ban)).Returns(Task.CompletedTask);
-        var user = UserModel.Create(_coordinator.Id, "alice", "192.0.2.1", DateTime.UtcNow);
+        var user = UserModel.Create(_coordinator.Id, "alice", "192.0.2.1", DateTimeOffset.UtcNow);
         user.Id = 1;
         var users = new Mock<IUserManager>();
         users.Setup(x => x.GetUserAsync(1)).ReturnsAsync(user);
@@ -76,7 +76,7 @@ public class BansControllerTests
         var running = new Mock<ICoordinatorInstance>();
         running.Setup(x => x.Moderation).Returns(moderation);
         _orchestrator.Setup(x => x.GetCoordinator(_coordinator.Id)).Returns(running.Object);
-        var expiry = DateTime.UtcNow.AddDays(1);
+        var expiry = DateTimeOffset.UtcNow.AddDays(1);
         Assert.IsType<NoContentResult>(await _controller.Create(_coordinator.Id,
             new BansController.CreateBan(1, BanKind.Account, reason, expiry)));
         var saved = Assert.Single(entries);

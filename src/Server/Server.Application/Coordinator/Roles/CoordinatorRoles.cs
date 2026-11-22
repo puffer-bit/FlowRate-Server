@@ -92,7 +92,7 @@ public sealed class CoordinatorRoles : ICoordinatorPermissions, IDisposable
     {
         if (!chat.MemberIds.Contains(userId)) return Permission.None;
         var granted = Permission.ViewSessions | Permission.SendMessages | Permission.AttachFiles;
-        return chat.Kind == ChatKind.Group && chat.AdminUserId == userId
+        return chat.Kind == ChatKind.Group && chat.OwnerUserId == userId
             ? granted | Permission.ManageSessions | Permission.ManageMessages : granted;
     }
 

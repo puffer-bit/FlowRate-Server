@@ -47,7 +47,7 @@ public class UserStatusTests
     [Fact]
     public void ToDto_ShowsTheIpOnlyToTheUserThemselves_OrWhenAskedFor()
     {
-        var alice = UserModel.Create("coordinator", "alice", "203.0.113.7", DateTime.UtcNow);
+        var alice = UserModel.Create("coordinator", "alice", "203.0.113.7", DateTimeOffset.UtcNow);
         alice.Id = 1;
 
         Assert.Null(alice.ToDto().Ip);
@@ -58,7 +58,7 @@ public class UserStatusTests
 
     private static UserModel Connected(UserStatus status)
     {
-        var user = UserModel.Create("coordinator", "alice", null, DateTime.UtcNow);
+        var user = UserModel.Create("coordinator", "alice", null, DateTimeOffset.UtcNow);
         user.Id = 1;
         user.SetStatus(status);
         user.SetConnected(true);

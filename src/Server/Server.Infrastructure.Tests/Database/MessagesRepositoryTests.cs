@@ -42,7 +42,7 @@ public sealed class MessagesRepositoryTests : IDisposable
     private ChatMessageModel NewMessage(string text) => ChatMessageModel.Create(
         _chatId,
         AuthorId,
-        DateTime.UtcNow,
+        DateTimeOffset.UtcNow,
         new ChatTextContentModel { Text = text });
 
     private async Task<int> Add(string text, int? replyTo = null)
@@ -57,7 +57,7 @@ public sealed class MessagesRepositoryTests : IDisposable
     private async Task Edit(int messageId, string text)
     {
         var message = (await _repository.GetByIdAsync(messageId))!;
-        message.Edit(AuthorId, text, DateTime.UtcNow);
+        message.Edit(AuthorId, text, DateTimeOffset.UtcNow);
         await _repository.UpdateAsync(message);
     }
 
@@ -78,7 +78,7 @@ public sealed class MessagesRepositoryTests : IDisposable
             CallEndReason = kind == ChatSystemEventKind.CallEnded ? Shared.Models.DataTransferObjects.DirectCallEndReason.Completed : null,
             CallDurationSeconds = kind == ChatSystemEventKind.CallEnded ? 75 : null
         };
-        var stored = await _repository.AddAsync(ChatMessageModel.CreateSystem(_chatId, content, DateTime.UtcNow));
+        var stored = await _repository.AddAsync(ChatMessageModel.CreateSystem(_chatId, content, DateTimeOffset.UtcNow));
         var loaded = await _repository.GetByIdAsync(stored.Id);
         Assert.Equal(content, loaded!.SystemContent);
         Assert.True(loaded.IsSystem);
@@ -98,7 +98,7 @@ public sealed class MessagesRepositoryTests : IDisposable
     {
         var content = new ChatSystemContentModel { Kind = ChatSystemEventKind.CallEnded,
             CallId = Guid.NewGuid(), CallEndReason = reason };
-        var stored = await _repository.AddAsync(ChatMessageModel.CreateSystem(_chatId, content, DateTime.UtcNow));
+        var stored = await _repository.AddAsync(ChatMessageModel.CreateSystem(_chatId, content, DateTimeOffset.UtcNow));
         Assert.Equal(content, (await _repository.GetByIdAsync(stored.Id))!.SystemContent);
     }
 
@@ -127,7 +127,7 @@ public sealed class MessagesRepositoryTests : IDisposable
     {
         var id = await Add("pin");
         var message = (await _repository.GetByIdAsync(id))!;
-        var now = DateTime.UtcNow;
+        var now = DateTimeOffset.UtcNow;
         message.SetPinned(true, 42, now);
         var revision = await _repository.UpdateAsync(message);
         var stored = Assert.Single(await _repository.GetPinnedAsync(_chatId));
@@ -203,7 +203,7 @@ public sealed class MessagesRepositoryTests : IDisposable
         var secondRevision = (await _repository.AddAsync(NewMessage("two"))).Revision;
 
         var edited = (await _repository.GetByIdAsync(firstId))!;
-        edited.Edit(AuthorId, "one, fixed", DateTime.UtcNow);
+        edited.Edit(AuthorId, "one, fixed", DateTimeOffset.UtcNow);
         var editRevision = await _repository.UpdateAsync(edited);
         var deleteRevision = await _repository.DeleteAsync(firstId);
 

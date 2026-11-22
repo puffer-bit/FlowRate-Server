@@ -17,7 +17,7 @@ namespace Server.Application.Tests.Coordinator;
 
 public class CoordinatorSettingsApplierTests
 {
-    private static readonly DateTime LaunchedAt = new(2026, 10, 1, 12, 0, 0, DateTimeKind.Utc);
+    private static readonly DateTimeOffset LaunchedAt = new(2026, 10, 1, 12, 0, 0, TimeSpan.Zero);
 
     private readonly CoordinatorInstanceModel _current = Model("Old");
     private readonly CoordinatorInstanceContext _context;
@@ -97,13 +97,13 @@ public class CoordinatorSettingsApplierTests
     [Fact]
     public void Context_RejectsTheSettingsOfAnotherCoordinator()
     {
-        var other = CoordinatorInstanceModel.Create("Other", "127.0.0.1", 5000, DateTime.UtcNow);
+        var other = CoordinatorInstanceModel.Create("Other", "127.0.0.1", 5000, DateTimeOffset.UtcNow);
 
         Assert.Throws<ArgumentException>(() => _context.ApplySettings(other));
     }
 
     private static CoordinatorInstanceModel Model(string name) =>
-        new("coordinator", name, true, "127.0.0.1", 5000, LaunchedAt, LaunchedAt, DateTime.UtcNow, 10, 100,
+        new("coordinator", name, true, "127.0.0.1", 5000, LaunchedAt, LaunchedAt, DateTimeOffset.UtcNow, 10, 100,
             MotdSettings.Disabled, AccessListSettings.Open, new CoordinatorHeartbeatSettings(5, 40),
             CoordinatorMediaSettings.Default, CoordinatorUploadSettings.Default, CoordinatorRateLimitSettings.Default, [1]);
 }

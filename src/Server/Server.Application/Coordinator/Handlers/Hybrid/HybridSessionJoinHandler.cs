@@ -29,6 +29,10 @@ public class HybridSessionJoinHandler : HybridSessionRequestHandler<HybridSessio
         session.Model.CallDevices == null
         && _permissions?.HasIn(userId, session.Model, Permission.MoveMembers) == true;
 
+    // Who may let others in needs nobody to let them in
+    private bool MayApprove(int userId, IHybridSession session) =>
+        _permissions?.HasIn(userId, session.Model, Permission.ApproveMembers) == true;
+
     protected override int GetSessionId(HybridSessionJoinRequest request) => request.SessionId;
 
     // Joining from another device takes the peer over from the one the user was on
@@ -38,14 +42,16 @@ public class HybridSessionJoinHandler : HybridSessionRequestHandler<HybridSessio
         if (session.Model.CallDevices == null && _callSessions.HasDirectCall(request.SenderId))
             return request.ToError(ErrorCode.Conflict);
         var (result, transportData) = await session.PeerManager.AddPeerAsync(request.SenderId,
-            request.ClientEpoch ?? string.Empty, connectionId, MayJoinPastCapacity(request.SenderId, session));
+            request.ClientEpoch ?? string.Empty, connectionId, MayJoinPastCapacity(request.SenderId, session),
+            MayApprove(request.SenderId, session));
         return request.Answer(result, () => request.ToResponse(transportData));
     }
 
     protected override async Task<BaseMessage> HandleAsync(HybridSessionJoinRequest request, IHybridSession session)
     {
         var (result, transportData) = await session.PeerManager.AddPeerAsync(request.SenderId,
-            request.ClientEpoch ?? string.Empty, pastCapacity: MayJoinPastCapacity(request.SenderId, session));
+            request.ClientEpoch ?? string.Empty, pastCapacity: MayJoinPastCapacity(request.SenderId, session),
+            mayApprove: MayApprove(request.SenderId, session));
         return request.Answer(result, () => request.ToResponse(transportData));
     }
 }

@@ -55,7 +55,7 @@ public class UserSessionHandlersTests
     private Guid AddSession(string device)
     {
         var id = Guid.NewGuid();
-        var now = _time.GetUtcNow().UtcDateTime;
+        var now = _time.GetUtcNow();
         _repository.AddAsync(new UserSession(id, Coordinator, UserId, SecretHash.Of(device), null, device, "Linux",
             "0.8.0", now, now, now + UserSessions.Lifetime, null));
 

@@ -58,7 +58,7 @@ public class ChatSessionManagerAttachmentTests
     private async Task<int> CreateChat(bool attachmentsAllowed = true)
     {
         var (_, chat) = await _manager.CreateAsync(
-            new CreateSessionModel("general", 10, new ChatSessionCreateData(IsAttachmentsAllowed: attachmentsAllowed)),
+            new CreateSessionModel("general", new ChatSessionCreateData(IsAttachmentsAllowed: attachmentsAllowed)),
             AuthorId);
         return chat!.Id;
     }
@@ -66,15 +66,15 @@ public class ChatSessionManagerAttachmentTests
     private void StoreUploads(int chatId, int ownerId = AuthorId, MediaUploadState state = MediaUploadState.Completed)
     {
         _storedUploads[OriginalId] = new MediaUploadModel(OriginalId, Coordinator, ownerId, chatId,
-            MediaUploadKind.Image, "image/png", 5000, state, DateTime.UtcNow);
+            MediaUploadKind.Image, "image/png", 5000, state, DateTimeOffset.UtcNow);
         _storedUploads[PreviewId] = new MediaUploadModel(PreviewId, Coordinator, ownerId, chatId,
-            MediaUploadKind.ImagePreview, "image/jpeg", 300, MediaUploadState.Completed, DateTime.UtcNow);
+            MediaUploadKind.ImagePreview, "image/jpeg", 300, MediaUploadState.Completed, DateTimeOffset.UtcNow);
     }
 
     private static NewChatMessageModel MessageWithImage(int chatId) => new()
     {
         ChatId = chatId,
-        Images =
+        Files =
         [
             new NewChatImageModel
             {
@@ -105,7 +105,7 @@ public class ChatSessionManagerAttachmentTests
     {
         var chatId = await CreateChat();
         StoreUploads(chatId);
-        var stored = ChatMessageModel.Create(chatId, AuthorId, DateTime.UtcNow, null,
+        var stored = ChatMessageModel.Create(chatId, AuthorId, DateTimeOffset.UtcNow, null,
             [new Core.Models.TextChat.Messages.Content.ChatImageContentModel
             {
                 Id = 55, FileName = "cat.png", Size = 5000, MimeType = "image/png", Width = 640, Height = 480,
@@ -190,7 +190,7 @@ public class ChatSessionManagerAttachmentTests
     private void StoreFile(int chatId, MediaUploadKind kind = MediaUploadKind.File,
         MediaUploadState state = MediaUploadState.Completed) =>
         _storedUploads[FileId] = new MediaUploadModel(FileId, Coordinator, AuthorId, chatId, kind,
-            "application/pdf", 12345, state, DateTime.UtcNow);
+            "application/pdf", 12345, state, DateTimeOffset.UtcNow);
 
     private static NewChatMessageModel MessageWithFile(int chatId) => new()
     {
@@ -244,23 +244,10 @@ public class ChatSessionManagerAttachmentTests
     }
 
     [Fact]
-    public async Task VideoMessage_IsRefused()
-    {
-        var chatId = await CreateChat();
-        var message = new NewChatMessageModel
-        {
-            ChatId = chatId,
-            Video = [new ChatVideoContentDTO { Id = 1, FileName = "a.mp4", Size = 1, MimeType = "video/mp4", Width = 1, Height = 1, Duration = TimeSpan.FromSeconds(1) }]
-        };
-
-        Assert.Equal(ErrorCode.AttachmentInvalid, await _manager.AddMessageAsync(chatId, message, AuthorId));
-    }
-
-    [Fact]
     public async Task DeletingAMessage_DeletesItsFiles()
     {
         var chatId = await CreateChat();
-        var message = ChatMessageModel.Create(chatId, AuthorId, DateTime.UtcNow, null,
+        var message = ChatMessageModel.Create(chatId, AuthorId, DateTimeOffset.UtcNow, null,
             [new Core.Models.TextChat.Messages.Content.ChatImageContentModel
             {
                 Id = 1, FileName = "cat.png", Size = 1, MimeType = "image/png", Width = 1, Height = 1,
@@ -341,7 +328,7 @@ public class ChatSessionManagerAttachmentTests
     private void StoreVideo(int chatId, byte[] content, string mimeType = "video/mp4")
     {
         _storedUploads[FileId] = new MediaUploadModel(FileId, Coordinator, AuthorId, chatId, MediaUploadKind.File,
-            mimeType, content.Length, MediaUploadState.Completed, DateTime.UtcNow);
+            mimeType, content.Length, MediaUploadState.Completed, DateTimeOffset.UtcNow);
         _storage.Setup(s => s.OpenReadAsync(FileId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(() => new MemoryStream(content));
     }
@@ -432,7 +419,7 @@ public class ChatSessionManagerAttachmentTests
         System.Buffers.Binary.BinaryPrimitives.WriteUInt32BigEndian(header.AsSpan(16), (uint)width);
         System.Buffers.Binary.BinaryPrimitives.WriteUInt32BigEndian(header.AsSpan(20), (uint)height);
         _storedUploads[FrameId] = new MediaUploadModel(FrameId, Coordinator, AuthorId, chatId,
-            MediaUploadKind.ImagePreview, "image/png", header.Length, MediaUploadState.Completed, DateTime.UtcNow);
+            MediaUploadKind.ImagePreview, "image/png", header.Length, MediaUploadState.Completed, DateTimeOffset.UtcNow);
         _storage.Setup(s => s.OpenReadAsync(FrameId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(() => new MemoryStream(header));
     }

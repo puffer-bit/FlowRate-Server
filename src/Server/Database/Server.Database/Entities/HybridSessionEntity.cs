@@ -9,8 +9,8 @@ namespace Server.Database.Entities
     {
         public required WebRTCEngine EngineType { get; set; }
         
-        public DateTime CreatedAt { get; set; }
-        public DateTime? ExpiresAt { get; set; }
+        public DateTimeOffset CreatedAt { get; set; }
+        public DateTimeOffset? ExpiresAt { get; set; }
         public bool IsHostMustApprove { get; set; }
 
         public WebRTCVideoCodecs CameraCodec { get; set; } = WebRTCVideoCodecs.VP8;

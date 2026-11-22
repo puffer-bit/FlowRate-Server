@@ -42,7 +42,7 @@ public sealed class ChatReadStateRepositoryTests : IDisposable
     }
 
     private async Task<int> Add(int senderId, string text) =>
-        (await _messages.AddAsync(ChatMessageModel.Create(_chatId, senderId, DateTime.UtcNow,
+        (await _messages.AddAsync(ChatMessageModel.Create(_chatId, senderId, DateTimeOffset.UtcNow,
             new ChatTextContentModel { Text = text }))).Id;
 
     [Fact]
@@ -77,7 +77,7 @@ public sealed class ChatReadStateRepositoryTests : IDisposable
     [Fact]
     public async Task Positions_GoAwayWithTheirChat()
     {
-        await _repository.MoveAsync(ReaderId, _chatId, 3, DateTime.UtcNow);
+        await _repository.MoveAsync(ReaderId, _chatId, 3, DateTimeOffset.UtcNow);
 
         await new ChatSessionRepository(_factory).RemoveAsync(_chatId);
 
@@ -85,7 +85,7 @@ public sealed class ChatReadStateRepositoryTests : IDisposable
     }
 
     private const int ThirdId = 3;
-    private static readonly DateTime Noon = new(2026, 11, 13, 12, 0, 0, DateTimeKind.Utc);
+    private static readonly DateTimeOffset Noon = new(2026, 11, 13, 12, 0, 0, TimeSpan.Zero);
 
     [Fact]
     public async Task Readers_GetTheTimeOfTheFirstMarkThatReachedTheMessage()
@@ -104,7 +104,7 @@ public sealed class ChatReadStateRepositoryTests : IDisposable
             ofFirst);
         Assert.Equal([new ChatMessageReader(ThirdId, Noon.AddMinutes(1)),
             new ChatMessageReader(OtherId, Noon.AddMinutes(5))], ofSecond);
-        Assert.All(ofFirst, reader => Assert.Equal(DateTimeKind.Utc, reader.ReadAt!.Value.Kind));
+        Assert.All(ofFirst, reader => Assert.Equal(TimeSpan.Zero, reader.ReadAt!.Value.Offset));
     }
 
     [Fact]

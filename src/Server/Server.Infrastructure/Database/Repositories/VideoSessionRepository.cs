@@ -60,7 +60,7 @@ public class VideoSessionRepository : IVideoSessionRepository
 
         entity.Name = instance.Name;
         entity.Capacity = instance.Capacity;
-        entity.IsHostMustApprove = instance.IsHostMustApprove;
+        entity.IsHostMustApprove = instance.IsApprovalRequired;
         entity.SetMedia(instance.Media);
         await context.SaveChangesAsync(cancellationToken);
     }

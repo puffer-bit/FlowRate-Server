@@ -27,8 +27,8 @@ public sealed class UserModel
     /// <summary>The status others see: offline while the user is not connected or invisible.</summary>
     public UserStatus Presence => IsConnected && Status != UserStatus.Invisible ? Status : UserStatus.Offline;
 
-    public DateTime FirstConnectionTime { get; }
-    public DateTime LastConnectionTime { get; private set; }
+    public DateTimeOffset FirstConnectionTime { get; }
+    public DateTimeOffset LastConnectionTime { get; private set; }
 
     /// <summary>The coordinator roles of the user, without the everyone role.</summary>
     public IReadOnlyCollection<int> RoleIds { get; private set; } = [];
@@ -37,7 +37,7 @@ public sealed class UserModel
     public bool IsBanned => State == UserState.Banned;
 
     public UserModel(int id, string coordinatorInstanceId, string username, UserState state, UserStatus status,
-        DateTime firstConnectionTime, DateTime lastConnectionTime,
+        DateTimeOffset firstConnectionTime, DateTimeOffset lastConnectionTime,
         string? ip = null, string? regionName = null, string? regionCode = null,
         string? displayName = null, string? prefix = null, string? avatarUrl = null,
         IEnumerable<int>? roleIds = null)
@@ -63,14 +63,14 @@ public sealed class UserModel
     }
 
     /// <summary>A new user connecting for the first time; not saved yet.</summary>
-    public static UserModel Create(string coordinatorInstanceId, string username, string? ip, DateTime now) =>
+    public static UserModel Create(string coordinatorInstanceId, string username, string? ip, DateTimeOffset now) =>
         new(0, coordinatorInstanceId, username, UserState.Normal, UserStatus.Online, now, now, ip);
 
     /// <summary>The in-process user the server itself acts as. Never saved.</summary>
-    public static UserModel CreateSystem(string coordinatorInstanceId, string? ip, DateTime now) =>
+    public static UserModel CreateSystem(string coordinatorInstanceId, string? ip, DateTimeOffset now) =>
         new(SystemUserId, coordinatorInstanceId, "System", UserState.System, UserStatus.Online, now, now, ip);
 
-    public void MarkConnected(string? ip, DateTime now)
+    public void MarkConnected(string? ip, DateTimeOffset now)
     {
         Ip = ip;
         LastConnectionTime = now;

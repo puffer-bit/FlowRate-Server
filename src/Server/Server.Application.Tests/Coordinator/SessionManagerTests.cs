@@ -46,7 +46,7 @@ public class SessionManagerTests
     }
 
     private Task<(ErrorCode? result, Core.Models.SessionModel? session)> CreateChat(int? categoryId = null) =>
-        _manager.CreateSessionAsync(new CreateSessionModel("general", 10, new ChatSessionCreateData(), categoryId), UserId);
+        _manager.CreateSessionAsync(new CreateSessionModel("general", new ChatSessionCreateData(), categoryId), UserId);
 
     [Fact]
     public async Task CreateSession_PlacesTheSessionInTheRequestedCategory()

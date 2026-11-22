@@ -29,7 +29,7 @@ public sealed class ModerationService(
     private readonly CancellationTokenSource _stopping = new();
     private Task? _expiryTask;
     private Ban[]? _snapshot;
-    private DateTime Now => time.GetUtcNow().UtcDateTime;
+    private DateTimeOffset Now => time.GetUtcNow();
 
     public void Start() => _expiryTask ??= SweepAsync();
 
@@ -110,7 +110,7 @@ public sealed class ModerationService(
 
             var reason = request.Reason?.Trim() ?? string.Empty;
             if (reason.Length > Limits.BanReasonMaxLength ||
-                request.ExpiresAt is { } expiry && (expiry.Kind != DateTimeKind.Utc || expiry <= Now) ||
+                request.ExpiresAt is { } expiry && expiry <= Now ||
                 request.Kind is not (BanKind.Account or BanKind.Ip)) return (ErrorCode.InvalidValue, null);
 
             string? address = null;
@@ -214,7 +214,7 @@ public sealed class ModerationService(
         bans.Remove(ban);
     }
 
-    private async Task RestoreAccountAsync(int userId, IEnumerable<Ban> entries, DateTime now)
+    private async Task RestoreAccountAsync(int userId, IEnumerable<Ban> entries, DateTimeOffset now)
     {
         var bans = entries.ToList();
         if (bans.Count == 0) return;

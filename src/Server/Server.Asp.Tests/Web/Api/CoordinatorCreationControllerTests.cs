@@ -28,7 +28,7 @@ public class CoordinatorCreationControllerTests
     [InlineData(CoordinatorState.Failed)]
     public async Task Create_ReturnsTheSavedIdAndActualState(CoordinatorState state)
     {
-        var model = CoordinatorInstanceModel.Create("new", "127.0.0.1", 5001, DateTime.UtcNow);
+        var model = CoordinatorInstanceModel.Create("new", "127.0.0.1", 5001, DateTimeOffset.UtcNow);
         Answer(new(CoordinatorCreationStatus.Created, model, state));
         var result = await _controller.CreateCoordinator(Request(), default);
         var created = Assert.IsType<CreatedAtActionResult>(result.Result);
@@ -63,7 +63,7 @@ public class CoordinatorCreationControllerTests
     public void FailedCoordinator_CanBeOpenedToFixItsSettings()
     {
         _orchestrator.Setup(o => o.GetCoordinatorSnapshots()).Returns([
-            new CoordinatorSnapshot("failed", "failed", "127.0.0.1", 5001, CoordinatorState.Failed, DateTime.UtcNow, [], [])
+            new CoordinatorSnapshot("failed", "failed", "127.0.0.1", 5001, CoordinatorState.Failed, DateTimeOffset.UtcNow, [], [])
         ]);
         var result = _controller.GetCoordinator("failed");
         Assert.Equal(CoordinatorState.Failed, result.Value!.Summary.State);

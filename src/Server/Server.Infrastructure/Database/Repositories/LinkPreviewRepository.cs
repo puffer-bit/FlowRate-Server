@@ -16,7 +16,7 @@ public class LinkPreviewRepository : ILinkPreviewRepository
     }
 
     public async Task<ChatLinkPreviewModel?> GetNewestAsync(string coordinatorInstanceId, string url,
-        DateTime fetchedAfter, CancellationToken cancellationToken = default)
+        DateTimeOffset fetchedAfter, CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         var entity = await context.LinkPreviews
@@ -48,7 +48,7 @@ public class LinkPreviewRepository : ILinkPreviewRepository
         return entity.ToModel();
     }
 
-    public async Task<IReadOnlyList<int>> RemoveUnusedAsync(string coordinatorInstanceId, DateTime fetchedBefore,
+    public async Task<IReadOnlyList<int>> RemoveUnusedAsync(string coordinatorInstanceId, DateTimeOffset fetchedBefore,
         CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);

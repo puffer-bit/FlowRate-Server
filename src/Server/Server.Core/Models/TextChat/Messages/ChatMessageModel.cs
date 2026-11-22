@@ -14,7 +14,7 @@ public sealed class ChatMessageModel
 {
     private ChatTextContentModel? _textContent;
     private ChatReplyContentModel? _replyContent;
-    private DateTime? _editTime;
+    private DateTimeOffset? _editTime;
     private bool _isDelivered;
     private long _revision;
     private readonly List<ChatReactionModel> _reactions = new();
@@ -24,11 +24,11 @@ public sealed class ChatMessageModel
     public long Revision { get => _revision; init => _revision = value; }
     public required int ChatId { get; init; }
     public required int SenderUserId { get; init; }
-    public required DateTime SentTime { get; init; }
-    public DateTime? DelayedSentTime { get; init; }
-    public DateTime? DisposeTime { get; init; }
+    public required DateTimeOffset SentTime { get; init; }
+    public DateTimeOffset? DelayedSentTime { get; init; }
+    public DateTimeOffset? DisposeTime { get; init; }
 
-    public DateTime? EditTime { get => _editTime; init => _editTime = value; }
+    public DateTimeOffset? EditTime { get => _editTime; init => _editTime = value; }
     public ChatTextContentModel? TextContent { get => _textContent; init => _textContent = value; }
     public ChatReplyContentModel? ReplyContent { get => _replyContent; init => _replyContent = value; }
 
@@ -74,13 +74,13 @@ public sealed class ChatMessageModel
         return true;
     }
 
-    private DateTime? _pinnedAt;
+    private DateTimeOffset? _pinnedAt;
     private int? _pinnedByUserId;
-    public DateTime? PinnedAt { get => _pinnedAt; init => _pinnedAt = value; }
+    public DateTimeOffset? PinnedAt { get => _pinnedAt; init => _pinnedAt = value; }
     public int? PinnedByUserId { get => _pinnedByUserId; init => _pinnedByUserId = value; }
     public bool IsPinned => PinnedAt.HasValue;
 
-    public bool SetPinned(bool pinned, int userId, DateTime now)
+    public bool SetPinned(bool pinned, int userId, DateTimeOffset now)
     {
         if (IsPinned == pinned) return false;
         _pinnedAt = pinned ? now : null;
@@ -99,13 +99,13 @@ public sealed class ChatMessageModel
     public bool IsDisposable => DisposeTime.HasValue;
     public bool IsEdited => _editTime.HasValue;
 
-    public static ChatMessageModel Create(int chatId, int senderUserId, DateTime now,
+    public static ChatMessageModel Create(int chatId, int senderUserId, DateTimeOffset now,
         ChatTextContentModel? text,
         IEnumerable<ChatImageContentModel>? images = null,
         IEnumerable<ChatVideoContentModel>? videos = null,
         IEnumerable<ChatFileContentModel>? files = null,
-        DateTime? delayedSentTime = null,
-        DateTime? disposeTime = null,
+        DateTimeOffset? delayedSentTime = null,
+        DateTimeOffset? disposeTime = null,
         bool isLinkPreviewDisabled = false)
     {
         var message = new ChatMessageModel
@@ -128,7 +128,7 @@ public sealed class ChatMessageModel
         return message;
     }
 
-    public static ChatMessageModel CreateSystem(int chatId, ChatSystemContentModel content, DateTime now)
+    public static ChatMessageModel CreateSystem(int chatId, ChatSystemContentModel content, DateTimeOffset now)
     {
         if (chatId <= 0 || !content.IsValid())
             throw new ArgumentException("Invalid system chat event.");
@@ -169,7 +169,7 @@ public sealed class ChatMessageModel
     }
 
     /// <param name="isLinkPreviewDisabled">Turns the preview off or on again; null leaves it as it was.</param>
-    public ErrorCode? Edit(int userId, string text, DateTime now, bool? isLinkPreviewDisabled = null)
+    public ErrorCode? Edit(int userId, string text, DateTimeOffset now, bool? isLinkPreviewDisabled = null)
     {
         if (!IsSentBy(userId) || IsDeleted || IsReadOnly || IsSystem || TextContent?.CommandResult != null)
             return ErrorCode.InsufficientPermissions;
@@ -190,7 +190,7 @@ public sealed class ChatMessageModel
     public void MarkChanged(long revision) => _revision = revision;
 
     /// <returns>False if the user already reacted with this emoji.</returns>
-    public bool AddReaction(int userId, string emoji, DateTime? reactedAt = null)
+    public bool AddReaction(int userId, string emoji, DateTimeOffset? reactedAt = null)
     {
         if (_reactions.Any(r => r.UserId == userId && r.Emoji == emoji))
             return false;

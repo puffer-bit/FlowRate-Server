@@ -17,7 +17,7 @@ public sealed record UserSession(
     string DeviceName,
     string DevicePlatform,
     string AppVersion,
-    DateTime CreatedAt,
-    DateTime LastUsedAt,
-    DateTime ExpiresAt,
+    DateTimeOffset CreatedAt,
+    DateTimeOffset LastUsedAt,
+    DateTimeOffset ExpiresAt,
     string? LastAddress);

@@ -66,7 +66,7 @@ public static class CoordinatorSettingsMapper
         Id = node.Id, Name = node.Name, Host = node.Host, Port = node.Port, IsEnabled = node.IsEnabled,
         ConnectionState = status?.State,
         PingMs = status?.RoundTripTime is { } roundTrip ? Math.Round(roundTrip.TotalMilliseconds, 1) : null,
-        LastPingAtUtc = status?.LastPingAtUtc,
+        LastPingAt = status?.LastPingAtUtc,
         ConnectionError = status?.Error
     };
 

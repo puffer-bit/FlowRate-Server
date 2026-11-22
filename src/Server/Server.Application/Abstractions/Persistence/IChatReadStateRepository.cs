@@ -11,7 +11,7 @@ public interface IChatReadStateRepository
     /// Moves the position of the user forward to <paramref name="messageId"/>. With <paramref name="markAt"/> a
     /// real move is also kept as a read mark with that time, so readers of a message get their read time.
     /// </summary>
-    Task<ChatReadMove> MoveAsync(int userId, int chatId, int messageId, DateTime? markAt,
+    Task<ChatReadMove> MoveAsync(int userId, int chatId, int messageId, DateTimeOffset? markAt,
         CancellationToken cancellationToken = default);
 
     Task<IReadOnlyList<ChatUnreadMessage>> GetUnreadAsync(int chatId, int userId, int afterMessageId, int take,

@@ -5,7 +5,7 @@ using Shared.Enums;
 namespace Server.Core.Models.HybridSession;
 
 /// <summary>
-/// A participant of a hybrid session. Owns the participant's lifecycle: admission by the host,
+/// A participant of a hybrid session. Owns the participant's lifecycle: admission,
 /// transport connection and microphone state. Media routing itself stays with the SFU.
 /// </summary>
 public sealed class Peer
@@ -13,7 +13,6 @@ public sealed class Peer
     public int UserId { get; }
     /// <summary>The connection of the device the user takes part from; null when not known.</summary>
     public string? ConnectionId { get; private set; }
-    public bool IsHost { get; }
     public PeerAdmission Admission { get; private set; }
     public HybridSessionPeerState State { get; private set; }
     public bool IsTransportConnected { get; private set; }
@@ -41,25 +40,20 @@ public sealed class Peer
     /// <summary>Only admitted peers with a connected transport may consume other peers' media.</summary>
     public bool CanReceiveMedia => State == HybridSessionPeerState.Connected;
 
-    private Peer(int userId, bool isHost, PeerAdmission admission, string? connectionId)
+    private Peer(int userId, PeerAdmission admission, string? connectionId)
     {
         UserId = userId;
         ConnectionId = connectionId;
-        IsHost = isHost;
         Admission = admission;
         State = admission == PeerAdmission.Pending
             ? HybridSessionPeerState.WaitingForApprove
             : HybridSessionPeerState.Connecting;
     }
 
-    public static Peer Join(int userId, HybridSessionModel session, string? connectionId = null)
-    {
-        if (session.IsHost(userId))
-            return new Peer(userId, isHost: true, PeerAdmission.NotRequired, connectionId);
-
-        return new Peer(userId, isHost: false,
-            session.IsHostMustApprove ? PeerAdmission.Pending : PeerAdmission.NotRequired, connectionId);
-    }
+    /// <param name="mayApprove">The user may let joiners in, so they need nobody to let them in.</param>
+    public static Peer Join(int userId, HybridSessionModel session, string? connectionId = null, bool mayApprove = false) =>
+        new(userId, session.IsApprovalRequired && !mayApprove ? PeerAdmission.Pending : PeerAdmission.NotRequired,
+            connectionId);
 
     /// <summary>
     /// A peer moved in from another session by someone else: admitted whatever the session asks of joiners, and
@@ -67,7 +61,7 @@ public sealed class Peer
     /// </summary>
     public static Peer MoveIn(int userId, HybridSessionModel session, string? connectionId)
     {
-        var peer = new Peer(userId, session.IsHost(userId), PeerAdmission.NotRequired, connectionId)
+        var peer = new Peer(userId, PeerAdmission.NotRequired, connectionId)
         {
             State = HybridSessionPeerState.WaitingForServer,
             IsAwaitingMove = true
@@ -108,8 +102,6 @@ public sealed class Peer
 
     public ErrorCode? Approve()
     {
-        if (IsHost)
-            return ErrorCode.Internal;
         if (IsRejected)
             return ErrorCode.AlreadyRejected;
         if (Admission != PeerAdmission.Pending)
@@ -122,8 +114,6 @@ public sealed class Peer
 
     public ErrorCode? Reject()
     {
-        if (IsHost)
-            return ErrorCode.Internal;
         if (IsApproved)
             return ErrorCode.AlreadyApproved;
 

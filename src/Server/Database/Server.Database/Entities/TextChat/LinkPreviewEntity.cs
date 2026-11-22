@@ -31,5 +31,5 @@ public class LinkPreviewEntity
     public long ImageSize { get; set; }
     public bool IsLargeImage { get; set; }
 
-    public DateTime FetchedAt { get; set; }
+    public DateTimeOffset FetchedAt { get; set; }
 }

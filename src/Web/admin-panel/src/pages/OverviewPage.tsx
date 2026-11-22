@@ -4,6 +4,7 @@ import { formatSince } from '../format'
 import { PanelIcon } from '../components/PanelIcon'
 import { QueryState } from '../components/QueryState'
 import { StatCard } from '../components/StatCard'
+import { RestartNoticeCard } from '../components/RestartNoticeCard'
 
 export function OverviewPage() {
   const overview = useOverview()
@@ -23,6 +24,8 @@ export function OverviewPage() {
             <StatCard label="Connected users" value={data.connectedUsersCount} icon="users" hint="Currently connected" />
             <StatCard label="Server uptime" value={formatSince(data.startedAtUtc, now)} icon="clock" hint="Since the last server start" />
           </SimpleGrid>
+
+          <RestartNoticeCard />
 
           <div className="overview-note"><PanelIcon name="activity" size={16} /><span>Metrics update automatically as your infrastructure changes.</span><span className="version-tag">Server v{data.serverVersion}</span></div>
         </Stack>

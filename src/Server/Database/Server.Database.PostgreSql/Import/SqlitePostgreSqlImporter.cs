@@ -241,6 +241,9 @@ public sealed class SqlitePostgreSqlImporter
             {
                 DateTime time when time == DateTime.MinValue || time == DateTime.MaxValue => time,
                 DateTime time => new DateTime(time.Ticks - time.Ticks % 10, DateTimeKind.Utc),
+                // Times pass the UTC converter of the model, so they arrive as DateTimeOffset
+                DateTimeOffset time when time == DateTimeOffset.MinValue || time == DateTimeOffset.MaxValue => time,
+                DateTimeOffset time => new DateTimeOffset(time.Ticks - time.Ticks % 10, time.Offset),
                 TimeSpan span => TimeSpan.FromTicks(span.Ticks - span.Ticks % 10),
                 _ => value
             };

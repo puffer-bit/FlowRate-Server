@@ -42,14 +42,14 @@ public class PushReplyServiceTests
         var chat = ChatSessionModel.Create(CoordinatorId, "general", UserId);
         _chats.Setup(c => c.TryGetSession(ChatId, out chat)).Returns(true);
         _reads.Setup(r => r.GetLastMessageIdAsync(ChatId, It.IsAny<CancellationToken>())).ReturnsAsync(50);
-        _reads.Setup(r => r.MoveAsync(UserId, ChatId, It.IsAny<int>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((int _, int _, int messageId, DateTime? _, CancellationToken _) => new ChatReadMove(messageId, true));
+        _reads.Setup(r => r.MoveAsync(UserId, ChatId, It.IsAny<int>(), It.IsAny<DateTimeOffset?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((int _, int _, int messageId, DateTimeOffset? _, CancellationToken _) => new ChatReadMove(messageId, true));
         _reads.Setup(r => r.GetUnreadAsync(ChatId, UserId, It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync([]);
     }
 
     private static UserModel User(UserState state) =>
-        new(UserId, CoordinatorId, "alice", state, UserStatus.Online, DateTime.UtcNow, DateTime.UtcNow);
+        new(UserId, CoordinatorId, "alice", state, UserStatus.Online, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow);
 
     private PushReplyService Create(CoordinatorRateLimitSettings? options = null)
     {
@@ -66,7 +66,7 @@ public class PushReplyServiceTests
 
         Assert.Equal(PushReplyResult.Sent, result);
         _chats.Verify(c => c.AddMessageAsync(ChatId,
-            It.Is<NewChatMessageModel>(m => m.ChatId == ChatId && m.TextContent!.Text == "hi" && m.Images.Count == 0),
+            It.Is<NewChatMessageModel>(m => m.ChatId == ChatId && m.TextContent!.Text == "hi" && m.Files.Count == 0),
             UserId), Times.Once);
     }
 
@@ -147,7 +147,7 @@ public class PushReplyServiceTests
         var result = await Create().MarkReadAsync(Token, new PushMarkReadRequest(ChatId, 42));
 
         Assert.Equal(PushReplyResult.Sent, result);
-        _reads.Verify(r => r.MoveAsync(UserId, ChatId, 42, It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()), Times.Once);
+        _reads.Verify(r => r.MoveAsync(UserId, ChatId, 42, It.IsAny<DateTimeOffset?>(), It.IsAny<CancellationToken>()), Times.Once);
         _sender.Verify(s => s.SendMessageByUserId(UserId, It.IsAny<ChatReadStateChangedNotification>()), Times.Once);
     }
 

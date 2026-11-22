@@ -14,7 +14,7 @@ public record ChatReadMove(int Position, bool Moved);
 
 /// <summary>A member whose position reached a message; <paramref name="ReadAt"/> is null when it got there
 /// before read times were kept.</summary>
-public record ChatMessageReader(int UserId, DateTime? ReadAt);
+public record ChatMessageReader(int UserId, DateTimeOffset? ReadAt);
 
 /// <summary>What the readers request needs to know about the message.</summary>
 public record ChatReadTarget(int SenderUserId, bool IsSystem, bool IsDeleted);

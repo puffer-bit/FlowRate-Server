@@ -31,7 +31,7 @@ public class HybridSessionRequestHandlerTests
     {
         var session = new Mock<IHybridSession>();
         session.Setup(s => s.Model).Returns(new Server.Core.Models.HybridSession.HybridSessionModel(
-            SessionId, "server", "Room", 10, HostId, Shared.Enums.WebRTC.WebRTCEngine.Mediasoup));
+            SessionId, "server", "Room", 10, Shared.Enums.WebRTC.WebRTCEngine.Mediasoup));
         session.Setup(s => s.PeerManager).Returns(_peers.Object);
         var found = session.Object;
         _sessions.Setup(m => m.TryGetSession(SessionId, out found)).Returns(true);
@@ -45,8 +45,8 @@ public class HybridSessionRequestHandlerTests
         _join = new HybridSessionJoinHandler(_sessions.Object, sender.Object);
     }
 
-    private static KickFromSessionRequest Kick(int sessionId, SessionType type = SessionType.Hybrid) =>
-        new(sessionId, GuestId, type, "bye") { SenderId = HostId };
+    private static KickFromSessionRequest Kick(int sessionId) =>
+        new(sessionId, GuestId, "bye") { SenderId = HostId };
 
     [Fact]
     public async Task Kick_KicksTheTargetOnBehalfOfTheSender()
@@ -69,15 +69,6 @@ public class HybridSessionRequestHandlerTests
     }
 
     [Fact]
-    public async Task OtherSessionType_AnswersUnknownSessionType()
-    {
-        await _handler.HandleMessage(Kick(sessionId: 99, SessionType.Chat), "connection");
-
-        var response = Assert.IsType<ErrorResponse>(Assert.Single(_sent));
-        Assert.Equal(ErrorCode.WrongSessionType, response.Code);
-    }
-
-    [Fact]
     public async Task NullRequest_IsForbiddenAndNotAnswered()
     {
         Assert.Equal(HandleMessageResult.ForbiddenRequest, await _handler.HandleMessage(null, "connection"));
@@ -89,7 +80,7 @@ public class HybridSessionRequestHandlerTests
     {
         _peers.Setup(p => p.IsPeerOf(GuestId, "phone")).Returns(false);
 
-        await _leave.HandleMessage(new LeaveSessionRequest(SessionId, SessionType.Hybrid) { SenderId = GuestId }, "phone");
+        await _leave.HandleMessage(new LeaveSessionRequest(SessionId) { SenderId = GuestId }, "phone");
 
         _peers.Verify(p => p.RemovePeerAsync(It.IsAny<int>()), Times.Never);
         var response = Assert.IsType<ErrorResponse>(Assert.Single(_sent));
@@ -102,7 +93,7 @@ public class HybridSessionRequestHandlerTests
         _peers.Setup(p => p.IsPeerOf(GuestId, "desktop")).Returns(true);
         _peers.Setup(p => p.RemovePeerAsync(GuestId)).ReturnsAsync((ErrorCode?)null);
 
-        await _leave.HandleMessage(new LeaveSessionRequest(SessionId, SessionType.Hybrid) { SenderId = GuestId }, "desktop");
+        await _leave.HandleMessage(new LeaveSessionRequest(SessionId) { SenderId = GuestId }, "desktop");
 
         var response = Assert.IsType<LeaveSessionResponse>(Assert.Single(_sent));
     }

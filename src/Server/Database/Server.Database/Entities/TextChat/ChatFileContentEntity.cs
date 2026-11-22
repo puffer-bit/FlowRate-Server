@@ -1,5 +1,4 @@
 using System.ComponentModel.DataAnnotations;
-using Shared.Models.DataTransferObjects.ChatSession.Messages;
 
 namespace Server.Database.Entities.TextChat;
 
@@ -27,5 +26,4 @@ public class ChatFileContentEntity
     [MaxLength(32)]
     public string? PreviewUploadId { get; set; }
 
-    public ChatContentType Type => ChatContentType.File;
 }

@@ -79,7 +79,7 @@ public class MediaUploadRepository : IMediaUploadRepository
     public Task<IReadOnlyList<string>> RemoveByChatAsync(int chatId, CancellationToken cancellationToken = default) =>
         RemoveAsync(uploads => uploads.Where(x => x.ChatId == chatId), cancellationToken);
 
-    public Task<IReadOnlyList<string>> RemoveUnattachedAsync(string coordinatorInstanceId, DateTime createdBefore,
+    public Task<IReadOnlyList<string>> RemoveUnattachedAsync(string coordinatorInstanceId, DateTimeOffset createdBefore,
         CancellationToken cancellationToken = default) =>
         RemoveAsync(uploads => uploads.Where(x => x.CoordinatorInstanceId == coordinatorInstanceId
                                                   && x.State != MediaUploadState.Attached

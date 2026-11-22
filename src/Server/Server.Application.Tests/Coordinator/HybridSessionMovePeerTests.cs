@@ -31,11 +31,11 @@ public class HybridSessionMovePeerTests : IDisposable
     private readonly FakeSfuGateway _gateway = new();
     private readonly FakeTimeProvider _time = new(DateTimeOffset.UtcNow);
     private readonly Dictionary<int, HybridSessionPeerManager> _peers = new();
-    private readonly HybridSessionModel _room = new(RoomId, "coordinator", "room", 10, ModeratorId, WebRTCEngine.Mediasoup);
+    private readonly HybridSessionModel _room = new(RoomId, "coordinator", "room", 10, WebRTCEngine.Mediasoup);
     // Full and asking for approval: a moved peer gets in all the same
-    private readonly HybridSessionModel _hall = new(HallId, "coordinator", "hall", 2, ModeratorId, WebRTCEngine.Mediasoup,
-        isHostMustApprove: true);
-    private readonly HybridSessionModel _call = new(CallId, "coordinator", "call", 2, ModeratorId, WebRTCEngine.Mediasoup)
+    private readonly HybridSessionModel _hall = new(HallId, "coordinator", "hall", 2, WebRTCEngine.Mediasoup,
+        isApprovalRequired: true);
+    private readonly HybridSessionModel _call = new(CallId, "coordinator", "call", 2, WebRTCEngine.Mediasoup)
     {
         CallDevices = new Dictionary<int, string> { [UserId] = "device", [OtherUserId] = "other" }
     };
@@ -136,7 +136,7 @@ public class HybridSessionMovePeerTests : IDisposable
     [Fact]
     public async Task PeerWaitingForApproval_CanBeMoved()
     {
-        _room.SetHostMustApprove(true);
+        _room.SetApprovalRequired(true);
         Assert.Null((await _peers[RoomId].AddPeerAsync(UserId, "epoch", "device")).result);
         Assert.Equal(HybridSessionPeerState.WaitingForApprove, _peers[RoomId].GetAllPeerSnapshots()[UserId].State);
 

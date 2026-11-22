@@ -28,10 +28,10 @@ public class AuthenticatorTests
 
     public AuthenticatorTests()
     {
-        var model = CoordinatorInstanceModel.Create("coordinator", "127.0.0.1", 5000, DateTime.UtcNow);
+        var model = CoordinatorInstanceModel.Create("coordinator", "127.0.0.1", 5000, DateTimeOffset.UtcNow);
         _users.Setup(u => u.GetByIdentityAsync(model.Id, Identity, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(() => new UserModel(UserId, model.Id, "user", _state, UserStatus.Online, DateTime.UtcNow,
-                DateTime.UtcNow));
+            .ReturnsAsync(() => new UserModel(UserId, model.Id, "user", _state, UserStatus.Online, DateTimeOffset.UtcNow,
+                DateTimeOffset.UtcNow));
         _hasher.Setup(h => h.VerifyPassword("hash", "secret")).Returns(true);
         _passkeyService.Setup(p => p.IsAvailable).Returns(true);
         _passkeyService.Setup(p => p.BeginLogin(It.IsAny<IReadOnlyList<byte[]>>()))
@@ -61,7 +61,7 @@ public class AuthenticatorTests
 
     private UserPasskey AddPasskey(bool enabled = true)
     {
-        var passkey = UserPasskey.Create(UserId, [1], [2], 0, null, Guid.Empty, DateTime.UtcNow);
+        var passkey = UserPasskey.Create(UserId, [1], [2], 0, null, Guid.Empty, DateTimeOffset.UtcNow);
         if (!enabled)
             passkey.Disable();
         _passkeys.AddAsync(passkey);
@@ -206,7 +206,7 @@ public class AuthenticatorTests
     [Fact]
     public async Task Passkey_OfAnotherUser_Fails()
     {
-        var passkey = UserPasskey.Create(UserId + 1, [9], [2], 0, null, Guid.Empty, DateTime.UtcNow);
+        var passkey = UserPasskey.Create(UserId + 1, [9], [2], 0, null, Guid.Empty, DateTimeOffset.UtcNow);
         await _passkeys.AddAsync(passkey);
         _passkeyService.Setup(p => p.VerifyLoginAsync(It.IsAny<string>(), It.IsAny<PasskeyAssertion>(),
             It.IsAny<byte[]>(), It.IsAny<uint>(), It.IsAny<int>(), It.IsAny<CancellationToken>())).ReturnsAsync(1u);

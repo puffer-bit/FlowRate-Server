@@ -15,11 +15,11 @@ public class ChatMessageEntity
 
     public required int SenderUserId { get; set; }
 
-    public DateTime SentTime { get; set; }
-    public DateTime? DelayedSentTime { get; set; }
-    public DateTime? DisposeTime { get; set; }
-    public DateTime? EditTime { get; set; }
-    public DateTime? PinnedAt { get; set; }
+    public DateTimeOffset SentTime { get; set; }
+    public DateTimeOffset? DelayedSentTime { get; set; }
+    public DateTimeOffset? DisposeTime { get; set; }
+    public DateTimeOffset? EditTime { get; set; }
+    public DateTimeOffset? PinnedAt { get; set; }
     public int? PinnedByUserId { get; set; }
 
     public ChatTextContentEntity? TextContent { get; set; }

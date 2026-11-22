@@ -25,7 +25,7 @@ public class ChatReadStateRepository : IChatReadStateRepository
             .ToDictionaryAsync(x => x.ChatId, x => x.LastReadMessageId, cancellationToken);
     }
 
-    public async Task<ChatReadMove> MoveAsync(int userId, int chatId, int messageId, DateTime? markAt,
+    public async Task<ChatReadMove> MoveAsync(int userId, int chatId, int messageId, DateTimeOffset? markAt,
         CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
@@ -52,7 +52,7 @@ public class ChatReadStateRepository : IChatReadStateRepository
             context.ChatReadMarks.Add(new ChatReadMarkEntity
             {
                 ChatId = chatId, UserId = userId, UpToMessageId = messageId,
-                ReadAt = DateTime.SpecifyKind(at, DateTimeKind.Utc)
+                ReadAt = at
             });
         }
 
@@ -110,14 +110,14 @@ public class ChatReadStateRepository : IChatReadStateRepository
                 x.UserId,
                 ReadAt = context.ChatReadMarks
                     .Where(m => m.ChatId == chatId && m.UserId == x.UserId && m.UpToMessageId >= messageId)
-                    .Min(m => (DateTime?)m.ReadAt)
+                    .Min(m => (DateTimeOffset?)m.ReadAt)
             })
             .ToListAsync(cancellationToken);
 
         return readers
             .Select(x => new ChatMessageReader(x.UserId,
-                x.ReadAt is { } at ? DateTime.SpecifyKind(at, DateTimeKind.Utc) : null))
-            .OrderBy(x => x.ReadAt ?? DateTime.MinValue)
+                x.ReadAt is { } at ? at : null))
+            .OrderBy(x => x.ReadAt ?? DateTimeOffset.MinValue)
             .ThenBy(x => x.UserId)
             .ToList();
     }

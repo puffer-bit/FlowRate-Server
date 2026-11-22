@@ -12,7 +12,7 @@ namespace Server.Infrastructure.Tests.Database;
 public sealed class LinkPreviewRepositoryTests : IDisposable
 {
     private const string Coordinator = "coordinator";
-    private static readonly DateTime Now = new(2026, 11, 18, 12, 0, 0, DateTimeKind.Utc);
+    private static readonly DateTimeOffset Now = new(2026, 11, 18, 12, 0, 0, TimeSpan.Zero);
 
     private readonly RepositoryTestDatabase _database = new();
     private readonly LinkPreviewRepository _previews;
@@ -43,7 +43,7 @@ public sealed class LinkPreviewRepositoryTests : IDisposable
         _database.Dispose();
     }
 
-    private Task<ChatLinkPreviewModel> AddPreview(string url, DateTime fetchedAt) => _previews.AddAsync(new ChatLinkPreviewModel
+    private Task<ChatLinkPreviewModel> AddPreview(string url, DateTimeOffset fetchedAt) => _previews.AddAsync(new ChatLinkPreviewModel
     {
         CoordinatorInstanceId = Coordinator, Url = url, Title = "Title", Description = "Text",
         ImageMimeType = "image/png", ImageWidth = 1200, ImageHeight = 630, ImageSize = 100, IsLargeImage = true,

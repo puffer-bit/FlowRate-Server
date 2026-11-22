@@ -52,5 +52,5 @@ public sealed record CoordinatorUserDto(
     string Username,
     string? DisplayName,
     UserState State,
-    DateTime LastConnectionAtUtc,
+    DateTimeOffset LastConnectionAtUtc,
     IReadOnlyList<int> RoleIds);

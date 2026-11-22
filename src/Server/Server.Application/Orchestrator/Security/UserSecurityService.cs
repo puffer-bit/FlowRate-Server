@@ -147,7 +147,7 @@ public sealed class UserSecurityService(
         try
         {
             await passkeys.AddAsync(UserPasskey.Create(userId, credential.CredentialId, credential.PublicKey,
-                credential.SignatureCounter, label, credential.AaGuid, timeProvider.GetUtcNow().UtcDateTime), ct);
+                credential.SignatureCounter, label, credential.AaGuid, timeProvider.GetUtcNow()), ct);
             await SyncPasskeyFlagAsync(userId, ct);
         }
         finally

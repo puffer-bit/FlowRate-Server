@@ -99,7 +99,7 @@ public partial class HybridSessionManager
                         if (call.State == DirectCallState.Active)
                             return call.CalleeDevice == connectionId ? (null, CallDto(call, connectionId)) : (ErrorCode.CallAnsweredElsewhere, null);
                         var model = new HybridSessionModel(call.ChatId, _coordinatorInstanceId, chat.Name, 2,
-                            call.Caller, WebRTCEngine.Mediasoup)
+                            WebRTCEngine.Mediasoup)
                         {
                             CallDevices = new Dictionary<int, string>
                             { [call.Caller] = call.CallerDevice, [call.Callee] = connectionId }

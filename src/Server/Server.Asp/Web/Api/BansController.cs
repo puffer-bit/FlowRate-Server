@@ -18,9 +18,9 @@ namespace Server.Asp.Web.Api;
 public class BansController(IOrchestratorInstance orchestrator, IBanRepository repository,
     ICoordinatorSettingsService settings) : ControllerBase
 {
-    public record CreateBan([property: Range(1, int.MaxValue)] int UserId, BanKind Kind,
-        [property: StringLength(Limits.BanReasonMaxLength)] string? Reason = null, DateTime? ExpiresAt = null,
-        [property: StringLength(Limits.IpAddressMaxLength)] string? Address = null);
+    public record CreateBan([Range(1, int.MaxValue)] int UserId, BanKind Kind,
+        [StringLength(Limits.BanReasonMaxLength)] string? Reason = null, DateTimeOffset? ExpiresAt = null,
+        [StringLength(Limits.IpAddressMaxLength)] string? Address = null);
 
     [HttpGet]
     public async Task<ActionResult<List<BanDTO>>> Get(string id)
@@ -28,7 +28,7 @@ public class BansController(IOrchestratorInstance orchestrator, IBanRepository r
         if (await settings.GetAsync(id) == null) return NotFound();
         var moderation = orchestrator.GetCoordinator(id)?.Moderation;
         return moderation != null ? await moderation.ListAsync() :
-            (await repository.GetAsync(id)).Where(b => b.IsActive(DateTime.UtcNow)).Select(b => b.ToDto()).ToList();
+            (await repository.GetAsync(id)).Where(b => b.IsActive(DateTimeOffset.UtcNow)).Select(b => b.ToDto()).ToList();
     }
 
     [HttpPost]

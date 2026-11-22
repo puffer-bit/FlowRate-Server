@@ -56,7 +56,7 @@ public class MessageRouterGuardTests
     }
 
     private static CreateSessionRequest CreateSession(string name = "room") =>
-        new(new CreateSessionModel(name, 10, new ChatSessionCreateData()));
+        new(new CreateSessionModel(name, new ChatSessionCreateData()));
 
     [Fact]
     public void RequestWithoutPermission_IsRejectedWithoutReachingTheHandler()

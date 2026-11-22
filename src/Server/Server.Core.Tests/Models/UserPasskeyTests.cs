@@ -5,7 +5,7 @@ namespace Server.Core.Tests.Models;
 public class UserPasskeyTests
 {
     private static UserPasskey Create(string? label = null) =>
-        UserPasskey.Create(1, [1, 2], [3, 4], 0, label, Guid.Empty, DateTime.UtcNow);
+        UserPasskey.Create(1, [1, 2], [3, 4], 0, label, Guid.Empty, DateTimeOffset.UtcNow);
 
     [Fact]
     public void New_IsEnabledAndNeverUsed()
@@ -36,7 +36,7 @@ public class UserPasskeyTests
     public void Use_RecordsTheCounterAndTheTime()
     {
         var passkey = Create();
-        var at = new DateTime(2026, 10, 1, 0, 0, 0, DateTimeKind.Utc);
+        var at = new DateTimeOffset(2026, 10, 1, 0, 0, 0, TimeSpan.Zero);
 
         passkey.RecordUse(5, at);
 
@@ -47,7 +47,7 @@ public class UserPasskeyTests
     [Fact]
     public void Passkey_NeedsItsCredentialAndKey()
     {
-        Assert.Throws<ArgumentException>(() => UserPasskey.Create(1, [], [3], 0, null, Guid.Empty, DateTime.UtcNow));
-        Assert.Throws<ArgumentException>(() => UserPasskey.Create(1, [1], [], 0, null, Guid.Empty, DateTime.UtcNow));
+        Assert.Throws<ArgumentException>(() => UserPasskey.Create(1, [], [3], 0, null, Guid.Empty, DateTimeOffset.UtcNow));
+        Assert.Throws<ArgumentException>(() => UserPasskey.Create(1, [1], [], 0, null, Guid.Empty, DateTimeOffset.UtcNow));
     }
 }

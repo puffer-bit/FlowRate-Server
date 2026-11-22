@@ -24,7 +24,7 @@ public sealed record ChatLinkPreviewModel
     public long ImageSize { get; init; }
     public bool IsLargeImage { get; init; }
 
-    public required DateTime FetchedAt { get; init; }
+    public required DateTimeOffset FetchedAt { get; init; }
 
     public bool HasImage => ImageMimeType != null;
 }
