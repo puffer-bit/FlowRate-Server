@@ -54,6 +54,51 @@ public class ChatSessionManagerTests
     }
 
     [Fact]
+    public async Task RenameChannel_PersistsAndBroadcastsNewName()
+    {
+        var (_, chat) = await _manager.CreateAsync(new CreateSessionModel("General", new ChatSessionCreateData()), AuthorId);
+        Assert.Null(await _manager.ChangeSettingsAsync(chat!.Id, "Announcements", "Updated description", AuthorId));
+        Assert.Equal("Announcements", chat.Name);
+        Assert.Equal("Updated description", chat.Description);
+        _chats.Verify(r => r.UpdateAsync(chat, It.IsAny<CancellationToken>()), Times.Once);
+        Assert.Equal("Announcements", Assert.Single(_events.Of<ChatSessionReconfiguredEvent>()).Session.Name);
+    }
+
+    [Fact]
+    public async Task RenameChannel_RejectsDuplicateAndMissingChat()
+    {
+        var (_, chat) = await _manager.CreateAsync(new CreateSessionModel("General", new ChatSessionCreateData()), AuthorId);
+        await _manager.CreateAsync(new CreateSessionModel("Announcements", new ChatSessionCreateData()), AuthorId);
+        Assert.Equal(ErrorCode.NameTaken, await _manager.ChangeSettingsAsync(chat!.Id, "Announcements", "Updated description", AuthorId));
+        Assert.Equal("General", chat.Name);
+        Assert.Null(chat.Description);
+        Assert.Equal(ErrorCode.SessionNotFound, await _manager.ChangeSettingsAsync(999, "Missing", "Updated description", AuthorId));
+        Assert.Empty(_events.Of<ChatSessionReconfiguredEvent>());
+    }
+
+    [Theory]
+    [InlineData(ChatKind.Direct)]
+    [InlineData(ChatKind.Group)]
+    public async Task RenameChannel_DoesNotChangePrivateChats(ChatKind kind)
+    {
+        var (_, chat) = await _manager.CreateAsync(new CreateSessionModel("Private",
+            new ChatSessionCreateData(Kind: kind, MemberIds: [2])), AuthorId);
+        Assert.Equal(ErrorCode.InvalidValue, await _manager.ChangeSettingsAsync(chat!.Id, "Changed", "Updated description", AuthorId));
+        Assert.Equal("Private", chat.Name);
+    }
+
+    [Fact]
+    public async Task RenameChannel_FailedSaveRestoresNameAndDoesNotBroadcast()
+    {
+        var (_, chat) = await _manager.CreateAsync(new CreateSessionModel("General", new ChatSessionCreateData()), AuthorId);
+        _chats.Setup(r => r.UpdateAsync(chat!, It.IsAny<CancellationToken>())).ThrowsAsync(new IOException("Save failed"));
+        Assert.Equal(ErrorCode.Internal, await _manager.ChangeSettingsAsync(chat!.Id, "Changed", "Updated description", AuthorId));
+        Assert.Equal("General", chat.Name);
+        Assert.Null(chat.Description);
+        Assert.Empty(_events.Of<ChatSessionReconfiguredEvent>());
+    }
+
+    [Fact]
     public async Task DirectChat_ConcurrentReverseCreation_ReturnsOneConversation()
     {
         var results = await Task.WhenAll(

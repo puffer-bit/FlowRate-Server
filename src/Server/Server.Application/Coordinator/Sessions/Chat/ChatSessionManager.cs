@@ -68,6 +68,46 @@ public class ChatSessionManager : IChatSessionManager
         _coordinatorInstanceId = coordinatorInstanceId;
     }
 
+    public async Task<ErrorCode?> ChangeSettingsAsync(int sessionId, string name, string? description, int userId)
+    {
+        await _lifecycleLock.WaitAsync();
+        try
+        {
+            if (!_sessions.TryGetValue(sessionId, out var chat))
+                return ErrorCode.SessionNotFound;
+            if (chat.Kind != ChatKind.ServerChannel)
+                return ErrorCode.InvalidValue;
+            if (_sessions.Values.Any(other => !other.IsPrivate && other.Id != sessionId && other.Name == name))
+                return ErrorCode.NameTaken;
+
+            var oldName = chat.Name;
+            var oldDescription = chat.Description;
+            chat.Rename(name);
+            chat.Describe(description, chat.IconPath);
+            try
+            {
+                await _chatSessionRepository.UpdateAsync(chat);
+            }
+            catch
+            {
+                chat.Rename(oldName);
+                chat.Describe(oldDescription, chat.IconPath);
+                throw;
+            }
+            await _coordinatorEventBus.PublishAsync(new ChatSessionReconfiguredEvent(chat, userId));
+            return null;
+        }
+        catch (Exception exception)
+        {
+            _logger.LogError(exception, "Failed to rename chat {SessionId}.", sessionId);
+            return ErrorCode.Internal;
+        }
+        finally
+        {
+            _lifecycleLock.Release();
+        }
+    }
+
     public async Task LoadAsync()
     {
         foreach (var chat in await _chatSessionRepository.GetByCoordinatorIdAsync(_coordinatorInstanceId))

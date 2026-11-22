@@ -46,6 +46,7 @@ public static class RequestPolicies
         ChangeGroupRequest request => InSession(request.SessionId, View),
         LeaveGroupRequest request => InSession(request.SessionId, View),
         DeleteSessionRequest request => InSession(request.SessionId, Permission.ManageSessions),
+        ChangeChatSessionSettingsRequest request => InSession(request.SessionId, Permission.ManageSessions),
         ChangeHybridSessionSettingsRequest request => InSession(request.SessionId, Permission.ManageSessions),
         // Which roles and permissions the sender may change, the handler checks
         ChangeSessionPermissionsRequest request =>

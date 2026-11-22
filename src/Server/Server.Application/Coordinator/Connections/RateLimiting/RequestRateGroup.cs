@@ -95,7 +95,7 @@ public sealed class RequestRateLimits
         UserSetPasswordRequest or UserTwoFactorSetupRequest or UserTwoFactorEnableRequest
             or UserTwoFactorDisableRequest or UserPasskeyOptionsRequest or UserPasskeyRegisterRequest
             or UserPasskeyDeleteRequest or UserIdentityResetRequest => RequestRateGroup.Authentication,
-        CreateSessionRequest or DeleteSessionRequest or ChangeHybridSessionSettingsRequest
+        CreateSessionRequest or DeleteSessionRequest or ChangeChatSessionSettingsRequest or ChangeHybridSessionSettingsRequest
             or ChangeSessionPermissionsRequest
             => RequestRateGroup.SessionManagement,
         CreateSessionCategoryRequest or RenameSessionCategoryRequest or DeleteSessionCategoryRequest
