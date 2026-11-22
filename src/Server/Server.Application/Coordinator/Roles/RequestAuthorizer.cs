@@ -33,11 +33,13 @@ public sealed class RequestAuthorizer
             && RequestPolicies.Of(message)?.SessionId is { } mediaSessionId
             && _hybridSessions.TryGetSession(mediaSessionId, out var callSession)
             && callSession.Model.CallDevices is { } callDevices)
-        {
-            if (!callDevices.ContainsKey(message.SenderId)) return false;
-            return message is not (Shared.Models.Requests.SessionActions.HybridSession.HybridSessionStartVideoRequest
-                or Shared.Models.Requests.SessionActions.HybridSession.HybridSessionStartScreenShareRequest);
-        }
+            // Members in the call may do everything in it; the call checks kicks against the group owner
+            return callDevices.ContainsKey(message.SenderId);
+        // Server roles do not rank group members: the call kicks only for the group owner
+        if (message is Shared.Models.Requests.SessionActions.Generic.KickFromSessionRequest kick
+            && _hybridSessions.TryGetSession(kick.SessionId, out var kickSession)
+            && kickSession.Model.CallDevices is { } kickDevices)
+            return kickDevices.ContainsKey(message.SenderId);
         if (RequestPolicies.Of(message) is not { } policy)
             return false;
 

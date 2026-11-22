@@ -257,7 +257,7 @@ public partial class HybridSessionManager : IHybridSessionManager
 
     public async Task RemoveUserFromAllSessionsAsync(int userId)
     {
-        await EndCallsForDeviceAsync(userId, null);
+        await LeaveCallsOfDeviceAsync(userId, null);
         foreach (var session in _sessions.Values)
         {
             if (!session.PeerManager.HasPeer(userId))
@@ -277,7 +277,7 @@ public partial class HybridSessionManager : IHybridSessionManager
 
     public async Task RemoveConnectionFromAllSessionsAsync(int userId, string connectionId)
     {
-        await EndCallsForDeviceAsync(userId, connectionId);
+        await LeaveCallsOfDeviceAsync(userId, connectionId);
         foreach (var session in _sessions.Values)
         {
             if (!session.PeerManager.HasPeer(userId))

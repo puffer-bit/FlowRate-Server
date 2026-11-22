@@ -9,8 +9,15 @@ public sealed class HybridSessionModel : SessionModel
     public const int NoCapacityLimit = -1;
 
     public int Capacity { get; private set; }
-    /// <summary>Only selected devices may join a private call. Null for server channels.</summary>
+    /// <summary>
+    /// The device each member in a chat call takes part from; only these may join. The call keeps it up to date.
+    /// Null for server channels.
+    /// </summary>
     public IReadOnlyDictionary<int, string>? CallDevices { get; init; }
+    /// <summary>Who may kick from a chat call: the owner of the group. Null in direct chats and server channels.</summary>
+    public int? CallModeratorId { get; private set; }
+
+    public void SetCallModerator(int? userId) => CallModeratorId = userId;
     public WebRTCEngine EngineType { get; }
     /// <summary>Joiners wait for someone with ApproveMembers to let them in.</summary>
     public bool IsApprovalRequired { get; private set; }

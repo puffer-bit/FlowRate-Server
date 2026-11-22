@@ -4,10 +4,10 @@ using Shared.Models.Requests.SessionActions.ChatSession;
 
 namespace Server.Application.Coordinator.Handlers.Chat;
 
-public sealed class DirectCallHandler(IHybridSessionManager sessions, IMessageSender sender)
-    : IMessageHandler<DirectCallRequest>
+public sealed class ChatCallHandler(IHybridSessionManager sessions, IMessageSender sender)
+    : IMessageHandler<ChatCallRequest>
 {
-    public async Task<HandleMessageResult> HandleMessage(DirectCallRequest? request, string connectionId)
+    public async Task<HandleMessageResult> HandleMessage(ChatCallRequest? request, string connectionId)
     {
         if (request == null) return HandleMessageResult.ForbiddenRequest;
         var (error, call) = await sessions.ChangeCallAsync(request, connectionId);

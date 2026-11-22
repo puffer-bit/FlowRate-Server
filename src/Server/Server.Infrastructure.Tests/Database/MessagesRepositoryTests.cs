@@ -75,7 +75,7 @@ public sealed class MessagesRepositoryTests : IDisposable
             Kind = kind, ActorUserId = 1,
             SubjectUserId = call ? null : kind == ChatSystemEventKind.MemberLeft ? 1 : 2,
             CallId = call ? Guid.NewGuid() : null,
-            CallEndReason = kind == ChatSystemEventKind.CallEnded ? Shared.Models.DataTransferObjects.DirectCallEndReason.Completed : null,
+            CallEndReason = kind == ChatSystemEventKind.CallEnded ? Shared.Models.DataTransferObjects.ChatCallEndReason.Completed : null,
             CallDurationSeconds = kind == ChatSystemEventKind.CallEnded ? 75 : null
         };
         var stored = await _repository.AddAsync(ChatMessageModel.CreateSystem(_chatId, content, DateTimeOffset.UtcNow));
@@ -92,9 +92,9 @@ public sealed class MessagesRepositoryTests : IDisposable
     }
 
     [Theory]
-    [InlineData(Shared.Models.DataTransferObjects.DirectCallEndReason.Missed)]
-    [InlineData(Shared.Models.DataTransferObjects.DirectCallEndReason.Declined)]
-    public async Task UnansweredCallOutcome_SurvivesDatabaseReload(Shared.Models.DataTransferObjects.DirectCallEndReason reason)
+    [InlineData(Shared.Models.DataTransferObjects.ChatCallEndReason.Missed)]
+    [InlineData(Shared.Models.DataTransferObjects.ChatCallEndReason.Declined)]
+    public async Task UnansweredCallOutcome_SurvivesDatabaseReload(Shared.Models.DataTransferObjects.ChatCallEndReason reason)
     {
         var content = new ChatSystemContentModel { Kind = ChatSystemEventKind.CallEnded,
             CallId = Guid.NewGuid(), CallEndReason = reason };

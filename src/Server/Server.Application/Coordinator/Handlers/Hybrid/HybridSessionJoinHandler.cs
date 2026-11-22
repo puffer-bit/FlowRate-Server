@@ -39,8 +39,9 @@ public class HybridSessionJoinHandler : HybridSessionRequestHandler<HybridSessio
     protected override async Task<BaseMessage> HandleAsync(HybridSessionJoinRequest request, IHybridSession session,
         string connectionId)
     {
-        if (session.Model.CallDevices == null && _callSessions.HasDirectCall(request.SenderId))
-            return request.ToError(ErrorCode.Conflict);
+        // Entering a voice channel hangs up the call the user was in
+        if (session.Model.CallDevices == null && _callSessions.IsInCall(request.SenderId))
+            await _callSessions.LeaveCallsAsync(request.SenderId);
         var (result, transportData) = await session.PeerManager.AddPeerAsync(request.SenderId,
             request.ClientEpoch ?? string.Empty, connectionId, MayJoinPastCapacity(request.SenderId, session),
             MayApprove(request.SenderId, session));

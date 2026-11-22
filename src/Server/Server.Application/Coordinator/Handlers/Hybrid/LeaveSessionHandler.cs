@@ -24,7 +24,7 @@ public class LeaveSessionHandler : HybridSessionRequestHandler<LeaveSessionReque
     {
         if (session.Model.CallDevices != null)
         {
-            await _callSessions.EndCallForSessionAsync(request.SessionId, request.SenderId, connectionId);
+            await _callSessions.LeaveCallForSessionAsync(request.SessionId, request.SenderId, connectionId);
             return request.ToResponse();
         }
         return await HandleAsync(request, session);

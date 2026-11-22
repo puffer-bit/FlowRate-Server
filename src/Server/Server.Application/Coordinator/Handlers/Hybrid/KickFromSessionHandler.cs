@@ -15,7 +15,18 @@ public class KickFromSessionHandler : HybridSessionRequestHandler<KickFromSessio
     public KickFromSessionHandler(IHybridSessionManager sessionManager, IMessageSender messageSender)
         : base(sessionManager, messageSender)
     {
+        _calls = sessionManager;
     }
+
+    private readonly IHybridSessionManager _calls;
+
+    // In a chat call the group owner kicks; the member leaves the call and may join it again
+    protected override async Task<BaseMessage> HandleAsync(KickFromSessionRequest request, IHybridSession session,
+        string connectionId) =>
+        session.Model.CallDevices != null
+            ? request.Answer(await _calls.KickFromCallAsync(request.SessionId, request.SenderId, connectionId,
+                request.TargetUserId, request.Reason), request.ToResponse)
+            : await HandleAsync(request, session);
 
     protected override int GetSessionId(KickFromSessionRequest request) => request.SessionId;
 
