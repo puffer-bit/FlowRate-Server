@@ -98,9 +98,10 @@ public class PushNotifierTests
         notifier.Watch(_users.Object, _chats.Object, Mock.Of<ICoordinatorPermissions>());
         var now = DateTimeOffset.UtcNow;
         var id = Guid.NewGuid();
-        var call = new Shared.Models.DataTransferObjects.DirectCallDTO(id, ChatId, AuthorId, recipient,
-            Shared.Models.DataTransferObjects.DirectCallState.Ringing, null, now, null, false, null);
-        await notifier.NotifyCallAsync(call);
+        var call = new Shared.Models.DataTransferObjects.ChatCallDTO(id, ChatId, AuthorId,
+            Shared.Models.DataTransferObjects.ChatCallState.Active, null, now, null,
+            [new(recipient, Shared.Models.DataTransferObjects.ChatCallParticipantState.Ringing)], false, null);
+        await notifier.NotifyCallAsync(new CallPush(call, null, [new CallPushRecipient(recipient, true, now.AddSeconds(45))]));
         var sent = Assert.Single(_sender.Sent);
         Assert.Equal(recipient == OfflineUserId ? "offline-token" : "online-token", sent.Token);
         Assert.Equal(45, sent.TimeToLiveSeconds);
@@ -109,8 +110,11 @@ public class PushNotifierTests
         Assert.Equal(recipient, json.RootElement.GetProperty("recipientId").GetInt32());
         Assert.Equal(now.AddSeconds(45).ToUnixTimeMilliseconds(), json.RootElement.GetProperty("expiresAt").GetInt64());
         Assert.Equal(0, json.RootElement.GetProperty("callState").GetInt32());
-        await notifier.NotifyCallAsync(call with { State = Shared.Models.DataTransferObjects.DirectCallState.Active });
+        await notifier.NotifyCallAsync(new CallPush(call, "Friends", [new CallPushRecipient(recipient, false, now)]));
         Assert.Equal(2, _sender.Sent.Count);
+        using var stopped = JsonDocument.Parse(PushCipher.Decrypt(Key, _sender.Sent[1].Payload));
+        Assert.Equal(2, stopped.RootElement.GetProperty("callState").GetInt32());
+        Assert.Equal("Friends", stopped.RootElement.GetProperty("chatName").GetString());
         await notifier.DrainAsync();
     }
 

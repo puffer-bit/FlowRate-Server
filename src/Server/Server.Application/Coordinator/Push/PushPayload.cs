@@ -41,25 +41,31 @@ public static class PushPayload
         return stream.ToArray();
     }
 
-    public static byte[] CreateCall(string coordinatorInstanceId, string callerName, string? callerAvatarUrl,
-        Shared.Models.DataTransferObjects.DirectCallDTO call)
+    /// <summary>
+    /// A ring for one member. callState is 0 while it rings, 1 once they joined and 2 otherwise, so the phone
+    /// shows the call or takes it away. chatName is the group name, or the caller in a direct chat.
+    /// </summary>
+    public static byte[] CreateCall(string coordinatorInstanceId, string chatName, string callerName,
+        string? callerAvatarUrl, Shared.Models.DataTransferObjects.ChatCallDTO call, CallPushRecipient recipient)
     {
+        var joined = call.Participants.Any(p => p.UserId == recipient.UserId
+            && p.State == Shared.Models.DataTransferObjects.ChatCallParticipantState.Joined);
         using var stream = new MemoryStream();
         using (var writer = new Utf8JsonWriter(stream))
         {
             writer.WriteStartObject();
             writer.WriteString("coordinatorId", coordinatorInstanceId);
             writer.WriteNumber("chatId", call.ChatId);
-            writer.WriteString("chatName", callerName);
+            writer.WriteString("chatName", chatName);
             writer.WriteNumber("senderId", call.CallerId);
-            writer.WriteNumber("recipientId", call.CalleeId);
+            writer.WriteNumber("recipientId", recipient.UserId);
             writer.WriteString("senderName", callerName);
             if (callerAvatarUrl != null)
                 writer.WriteString("senderAvatarUrl", callerAvatarUrl);
             writer.WriteNumber("sentTime", call.CreatedAt.ToUnixTimeMilliseconds());
             writer.WriteString("callId", call.CallId);
-            writer.WriteNumber("callState", (int)call.State);
-            writer.WriteNumber("expiresAt", call.CreatedAt.AddSeconds(45).ToUnixTimeMilliseconds());
+            writer.WriteNumber("callState", recipient.IsRinging ? 0 : joined ? 1 : 2);
+            writer.WriteNumber("expiresAt", recipient.ExpiresAt.ToUnixTimeMilliseconds());
             writer.WriteEndObject();
         }
         return stream.ToArray();

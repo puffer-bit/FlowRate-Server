@@ -165,21 +165,27 @@ public sealed class PushNotifier : IEventHandler<ChatSessionMessageAddedEvent>, 
         return builder.ToString();
     }
 
-    public async Task NotifyCallAsync(Shared.Models.DataTransferObjects.DirectCallDTO call)
+    /// <summary>Rings the phones of the members whose ring started, and takes it away where it stopped.</summary>
+    public async Task NotifyCallAsync(Push.CallPush push)
     {
-        if (!_sender.IsEnabled || _userManager == null)
+        if (!_sender.IsEnabled || _userManager == null || push.Recipients.Count == 0)
             return;
-        var caller = await _userManager.GetUserAsync(call.CallerId);
-        var payload = PushPayload.CreateCall(_coordinatorInstanceId, caller?.Username ?? "", caller?.AvatarUrl, call);
+        var caller = await _userManager.GetUserAsync(push.Call.CallerId);
+        var callerName = caller?.Username ?? "";
         var devices = await _devices.GetAllAsync(_coordinatorInstanceId, _stopping.Token);
-        foreach (var device in devices.Where(d => d.UserId == call.CalleeId))
+        foreach (var recipient in push.Recipients)
         {
-            var result = await _sender.SendAsync(new PushMessage(device.Token, device.Platform, device.KeyId,
-                PushCipher.Encrypt(device.Key, payload), TimeToLiveSeconds: 45), _stopping.Token);
-            if (result.Status == PushSendStatus.TokenInvalid)
-                await _devices.RemoveAsync(_coordinatorInstanceId, device.Token, _stopping.Token);
-            else if (result.Status == PushSendStatus.Failed)
-                _logger.LogWarning("Call push to user {UserId} failed: {Detail}", device.UserId, result.Detail);
+            var payload = PushPayload.CreateCall(_coordinatorInstanceId, push.GroupName ?? callerName, callerName,
+                caller?.AvatarUrl, push.Call, recipient);
+            foreach (var device in devices.Where(d => d.UserId == recipient.UserId))
+            {
+                var result = await _sender.SendAsync(new PushMessage(device.Token, device.Platform, device.KeyId,
+                    PushCipher.Encrypt(device.Key, payload), TimeToLiveSeconds: 45), _stopping.Token);
+                if (result.Status == PushSendStatus.TokenInvalid)
+                    await _devices.RemoveAsync(_coordinatorInstanceId, device.Token, _stopping.Token);
+                else if (result.Status == PushSendStatus.Failed)
+                    _logger.LogWarning("Call push to user {UserId} failed: {Detail}", device.UserId, result.Detail);
+            }
         }
     }
 

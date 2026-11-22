@@ -80,8 +80,9 @@ public class CoordinatorInstanceFactory : ICoordinatorInstanceFactory
             new LinkPreviewFetcher(logger),
             new LinkPreviewImageStore(Path.Combine(mediaDirectory, coordinatorInstanceModel.Id + "-link-previews")),
             coordinatorInstanceModel.Id);
+        var chatCalls = new ChatCallsRelay();
         var coordinatorEventBus = CreateEventBus(logger, messageSender, visibility, panelEvents, pushNotifier,
-            readService, linkPreviews);
+            readService, linkPreviews, chatCalls);
 
         var coordinatorInstanceContext =
             CreateCoordinatorInstanceContext(serverVersion, coordinatorInstanceModel);
@@ -116,6 +117,7 @@ public class CoordinatorInstanceFactory : ICoordinatorInstanceFactory
         pushNotifier.Watch(userManager, chatSessionManager, roles);
         visibility.Watch(roles, sessionManager, userManager);
         hybridSessionManager.WatchPermissions(roles, visibility);
+        chatCalls.Attach(hybridSessionManager);
         hybridSessionManager.ConfigureCalls(chatSessionManager, userManager, messageSender, connectionsContext, _provider.GetRequiredService<TimeProvider>(), pushNotifier.NotifyCallAsync);
         mediaService.Watch(roles);
         pushReplyService.Watch(roles);
@@ -242,10 +244,10 @@ public class CoordinatorInstanceFactory : ICoordinatorInstanceFactory
     
     private static ICoordinatorEventBus CreateEventBus(ILogger logger, IMessageSender messageSender,
         SessionVisibility visibility, CoordinatorPanelEvents panelEvents, PushNotifier pushNotifier,
-        ChatReadService readService, LinkPreviewService linkPreviews) =>
+        ChatReadService readService, LinkPreviewService linkPreviews, ChatCallsRelay chatCalls) =>
         new CoordinatorEventBus(logger,
             [new ChatSessionNotifier(messageSender, visibility), new HybridSessionNotifier(messageSender, visibility),
-                panelEvents, pushNotifier, readService, linkPreviews]);
+                panelEvents, pushNotifier, readService, linkPreviews, chatCalls]);
     
     private IEnumerable<IMessageHandler> CreateMessageHandlers(
         ILogger logger,
@@ -307,7 +309,7 @@ public class CoordinatorInstanceFactory : ICoordinatorInstanceFactory
         yield return ActivatorUtilities.CreateInstance<ApproveInSessionHandler>(_provider, hybridSessionManager, messageSender);
         yield return ActivatorUtilities.CreateInstance<RejectInSessionHandler>(_provider, hybridSessionManager, messageSender);
         
-        yield return new Server.Application.Coordinator.Handlers.Chat.DirectCallHandler(hybridSessionManager, messageSender);
+        yield return new Server.Application.Coordinator.Handlers.Chat.ChatCallHandler(hybridSessionManager, messageSender);
         yield return new HybridSessionJoinHandler(hybridSessionManager, messageSender, permissions);
         yield return ActivatorUtilities.CreateInstance<HybridSessionConnectHandler>(_provider, hybridSessionManager, messageSender);
         yield return ActivatorUtilities.CreateInstance<HybridSessionPeerListRequestHandler>(_provider, hybridSessionManager, messageSender);

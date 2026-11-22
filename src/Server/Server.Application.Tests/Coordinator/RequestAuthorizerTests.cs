@@ -71,6 +71,28 @@ public class RequestAuthorizerTests
     private static KickFromSessionRequest Kick(int senderId, int targetId, int sessionId = SessionId) =>
         From(senderId, new KickFromSessionRequest(sessionId, targetId, null));
 
+    [Fact]
+    public async Task CallPeers_AreReadByChatMembers_ActionsStayWithThoseInTheCall()
+    {
+        const int callId = 9;
+        var chat = Server.Core.Models.TextChat.ChatSessionModel.Create("c", "Group", CreatorId);
+        chat.SetAudience(ChatKind.Group, [CreatorId, PlainId]);
+        var call = new Mock<IHybridSession>();
+        call.SetupGet(s => s.Model).Returns(new HybridSessionModel(callId, "c", "Group", 2, WebRTCEngine.Mediasoup)
+            { CallDevices = new Dictionary<int, string> { [CreatorId] = "device" } });
+        IHybridSession? found = call.Object;
+        _sessions.Setup(s => s.TryGetSession(callId, out found)).Returns(true);
+        var sessions = new Mock<ISessionManager>();
+        Server.Core.Models.SessionModel? chatModel = chat;
+        sessions.Setup(s => s.TryGetSessionModel(callId, out chatModel)).Returns(true);
+        var authorizer = new RequestAuthorizer(_permissions.Object, _sessions.Object, sessions.Object);
+
+        Assert.True(await authorizer.IsAllowedAsync(From(PlainId, new HybridSessionPeerListRequest(callId))));
+        Assert.False(await authorizer.IsAllowedAsync(From(ViewerId, new HybridSessionPeerListRequest(callId))));
+        Assert.False(await authorizer.IsAllowedAsync(From(PlainId, new HybridSessionPokeRequest(callId, CreatorId))));
+        Assert.True(await authorizer.IsAllowedAsync(From(CreatorId, new HybridSessionPeerListRequest(callId))));
+    }
+
     [Theory]
     [InlineData(true, true)]
     [InlineData(false, false)]

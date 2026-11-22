@@ -9,7 +9,7 @@ public sealed record ChatSystemContentModel
     public int? ActorUserId { get; init; }
     public int? SubjectUserId { get; init; }
     public Guid? CallId { get; init; }
-    public Shared.Models.DataTransferObjects.DirectCallEndReason? CallEndReason { get; init; }
+    public Shared.Models.DataTransferObjects.ChatCallEndReason? CallEndReason { get; init; }
     public int? CallDurationSeconds { get; init; }
 
     public bool IsValid() => Enum.IsDefined(Kind)

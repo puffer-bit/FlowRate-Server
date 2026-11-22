@@ -13,11 +13,20 @@ namespace Server.Application.Coordinator.Sessions.Hybrid;
 public interface IHybridSessionManager : IDisposable
 {
     Task LoadAsync();
-    bool HasDirectCall(int userId);
+    /// <summary>Whether the user takes part in a chat call.</summary>
+    bool IsInCall(int userId);
+    /// <summary>Sends the running calls of the user's chats to a connection that has just loaded them.</summary>
     Task PublishCurrentCallAsync(int userId, string connectionId);
-    Task EndCallForSessionAsync(int sessionId, int userId, string connectionId);
-    Task<(ErrorCode? Error, Shared.Models.DataTransferObjects.DirectCallDTO? Call)> ChangeCallAsync(
-        Shared.Models.Requests.SessionActions.ChatSession.DirectCallRequest request, string connectionId);
+    /// <summary>The selected device leaves the call that runs in the media session.</summary>
+    Task LeaveCallForSessionAsync(int sessionId, int userId, string connectionId);
+    /// <summary>Takes the user out of every call, e.g. when they enter a voice channel.</summary>
+    Task LeaveCallsAsync(int userId);
+    /// <summary>The group owner, in the call on <paramref name="connectionId"/>, takes a member out of it.</summary>
+    Task<ErrorCode?> KickFromCallAsync(int sessionId, int initiatorId, string connectionId, int userId, string? reason);
+    /// <summary>Follows a change of a chat's members or owner, or its removal.</summary>
+    Task OnChatChangedAsync(int chatId);
+    Task<(ErrorCode? Error, Shared.Models.DataTransferObjects.ChatCallDTO? Call)> ChangeCallAsync(
+        Shared.Models.Requests.SessionActions.ChatSession.ChatCallRequest request, string connectionId);
     /// <summary>
     /// Declines a call that rings for <paramref name="userId"/> without a connection, from the button of a
     /// push notification. A call that has already ended needs nothing and is no error.

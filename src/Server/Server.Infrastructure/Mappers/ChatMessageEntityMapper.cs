@@ -86,7 +86,7 @@ public static class ChatMessageEntityMapper
                 ActorUserId = entity.SystemActorUserId,
                 SubjectUserId = entity.SystemSubjectUserId,
                 CallId = entity.SystemCallId,
-                CallEndReason = (Shared.Models.DataTransferObjects.DirectCallEndReason?)entity.SystemCallEndReason,
+                CallEndReason = (Shared.Models.DataTransferObjects.ChatCallEndReason?)entity.SystemCallEndReason,
                 CallDurationSeconds = entity.SystemCallDurationSeconds
             } : null,
 
