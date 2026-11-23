@@ -172,7 +172,7 @@ public class RateLimitingTests
 
         for (var i = 0; i < 20; i++)
         {
-            Assert.Equal(RequestGuardVerdict.Allowed, guard.Check(new UserAuthRequest("p", "u"), out var group));
+            Assert.Equal(RequestGuardVerdict.Allowed, guard.Check(new LoginChallengeRequest(), out var group));
             Assert.Equal(RequestRateGroup.Authentication, group);
         }
     }

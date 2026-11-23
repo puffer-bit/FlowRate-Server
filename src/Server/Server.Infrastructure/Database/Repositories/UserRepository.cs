@@ -46,6 +46,33 @@ public class UserRepository : IUserRepository
         return userEntity.ToModel();
     }
 
+    public async Task<UserModel?> GetByRecoveryKeyHashAsync(string coordinatorInstanceId, byte[] recoveryKeyHash,
+        CancellationToken cancellationToken = default)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+
+        var userEntity = await context.UserEntities
+            .Include(x => x.Roles)
+            .FirstOrDefaultAsync(x => x.RecoveryKeyHash == recoveryKeyHash
+                && x.CoordinatorInstanceId == coordinatorInstanceId, cancellationToken);
+        return userEntity?.ToModel();
+    }
+
+    public async Task<UserModel?> GetByUsernameAsync(string coordinatorInstanceId, string username,
+        CancellationToken cancellationToken = default)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+
+        var name = username.Trim().ToLower();
+        var found = await context.UserEntities
+            .Include(x => x.Roles)
+            .Where(x => x.CoordinatorInstanceId == coordinatorInstanceId && x.Username.ToLower() == name)
+            .Take(2)
+            .ToListAsync(cancellationToken);
+        // Names taken before they were compared ignoring case may still clash; such a name finds no one
+        return found.Count == 1 ? found[0].ToModel() : null;
+    }
+
     public async Task<IDictionary<int, UserModel>> GetAllAsync(
         CancellationToken cancellationToken = default)
     {
@@ -78,7 +105,8 @@ public class UserRepository : IUserRepository
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
 
         return await context.UserEntities
-            .AnyAsync(entity => entity.Username == username && entity.Id != exceptUserId, cancellationToken);
+            .AnyAsync(entity => entity.Username.ToLower() == username.ToLower() && entity.Id != exceptUserId,
+                cancellationToken);
     }
 
     public async Task<int> CountAsync(string coordinatorInstanceId, CancellationToken cancellationToken = default)
@@ -89,11 +117,14 @@ public class UserRepository : IUserRepository
             .CountAsync(entity => entity.CoordinatorInstanceId == coordinatorInstanceId, cancellationToken);
     }
 
-    public async Task<int> AddAsync(UserModel model, string userIdentity, CancellationToken cancellationToken = default)
+    public async Task<int> AddAsync(UserModel model, UserRecoveryKeys recoveryKeys,
+        CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
 
-        var userEntity = model.ToEntity(SecretHash.Of(userIdentity));
+        var userEntity = model.ToEntity(null);
+        userEntity.RecoveryKeyHash = recoveryKeys.RecoveryKeyHash;
+        userEntity.AccountPublicKey = recoveryKeys.AccountPublicKey;
         userEntity.SecurityData = new UserSecurityDataEntity();
         await context.UserEntities.AddAsync(userEntity, cancellationToken);
         await context.SaveChangesAsync(cancellationToken);
@@ -119,7 +150,11 @@ public class UserRepository : IUserRepository
         if (entity == null)
             return;
         
-        context.Entry(entity).CurrentValues.SetValues(model.ToEntity(entity.IdentityHash));
+        // What the model does not hold stays as it is
+        var values = model.ToEntity(entity.IdentityHash);
+        values.RecoveryKeyHash = entity.RecoveryKeyHash;
+        values.AccountPublicKey = entity.AccountPublicKey;
+        context.Entry(entity).CurrentValues.SetValues(values);
         await context.SaveChangesAsync(cancellationToken);
     }
 
@@ -138,16 +173,25 @@ public class UserRepository : IUserRepository
         }
     }
 
-    public async Task SetIdentityAsync(
-        int userId,
-        string userIdentity,
+    public async Task SetRecoveryKeysAsync(int userId, UserRecoveryKeys recoveryKeys,
         CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
 
-        var identityHash = SecretHash.Of(userIdentity);
         await context.UserEntities
             .Where(x => x.Id == userId)
-            .ExecuteUpdateAsync(setters => setters.SetProperty(x => x.IdentityHash, identityHash), cancellationToken);
+            .ExecuteUpdateAsync(setters => setters
+                .SetProperty(x => x.RecoveryKeyHash, recoveryKeys.RecoveryKeyHash)
+                .SetProperty(x => x.AccountPublicKey, recoveryKeys.AccountPublicKey)
+                .SetProperty(x => x.IdentityHash, (byte[]?)null), cancellationToken);
+    }
+
+    public async Task<bool> IsRecoveryKeyTakenAsync(byte[] recoveryKeyHash, int exceptUserId,
+        CancellationToken cancellationToken = default)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+
+        return await context.UserEntities.AnyAsync(x => x.RecoveryKeyHash == recoveryKeyHash && x.Id != exceptUserId,
+            cancellationToken);
     }
 }

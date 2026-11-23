@@ -35,7 +35,7 @@ public class MessageRouterGuardTests
         connections.Setup(m => m.TryGetConnectionById("connection-1", out found)).Returns(true);
 
         _router = new MessageRouter(NullLogger.Instance,
-            [Handler<CreateSessionRequest>(), Handler<DeleteSessionRequest>(), Handler<UserAuthRequest>()],
+            [Handler<CreateSessionRequest>(), Handler<DeleteSessionRequest>(), Handler<LoginChallengeRequest>()],
             connections.Object);
     }
 
@@ -134,10 +134,10 @@ public class MessageRouterGuardTests
     public void AuthenticationAttempts_AreLimitedPerIp()
     {
         for (var i = 0; i < 5; i++)
-            Route(new UserAuthRequest("p", "u"), senderId: 0);
-        Route(new UserAuthRequest("p", "u"), senderId: 0);
+            Route(new LoginChallengeRequest(), senderId: 0);
+        Route(new LoginChallengeRequest(), senderId: 0);
 
-        Assert.Equal(5, _handled[typeof(UserAuthRequest)]);
+        Assert.Equal(5, _handled[typeof(LoginChallengeRequest)]);
         Assert.Equal(ErrorCode.RateLimited, Assert.IsType<ErrorResponse>(Assert.Single(_connection.Sent)).Code);
     }
 
@@ -193,6 +193,7 @@ public class MessageRouterGuardTests
         public string ConnectionId { get; } = connectionId;
         public int? UserId { get; set; }
         public Guid? UserSessionId { get; set; }
+        public DateTimeOffset? WaitsForDeviceLinkUntil { get; set; }
         public Server.Core.Models.User.UserDevice? Device { get; set; }
         public string IpEndpoint { get; } = ip;
         public bool IsAvailable => CloseReason == null;

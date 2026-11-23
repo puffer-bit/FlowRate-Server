@@ -44,6 +44,7 @@ using Server.Application.Coordinator.Roles;
 using Server.Application.Coordinator.Handlers.Users.Security;
 using Server.Application.Orchestrator.Security;
 using Server.Application.Coordinator.Moderation;
+using Server.Application.Coordinator.Handlers.Users.Devices;
 using Server.Core.Models.Moderation;
 using Server.Application.Coordinator.LinkPreviews;
 using Server.Infrastructure.Coordinator.LinkPreviews;
@@ -138,12 +139,14 @@ public class CoordinatorInstanceFactory : ICoordinatorInstanceFactory
             return (await moderation.CheckAddressAsync(address))?.Reason;
         };
 
+        var userSessions = new UserSessions(_provider.GetRequiredService<IUserSessionRepository>(), connectionManager,
+            coordinatorInstanceModel.Id, _provider.GetRequiredService<TimeProvider>());
         var chatViewers = new ChatViewersHandler(chatSessionManager, userManager, roles, messageSender,
             connectionManager, visibility, logger);
         var messagesHandlers = CreateMessageHandlers(logger, 
             coordinatorInstanceContext, coordinatorInstanceModel.Id, userManager, sessionManager, sessionLayout,
             chatSessionManager, hybridSessionManager, messageSender, heartbeatManager, connectionManager, authenticator,
-            mediaService, readService, roles, visibility, moderation).Append(chatViewers)
+            mediaService, readService, roles, visibility, moderation, userSessions).Append(chatViewers)
             .Append(new ChatLinkPreviewHandler(chatSessionManager, linkPreviews, messageSender, logger));
         
         var messageRouter = CreateMessageRouter(logger, messagesHandlers, connectionManager, rateLimits,
@@ -169,6 +172,7 @@ public class CoordinatorInstanceFactory : ICoordinatorInstanceFactory
             chatViewers,
             moderation,
             linkPreviews);
+        coordinatorInstance.Devices = userSessions;
 
         return coordinatorInstance;
     }
@@ -265,17 +269,27 @@ public class CoordinatorInstanceFactory : ICoordinatorInstanceFactory
         IMediaService mediaService,
         ChatReadService readService,
         ICoordinatorPermissions permissions,
-        SessionVisibility visibility, ModerationService moderation)
+        SessionVisibility visibility, ModerationService moderation, UserSessions userSessions)
     {
-        var userSessions = new UserSessions(_provider.GetRequiredService<IUserSessionRepository>(), connectionManager,
-            coordinatorInstanceId, _provider.GetRequiredService<TimeProvider>());
+        var loginNonces = new LoginNonces(_provider.GetRequiredService<TimeProvider>());
+        var timeProvider = _provider.GetRequiredService<TimeProvider>();
+        var users = _provider.GetRequiredService<IUserRepository>();
         var userLogin = new UserLogin(userManager, userSessions, moderation);
-        var pendingLogins = new PendingLogins();
-        var secondStage = new SecondStageAuthentication(logger, messageSender, connectionManager, userLogin, pendingLogins);
-        yield return new AuthenticationActionHandler(logger, messageSender, authenticator, connectionManager, userLogin,
-            pendingLogins);
-        yield return new TwoFactorAuthenticationHandler(authenticator, secondStage);
-        yield return new Fido2AuthenticationHandler(authenticator, secondStage);
+        var pendingLogins = new PendingLogins(timeProvider);
+        var deviceLinks = new DeviceLinks(timeProvider);
+        var loginReplies = new LoginReplies(messageSender, connectionManager);
+        var secondStage = new SecondStageAuthentication(logger, loginReplies, userLogin, pendingLogins, users);
+        yield return new LoginChallengeHandler(loginReplies, loginNonces, coordinatorInstanceId);
+        yield return new LoginHandler(logger, loginReplies, authenticator, userLogin, loginNonces, pendingLogins, users,
+            _provider.GetRequiredService<IUserLoginCodeRepository>(), coordinatorInstanceId, timeProvider);
+        yield return new LoginProofHandler(authenticator, secondStage);
+        yield return new LoginPasskeyHandler(authenticator, secondStage);
+        yield return new DeviceLinkStartHandler(loginReplies, authenticator, userLogin, deviceLinks);
+        yield return new AccountDevicesHandler(messageSender, connectionManager, userSessions);
+        yield return new AccountDeviceRevokeHandler(messageSender, connectionManager, userSessions);
+        yield return new LogoutHandler(messageSender, connectionManager, userSessions);
+        yield return new DeviceLinkInfoHandler(messageSender, deviceLinks);
+        yield return new DeviceLinkApproveHandler(messageSender, connectionManager, deviceLinks, userLogin);
 
         var securityReplies = new UserSecurityReplies(_provider.GetRequiredService<IUserSecurityService>(),
             coordinatorInstanceId);
@@ -287,10 +301,7 @@ public class CoordinatorInstanceFactory : ICoordinatorInstanceFactory
         yield return new UserPasskeyOptionsHandler(messageSender, securityReplies);
         yield return new UserPasskeyRegisterHandler(messageSender, securityReplies);
         yield return new UserPasskeyDeleteHandler(messageSender, securityReplies);
-        yield return new UserSessionsHandler(messageSender, connectionManager, userSessions);
-        yield return new UserSessionRevokeHandler(messageSender, connectionManager, userSessions);
-        yield return new UserIdentityResetHandler(messageSender, connectionManager, securityReplies,
-            _provider.GetRequiredService<IUserRepository>(), userSessions);
+        yield return new UserRecoveryKeyResetHandler(messageSender, securityReplies, users);
         
         yield return ActivatorUtilities.CreateInstance<CreateSessionHandler>(_provider, sessionManager, messageSender, userManager);
         yield return ActivatorUtilities.CreateInstance<LeaveSessionHandler>(_provider, hybridSessionManager, messageSender);

@@ -39,3 +39,22 @@ public sealed class RegisterPasskeyDto
     [Required]
     public JsonElement Credential { get; init; }
 }
+
+/// <summary>A device of a user's account.</summary>
+/// <param name="AddedBy">How the device was added: registration, recovery phrase, factors, login code, another device.</param>
+/// <param name="IsOnline">Connected now; false while the coordinator is stopped.</param>
+public sealed record UserDeviceDto(
+    Guid Id,
+    string Name,
+    string Platform,
+    string AppVersion,
+    DateTimeOffset CreatedAtUtc,
+    DateTimeOffset LastUsedAtUtc,
+    DateTimeOffset ExpiresAtUtc,
+    string? LastAddress,
+    bool IsTemporary,
+    Shared.Enums.Auth.DeviceLoginMethod AddedBy,
+    bool IsOnline);
+
+/// <param name="Code">Shown once; the user types it into "Log in to an existing account" on the new device.</param>
+public sealed record LoginCodeDto(string Code, DateTimeOffset ExpiresAtUtc);

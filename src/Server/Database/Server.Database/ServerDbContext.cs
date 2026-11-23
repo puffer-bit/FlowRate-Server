@@ -13,6 +13,7 @@ public class ServerDbContext : DbContext
     public DbSet<BanEntity> GlobalBans { get; set; }
     public DbSet<UserEntity> UserEntities { get; set; }
     public DbSet<UserSessionEntity> UserSessions { get; set; }
+    public DbSet<UserLoginCodeEntity> UserLoginCodes { get; set; }
     public DbSet<SessionEntity> Sessions { get; set; }
     public DbSet<HybridSessionEntity> VideoSessionsEntities { get; set; }
     public DbSet<ChatSessionEntity> ChatSessionEntities { get; set; }

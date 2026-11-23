@@ -18,6 +18,7 @@ public class ClientConnection : IClientConnection
     }
 
     public Guid? UserSessionId { get; set; }
+    public DateTimeOffset? WaitsForDeviceLinkUntil { get; set; }
     public UserDevice? Device { get; set; }
 
     public string IpEndpoint => _webSocketGateway.IpAddress;

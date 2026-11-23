@@ -57,11 +57,8 @@ public class UserManager : IUserManager
         _nameProvider = new NameProvider();
     }
 
-    /// <summary>A new identity: what a user logs in with until it is reset.</summary>
-    public static string NewIdentity() => "#" + Guid.NewGuid();
-
-    public Task<UserAttachment> AttachUser(string? userIdentity, IClientConnection clientConnection) =>
-        AdmitAsync(() => AttachUserCore(userIdentity, clientConnection));
+    public Task<UserAttachment> RegisterUser(UserRecoveryKeys recoveryKeys, IClientConnection clientConnection) =>
+        AdmitAsync(() => RegisterUserCore(recoveryKeys, clientConnection));
 
     public Task<UserAttachment> AttachUser(int userId, IClientConnection clientConnection) =>
         AdmitAsync(() => AttachUserCore(userId, clientConnection));
@@ -74,37 +71,16 @@ public class UserManager : IUserManager
         finally { _admissionLock.Release(); }
     }
 
-    private async Task<UserAttachment> AttachUserCore(string? userIdentity, IClientConnection clientConnection)
+    private async Task<UserAttachment> RegisterUserCore(UserRecoveryKeys recoveryKeys, IClientConnection clientConnection)
     {
         // Checked before anything is created, so a full server does not register users it then turns away
-        if (userIdentity == null && IsOnlineLimitReached(exceptUserId: null))
+        if (IsOnlineLimitReached(exceptUserId: null))
             return UserAttachment.Rejected(AttachUserResult.OnlineLimitReached);
 
-        UserModel? user;
-        // If client provided null identity -> create new user with generated identity
-        if (userIdentity == null)
-        {
-            userIdentity = NewIdentity();
-            user = await CreateUserAsync(userIdentity, clientConnection);
-        }
-        else if (userIdentity == "system")
-        {
-            user = UserModel.CreateSystem(_coordinatorInstanceId, clientConnection.IpEndpoint, DateTimeOffset.UtcNow);
-        }
-        else if (await _userRepository.GetByIdentityAsync(_coordinatorInstanceId, userIdentity) is { } foundUser)
-        {
-            user = foundUser;
-            user.MarkConnected(clientConnection.IpEndpoint, DateTimeOffset.UtcNow);
-        }
-        else
-        {
-            _logger.LogInformation("Unknown user identity received, login rejected");
-            return UserAttachment.Rejected(AttachUserResult.UnknownIdentity);
-        }
-
-        var attachment = Attach(user, userIdentity, clientConnection);
-        if (attachment.Result == AttachUserResult.Attached && !attachment.User!.IsSystem)
-            await _userRepository.UpdateAsync(attachment.User);
+        var user = await CreateUserAsync(recoveryKeys, clientConnection);
+        var attachment = Attach(user, clientConnection);
+        if (attachment.Result == AttachUserResult.Attached)
+            await _userRepository.UpdateAsync(attachment.User!);
         return attachment;
     }
 
@@ -112,15 +88,15 @@ public class UserManager : IUserManager
     {
         var user = await _userRepository.GetByIdAsync(userId);
         if (user == null || user.CoordinatorInstanceId != _coordinatorInstanceId || user.IsSystem)
-            return UserAttachment.Rejected(AttachUserResult.UnknownIdentity);
+            return UserAttachment.Rejected(AttachUserResult.UnknownUser);
 
         user.MarkConnected(clientConnection.IpEndpoint, DateTimeOffset.UtcNow);
-        var attachment = Attach(user, null, clientConnection);
+        var attachment = Attach(user, clientConnection);
         if (attachment.Result == AttachUserResult.Attached) await _userRepository.UpdateAsync(attachment.User!);
         return attachment;
     }
 
-    private UserAttachment Attach(UserModel? user, string? userIdentity, IClientConnection clientConnection)
+    private UserAttachment Attach(UserModel? user, IClientConnection clientConnection)
     {
         if (user == null)
             return UserAttachment.Rejected(AttachUserResult.UserLimitReached);
@@ -179,7 +155,7 @@ public class UserManager : IUserManager
         if (!user.IsSystem)
             _logger.LogTrace("User with id {Id} connected on {ConnectionId}.", user.Id, clientConnection.ConnectionId);
 
-        return new UserAttachment(AttachUserResult.Attached, user, userIdentity);
+        return new UserAttachment(AttachUserResult.Attached, user);
     }
 
     public async Task<ErrorCode?> ChangeUsername(int userId, string newUsername)
@@ -197,8 +173,10 @@ public class UserManager : IUserManager
         await _renameLock.WaitAsync();
         try
         {
+            // Names are told apart ignoring case: a login by username finds the user by it
             var takenByConnected = _context.AttachedUsers.Values
-                .Any(other => other.Id != userId && other.Username == newUsername);
+                .Any(other => other.Id != userId
+                              && string.Equals(other.Username, newUsername, StringComparison.OrdinalIgnoreCase));
             if (takenByConnected || await _userRepository.IsUsernameTakenAsync(newUsername, userId))
                 return ErrorCode.NameTaken;
 
@@ -455,7 +433,7 @@ public class UserManager : IUserManager
     }
 
     /// <returns>Null when the coordinator cannot register another user.</returns>
-    private async Task<UserModel?> CreateUserAsync(string userIdentity, IClientConnection clientConnection)
+    private async Task<UserModel?> CreateUserAsync(UserRecoveryKeys recoveryKeys, IClientConnection clientConnection)
     {
         const string namePattern = "DefaultUsername";
 
@@ -479,7 +457,7 @@ public class UserManager : IUserManager
             var newUser = UserModel.Create(_coordinatorInstanceId,
                 _nameProvider.GenerateBaseName(namePattern, takenNames), clientConnection.IpEndpoint, DateTimeOffset.UtcNow);
 
-            newUser.Id = await _userRepository.AddAsync(newUser, userIdentity);
+            newUser.Id = await _userRepository.AddAsync(newUser, recoveryKeys);
             return newUser;
         }
         finally

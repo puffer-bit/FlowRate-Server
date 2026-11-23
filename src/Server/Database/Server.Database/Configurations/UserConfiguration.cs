@@ -12,8 +12,10 @@ public class UserEntityConfiguration : IEntityTypeConfiguration<UserEntity>
             .WithOne()
             .HasForeignKey<UserSecurityDataEntity>(x => x.UserId)
             .OnDelete(DeleteBehavior.Cascade);
-        // Logins look the user up by the hash of the identity
+        // Logins of the earlier protocol 3 look the user up by the hash of the identity, logins with the recovery
+        // phrase by the hash of its key
         builder.HasIndex(x => new { x.CoordinatorInstanceId, x.IdentityHash });
+        builder.HasIndex(x => new { x.CoordinatorInstanceId, x.RecoveryKeyHash });
     }
 }
 
@@ -36,6 +38,20 @@ public class UserPasskeyConfiguration : IEntityTypeConfiguration<UserPasskeyEnti
         // A credential belongs to one user; logins look it up by its id
         builder.HasIndex(x => x.CredentialId).IsUnique();
         builder.Property(x => x.Label).HasMaxLength(64);
+        builder.HasOne<UserEntity>()
+            .WithMany()
+            .HasForeignKey(x => x.UserId)
+            .OnDelete(DeleteBehavior.Cascade);
+    }
+}
+
+public class UserLoginCodeConfiguration : IEntityTypeConfiguration<UserLoginCodeEntity>
+{
+    public void Configure(EntityTypeBuilder<UserLoginCodeEntity> builder)
+    {
+        builder.ToTable("UserLoginCodes");
+        builder.HasKey(x => x.Id);
+        builder.HasIndex(x => x.CodeHash).IsUnique();
         builder.HasOne<UserEntity>()
             .WithMany()
             .HasForeignKey(x => x.UserId)

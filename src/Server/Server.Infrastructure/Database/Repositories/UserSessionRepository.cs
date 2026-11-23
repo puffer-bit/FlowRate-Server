@@ -3,6 +3,7 @@ using Server.Application.Abstractions.Persistence;
 using Server.Core.Models.User;
 using Server.Database.Entities;
 using Server.Database;
+using Shared.Enums.Auth;
 
 namespace Server.Infrastructure.Database.Repositories;
 
@@ -24,6 +25,24 @@ public class UserSessionRepository(IDbContextFactory<ServerDbContext> contextFac
         await context.SaveChangesAsync(cancellationToken);
     }
 
+    public async Task<UserSession?> GetAsync(string coordinatorInstanceId, Guid deviceId, DateTimeOffset now,
+        CancellationToken cancellationToken = default)
+    {
+        await using var context = await contextFactory.CreateDbContextAsync(cancellationToken);
+
+        var entity = await context.UserSessions.AsNoTracking()
+            .FirstOrDefaultAsync(x => x.Id == deviceId && x.CoordinatorInstanceId == coordinatorInstanceId
+                && x.ExpiresAt > now, cancellationToken);
+        return entity == null ? null : ToModel(entity);
+    }
+
+    public async Task<bool> IsPublicKeyTakenAsync(byte[] publicKey, CancellationToken cancellationToken = default)
+    {
+        await using var context = await contextFactory.CreateDbContextAsync(cancellationToken);
+
+        return await context.UserSessions.AnyAsync(x => x.PublicKey == publicKey, cancellationToken);
+    }
+
     public async Task<UserSession?> FindByTokenAsync(string coordinatorInstanceId, byte[] tokenHash, DateTimeOffset now,
         CancellationToken cancellationToken = default)
     {
@@ -31,7 +50,8 @@ public class UserSessionRepository(IDbContextFactory<ServerDbContext> contextFac
 
         var entity = await context.UserSessions.AsNoTracking()
             .FirstOrDefaultAsync(x => x.CoordinatorInstanceId == coordinatorInstanceId && x.ExpiresAt > now
-                && (x.TokenHash == tokenHash || x.PreviousTokenHash == tokenHash), cancellationToken);
+                && x.PublicKey == null && (x.TokenHash == tokenHash || x.PreviousTokenHash == tokenHash),
+                cancellationToken);
         return entity == null ? null : ToModel(entity);
     }
 
@@ -69,6 +89,18 @@ public class UserSessionRepository(IDbContextFactory<ServerDbContext> contextFac
         return ids;
     }
 
+    public async Task<IReadOnlyList<Guid>> DeleteLegacyAsync(string coordinatorInstanceId, int userId,
+        CancellationToken cancellationToken = default)
+    {
+        await using var context = await contextFactory.CreateDbContextAsync(cancellationToken);
+
+        var query = context.UserSessions
+            .Where(x => x.CoordinatorInstanceId == coordinatorInstanceId && x.UserId == userId && x.PublicKey == null);
+        var ids = await query.Select(x => x.Id).ToListAsync(cancellationToken);
+        await query.ExecuteDeleteAsync(cancellationToken);
+        return ids;
+    }
+
     public async Task DeleteExpiredAsync(DateTimeOffset now, CancellationToken cancellationToken = default)
     {
         await using var context = await contextFactory.CreateDbContextAsync(cancellationToken);
@@ -89,10 +121,14 @@ public class UserSessionRepository(IDbContextFactory<ServerDbContext> contextFac
         CreatedAt = model.CreatedAt,
         LastUsedAt = model.LastUsedAt,
         ExpiresAt = model.ExpiresAt,
-        LastAddress = model.LastAddress
+        LastAddress = model.LastAddress,
+        PublicKey = model.PublicKey,
+        IsTemporary = model.IsTemporary,
+        AddedBy = (int)model.AddedBy
     };
 
     private static UserSession ToModel(UserSessionEntity entity) => new(entity.Id, entity.CoordinatorInstanceId,
         entity.UserId, entity.TokenHash, entity.PreviousTokenHash, entity.DeviceName, entity.DevicePlatform,
-        entity.AppVersion, entity.CreatedAt, entity.LastUsedAt, entity.ExpiresAt, entity.LastAddress);
+        entity.AppVersion, entity.CreatedAt, entity.LastUsedAt, entity.ExpiresAt, entity.LastAddress, entity.PublicKey,
+        entity.IsTemporary, (DeviceLoginMethod)entity.AddedBy);
 }

@@ -2,6 +2,7 @@ using Shared.Enums;
 using Shared.Models;
 using Shared.Models.Requests.Auth;
 using Shared.Models.Requests.Coordinator;
+using Shared.Models.Requests.Coordinator.Devices;
 using Shared.Models.Requests.Coordinator.Security;
 using Shared.Models.Requests.Heartbeat;
 using Shared.Models.Requests.SessionActions.ChatSession;
@@ -105,8 +106,8 @@ public static class RequestPolicies
         // The sender's own account; changes are proven with the current password and code by the handlers
         UserSecurityInfoRequest or UserSetPasswordRequest or UserTwoFactorSetupRequest or UserTwoFactorEnableRequest
             or UserTwoFactorDisableRequest or UserPasskeyOptionsRequest or UserPasskeyRegisterRequest
-            or UserPasskeyDeleteRequest or UserSessionsRequest or UserSessionRevokeRequest
-            or UserIdentityResetRequest => Open,
+            or UserPasskeyDeleteRequest or UserRecoveryKeyResetRequest or AccountDevicesRequest
+            or AccountDeviceRevokeRequest or LogoutRequest or DeviceLinkInfoRequest or DeviceLinkApproveRequest => Open,
 
         _ => null
     };
@@ -129,8 +130,8 @@ public static class RequestPolicies
         // Securing one's own account is never held back
         UserSecurityInfoRequest or UserSetPasswordRequest or UserTwoFactorSetupRequest or UserTwoFactorEnableRequest
             or UserTwoFactorDisableRequest or UserPasskeyOptionsRequest or UserPasskeyRegisterRequest
-            or UserPasskeyDeleteRequest or UserSessionsRequest or UserSessionRevokeRequest
-            or UserIdentityResetRequest => true,
+            or UserPasskeyDeleteRequest or UserRecoveryKeyResetRequest or AccountDevicesRequest
+            or AccountDeviceRevokeRequest or LogoutRequest or DeviceLinkInfoRequest or DeviceLinkApproveRequest => true,
 
         _ => false
     };

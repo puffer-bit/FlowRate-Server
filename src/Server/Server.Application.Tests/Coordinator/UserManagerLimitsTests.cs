@@ -21,10 +21,11 @@ public class UserManagerLimitsTests
     private readonly IClientConnection _connection = Mock.Of<IClientConnection>(c => c.IpEndpoint == "127.0.0.1");
     private readonly UserManager _manager;
     private int _nextId = 100;
+    private static readonly UserRecoveryKeys Keys = new([1, 2, 3], [4, 5, 6]);
 
     public UserManagerLimitsTests()
     {
-        _users.Setup(r => r.AddAsync(It.IsAny<UserModel>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+        _users.Setup(r => r.AddAsync(It.IsAny<UserModel>(), It.IsAny<UserRecoveryKeys>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(() => _nextId++);
         _users.Setup(r => r.GetUsernamesStartingWithAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new HashSet<string>());
@@ -36,11 +37,10 @@ public class UserManagerLimitsTests
     [Fact]
     public async Task Attach_BelowTheLimits_Attaches()
     {
-        var attachment = await _manager.AttachUser(null, _connection);
+        var attachment = await _manager.RegisterUser(Keys, _connection);
 
         Assert.Equal(AttachUserResult.Attached, attachment.Result);
         Assert.NotNull(attachment.User);
-        Assert.NotNull(attachment.UserIdentity);
     }
 
     [Fact]
@@ -48,11 +48,11 @@ public class UserManagerLimitsTests
     {
         Online(1, 2);
 
-        var attachment = await _manager.AttachUser(null, _connection);
+        var attachment = await _manager.RegisterUser(Keys, _connection);
 
         Assert.Equal(AttachUserResult.OnlineLimitReached, attachment.Result);
         Assert.Equal(2, _manager.ConnectedUsersCount);
-        _users.Verify(r => r.AddAsync(It.IsAny<UserModel>(), It.IsAny<string>(), It.IsAny<CancellationToken>()),
+        _users.Verify(r => r.AddAsync(It.IsAny<UserModel>(), It.IsAny<UserRecoveryKeys>(), It.IsAny<CancellationToken>()),
             Times.Never);
     }
 
@@ -61,33 +61,13 @@ public class UserManagerLimitsTests
     {
         Online(1, 2);
         var returning = User(2);
-        _users.Setup(r => r.GetByIdentityAsync(It.IsAny<string>(), "#returning", It.IsAny<CancellationToken>())).ReturnsAsync(returning);
+        _users.Setup(r => r.GetByIdAsync(2, It.IsAny<CancellationToken>())).ReturnsAsync(returning);
 
         // A second device does not consume another online user slot.
-        var attachment = await _manager.AttachUser("#returning", _connection);
+        var attachment = await _manager.AttachUser(2, _connection);
 
         Assert.Equal(AttachUserResult.Attached, attachment.Result);
         Assert.Equal(2, _manager.ConnectedUsersCount);
-    }
-
-    [Fact]
-    public async Task Attach_SystemUser_IgnoresTheOnlineLimit()
-    {
-        Online(1, 2);
-
-        var attachment = await _manager.AttachUser("system", _connection);
-
-        Assert.Equal(AttachUserResult.Attached, attachment.Result);
-    }
-
-    [Fact]
-    public async Task ConnectedUsersCount_LeavesOutTheSystemUser()
-    {
-        Online(1);
-
-        await _manager.AttachUser("system", _connection);
-
-        Assert.Equal(1, _manager.ConnectedUsersCount);
     }
 
     [Fact]
@@ -95,7 +75,7 @@ public class UserManagerLimitsTests
     {
         _users.Setup(r => r.CountAsync(CoordinatorId, It.IsAny<CancellationToken>())).ReturnsAsync(10);
 
-        var attachment = await _manager.AttachUser(null, _connection);
+        var attachment = await _manager.RegisterUser(Keys, _connection);
 
         Assert.Equal(AttachUserResult.UserLimitReached, attachment.Result);
         Assert.Equal(0, _manager.ConnectedUsersCount);
@@ -105,9 +85,9 @@ public class UserManagerLimitsTests
     public async Task Attach_KnownUser_WhenAsManyAreRegisteredAsAllowed_Attaches()
     {
         _users.Setup(r => r.CountAsync(CoordinatorId, It.IsAny<CancellationToken>())).ReturnsAsync(10);
-        _users.Setup(r => r.GetByIdentityAsync(It.IsAny<string>(), "#known", It.IsAny<CancellationToken>())).ReturnsAsync(User(7));
+        _users.Setup(r => r.GetByIdAsync(7, It.IsAny<CancellationToken>())).ReturnsAsync(User(7));
 
-        var attachment = await _manager.AttachUser("#known", _connection);
+        var attachment = await _manager.AttachUser(7, _connection);
 
         Assert.Equal(AttachUserResult.Attached, attachment.Result);
     }
@@ -118,7 +98,7 @@ public class UserManagerLimitsTests
         Online(1, 2);
         _coordinator.ApplySettings(Model(maxOnlineUsers: 3, maxUsers: 10));
 
-        var attachment = await _manager.AttachUser(null, _connection);
+        var attachment = await _manager.RegisterUser(Keys, _connection);
 
         Assert.Equal(AttachUserResult.Attached, attachment.Result);
     }
@@ -130,7 +110,7 @@ public class UserManagerLimitsTests
         _users.Setup(r => r.CountAsync(CoordinatorId, It.IsAny<CancellationToken>())).ReturnsAsync(1000);
         _coordinator.ApplySettings(Model(CoordinatorInstanceModel.NoUserLimit, CoordinatorInstanceModel.NoUserLimit));
 
-        var attachment = await _manager.AttachUser(null, _connection);
+        var attachment = await _manager.RegisterUser(Keys, _connection);
 
         Assert.Equal(AttachUserResult.Attached, attachment.Result);
     }
@@ -139,11 +119,11 @@ public class UserManagerLimitsTests
     public async Task Attach_OfflineKnownUser_AtOnlineLimit_IsRejected()
     {
         Online(1, 2);
-        _users.Setup(r => r.GetByIdentityAsync(CoordinatorId, "#offline", It.IsAny<CancellationToken>()))
+        _users.Setup(r => r.GetByIdAsync(3, It.IsAny<CancellationToken>()))
             .ReturnsAsync(User(3));
 
         Assert.Equal(AttachUserResult.OnlineLimitReached,
-            (await _manager.AttachUser("#offline", _connection)).Result);
+            (await _manager.AttachUser(3, _connection)).Result);
         Assert.Equal(2, _manager.ConnectedUsersCount);
     }
 
@@ -163,7 +143,7 @@ public class UserManagerLimitsTests
         Online(1);
         var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        _users.Setup(r => r.AddAsync(It.IsAny<UserModel>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+        _users.Setup(r => r.AddAsync(It.IsAny<UserModel>(), It.IsAny<UserRecoveryKeys>(), It.IsAny<CancellationToken>()))
             .Returns(async () =>
             {
                 entered.TrySetResult();
@@ -171,16 +151,16 @@ public class UserManagerLimitsTests
                 return _nextId++;
             });
 
-        var first = _manager.AttachUser(null, _connection);
+        var first = _manager.RegisterUser(Keys, _connection);
         await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
-        var second = _manager.AttachUser(null, _connection);
+        var second = _manager.RegisterUser(Keys, _connection);
         release.SetResult();
         var results = await Task.WhenAll(first, second);
 
         Assert.Single(results, r => r.Result == AttachUserResult.Attached);
         Assert.Single(results, r => r.Result == AttachUserResult.OnlineLimitReached);
         Assert.Equal(2, _manager.ConnectedUsersCount);
-        _users.Verify(r => r.AddAsync(It.IsAny<UserModel>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
+        _users.Verify(r => r.AddAsync(It.IsAny<UserModel>(), It.IsAny<UserRecoveryKeys>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -189,7 +169,7 @@ public class UserManagerLimitsTests
         Online(1, 2);
         _manager.DetachUser(2, "test");
 
-        Assert.Equal(AttachUserResult.Attached, (await _manager.AttachUser(null, _connection)).Result);
+        Assert.Equal(AttachUserResult.Attached, (await _manager.RegisterUser(Keys, _connection)).Result);
         Assert.Equal(2, _manager.ConnectedUsersCount);
     }
 
@@ -202,7 +182,7 @@ public class UserManagerLimitsTests
         var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         _users.Setup(r => r.CountAsync(CoordinatorId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(() => registered);
-        _users.Setup(r => r.AddAsync(It.IsAny<UserModel>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+        _users.Setup(r => r.AddAsync(It.IsAny<UserModel>(), It.IsAny<UserRecoveryKeys>(), It.IsAny<CancellationToken>()))
             .Returns(async () =>
             {
                 entered.TrySetResult();
@@ -211,9 +191,9 @@ public class UserManagerLimitsTests
                 return _nextId++;
             });
 
-        var first = _manager.AttachUser(null, _connection);
+        var first = _manager.RegisterUser(Keys, _connection);
         await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
-        var second = _manager.AttachUser(null, _connection);
+        var second = _manager.RegisterUser(Keys, _connection);
         release.SetResult();
         var results = await Task.WhenAll(first, second);
 
@@ -223,17 +203,11 @@ public class UserManagerLimitsTests
         Assert.Equal(1, _manager.ConnectedUsersCount);
     }
 
-    [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public async Task Attach_FiveDevices_CountAsOneUser_AndSixthIsRejected(bool byId)
+    [Fact]
+    public async Task Attach_FiveDevices_CountAsOneUser_AndSixthIsRejected()
     {
-        _users.Setup(r => r.GetByIdentityAsync(CoordinatorId, "#known", It.IsAny<CancellationToken>()))
-            .ReturnsAsync(() => User(1));
         _users.Setup(r => r.GetByIdAsync(1, It.IsAny<CancellationToken>())).ReturnsAsync(() => User(1));
-        Task<UserAttachment> Attach(IClientConnection connection) => byId
-            ? _manager.AttachUser(1, connection)
-            : _manager.AttachUser("#known", connection);
+        Task<UserAttachment> Attach(IClientConnection connection) => _manager.AttachUser(1, connection);
         var devices = Enumerable.Range(0, 5).Select(i => Connection($"device-{i}")).ToArray();
         foreach (var device in devices)
             Assert.Equal(AttachUserResult.Attached, (await Attach(device)).Result);
@@ -245,10 +219,10 @@ public class UserManagerLimitsTests
         Assert.Equal(1, _manager.ConnectedUsersCount);
 
         // Another account can use the second online place, regardless of the first account's devices.
-        Assert.Equal(AttachUserResult.Attached, (await _manager.AttachUser(null, Connection("other-user"))).Result);
+        Assert.Equal(AttachUserResult.Attached, (await _manager.RegisterUser(Keys, Connection("other-user"))).Result);
         Assert.Equal(2, _manager.ConnectedUsersCount);
         Assert.Equal(AttachUserResult.OnlineLimitReached,
-            (await _manager.AttachUser(null, Connection("full"))).Result);
+            (await _manager.RegisterUser(Keys, Connection("full"))).Result);
 
         // Closing one device frees a connection place while the account remains online.
         Assert.False(_manager.DetachConnection(devices[0], "closed"));
@@ -263,17 +237,17 @@ public class UserManagerLimitsTests
         _coordinator.ApplySettings(Model(0, 0));
         var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        _users.Setup(r => r.GetByIdentityAsync(CoordinatorId, "#known", It.IsAny<CancellationToken>()))
+        _users.Setup(r => r.GetByIdAsync(1, It.IsAny<CancellationToken>()))
             .Returns(async () =>
             {
                 entered.TrySetResult();
                 await release.Task;
                 return User(1);
             });
-        var first = _manager.AttachUser("#known", Connection("first"));
+        var first = _manager.AttachUser(1, Connection("first"));
         await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
         var others = Enumerable.Range(0, 9)
-            .Select(i => _manager.AttachUser("#known", Connection($"other-{i}"))).ToArray();
+            .Select(i => _manager.AttachUser(1, Connection($"other-{i}"))).ToArray();
         release.SetResult();
         var results = await Task.WhenAll(others.Prepend(first));
 

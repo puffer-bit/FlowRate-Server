@@ -1,91 +1,100 @@
-# Logging in: password, one-time codes and passkeys
+# Logging in: devices, recovery phrase, factors
 
-A user is identified by the identity the server gave them on their first connection. Besides that identity, a
-user can be made to prove who they are with:
+An account is a set of **devices**. Each device has its own P-256 key: the client keeps the private part (in the
+system keyring, the Android Keystore or the TPM), the server only the public one. A device logs in by signing a
+challenge, so nothing a client sends to log in is a secret the server could leak or replay, and a copy of the server
+database logs nobody in.
 
-| Factor            | What the user has                                                        |
-|-------------------|--------------------------------------------------------------------------|
-| Password          | 8–128 characters, stored as a PBKDF2 hash.                               |
-| One-time codes    | TOTP (RFC 6238): 6 digits, 30 seconds, SHA-1, from an authenticator app. |
-| Passkeys (FIDO2)  | Security keys, or passkeys of a phone or computer. User verification (PIN, biometrics) is required. |
+| What | Role | Kept by the client | Kept by the server |
+|------|------|--------------------|--------------------|
+| Username | Finds the account for a login by username | — | the name |
+| Device key | Logs the device in by signing a challenge | private key, never exportable where the platform allows | public key (`UserSessions.PublicKey`) |
+| Recovery phrase | Adds a device on its own; later the root of end-to-end encryption keys | the user (paper, password manager); the keyring until the user confirms saving it | SHA-256 of the public key it derives (`UserEntities.RecoveryKeyHash`) and the account identity key (`AccountPublicKey`) |
+| Password, one-time codes, passkeys | Factors of a login by username | — | PBKDF2 hash, TOTP secret, passkey public keys |
+| Server password | Asked of every login while the coordinator has one | the keyring, when remembered | PBKDF2 hash |
+| Login code | Adds a device once, for a user who lost everything | — | SHA-256, 15 minutes |
 
-A user with none of them logs in with the identity alone, as before. Users set them up from the client (see
-[Setting up from the client](#setting-up-from-the-client)); the control panel can do it too, under
-**Roles → Users → Login**, and is how they are taken away when a user loses a device.
+The protocol is in `Shared/Docs/Protocol.md` (*Logging in and devices*); this page is the server side.
+
+## Keys and signatures
+
+- Keys are P-256. Public keys travel as SubjectPublicKeyInfo DER, signatures as r‖s (IEEE P1363, 64 bytes), both
+  base64url. `Shared.Auth.LoginSignature` holds what is signed and how it is checked, for both sides.
+- The payload is `FlowRate login v1\n{purpose}\n{coordinatorId}\n{nonce}\n{newDevicePublicKey}`, purpose `device` or
+  `recovery`. The nonce comes from `LoginChallengeRequest`: 32 random bytes, one per connection, good for one login and
+  two minutes (`LoginNonces`). A recovery login signs the key of the device it adds too, so the signature cannot be
+  reused for another device.
+- The recovery phrase is 24 BIP-39 words (256 bits). The client derives three keys with HKDF-SHA256 (salt
+  `FlowRate recovery v1`): `login` (the recovery key, P-256), `identity` (the account key for end-to-end encryption,
+  P-256) and `backup` (256 bits for encrypted backups). The server never sees the phrase.
 
 ## The login exchange
 
 ```
 client                                                       server
-  │  UserAuthRequest(ServerPassword, UserIdentity) ───────────► │
-  │                                                             │  nothing set: attached
-  │ ◄──────────────── UserAuthResponse(Success, UserDTO)        │
-  │                                                             │
-  │                                                             │  password / codes / passkeys set
-  │ ◄──────── UserAuthResponse(SecondStageRequeried,            │
-  │             ServerMessage = "Password,TwoFactor,FIDO2",     │
-  │             FIDO2LoginOptionsDTO)                           │
-  │                                                             │
-  │  TwoFactorUserAuthRequest(Password, TwoFactorCode) ───────► │  either one
-  │  FIDO2UserAuthRequest(AssertionResponse) ─────────────────► │
-  │ ◄──────── TwoFactorUserAuthResponse / FIDO2UserAuthResponse │
-  │             (Success, UserDTO) or (AuthFailed)              │
+  │  LoginChallengeRequest ───────────────────────────────────► │
+  │ ◄───────────────────── LoginChallengeResponse(Nonce, Id)    │
+  │  LoginRequest(ServerPassword, Method, Device) ────────────► │  server password, then the method
+  │ ◄──────────── LoginResponse(Success, User, DeviceId)        │
+  │                    or LoginResponse(SecondStageRequired,    │  username / legacy identity with factors
+  │                       Factors, PasskeyOptions)              │
+  │  LoginProofRequest(Password, TwoFactorCode) ──────────────► │  either one
+  │  LoginPasskeyRequest(Assertion) ──────────────────────────► │
+  │ ◄──────────── LoginResponse(Success, User, DeviceId)        │
 ```
 
-- `ServerMessage` of the `SecondStageRequeried` answer lists what the user can prove, as names of
-  `SecondStageAuthType`, comma separated: `Password`, `TwoFactor`, `FIDO2`.
-- `TwoFactorUserAuthRequest` carries the password and the code together; each is checked when the user has it.
-  A user who has passkeys alone cannot use it.
-- A passkey alone is enough: it already proves possession and, through user verification, the user.
-- A code is good for one login. A wrong password does not use the code up.
-- The second stage has three tries and two minutes. A wrong answer gets `AuthFailed` and the connection stays
-  open; the third closes it, as does the authentication timeout of the connection.
-- Second-stage requests count against the logins per IP rate limit (`RateLimits.AuthenticationPerIp`), which
-  is what keeps codes from being guessed.
-- A banned user is refused (`Banned`) at the first stage, without a second one; a user banned between the two
-  stages is refused when the second one holds.
+`LoginHandler` takes the methods:
 
-## Passkeys
+| Method | Checks | Adds a device |
+|--------|--------|---------------|
+| `Device` | The device exists and has not expired (`DeviceNotFound` otherwise), and signs the nonce | no, it lives on: `ExpiresAt` moves forward |
+| `Register` | The keys are P-256 and not taken | yes, `Registration`; the user gets a generated name |
+| `Recovery` | A user has the hash of the recovery key, and it signs the nonce and the new device key | yes, `Recovery` |
+| `Username` | The name finds exactly one user, ignoring case; the user has a factor (`LoginFactorsMissing` otherwise) | yes, `Factors`, after the second stage |
+| `LoginCode` | A code the panel gave out, not expired; it is deleted as it is used | yes, `LoginCode` |
+| `Legacy` | The identity of the earlier protocol 3; a live session token of the same user skips the second stage | yes, `Legacy`, see below |
 
-`FIDO2LoginOptionsDTO` holds what `navigator.credentials.get` (or a platform WebAuthn API) needs:
+- Every login but a resumed device goes through `UserLogin.AddDeviceAsync`: bans are checked
+  (`ModerationService.AdmitAsync`), the user is attached (online and connection limits), and only then the device is
+  saved. The user's other connections get `AccountDeviceAddedNotification`.
+- A wrong server password, signature, code or name closes the connection after the `ErrorResponse`. The second stage
+  allows three tries in two minutes; a one-time code works for one login.
+- Login requests count against `RateLimits.AuthenticationPerIp`, and so do the account security changes and the
+  device link requests, so codes cannot be guessed.
 
-| Field                    | Meaning                                                         |
-|--------------------------|-----------------------------------------------------------------|
-| `Challenge`              | base64url                                                       |
-| `RpId`                   | The relying party: the domain passkeys of this server belong to |
-| `Timeout`                | Milliseconds                                                    |
-| `AllowedCredentials[].Id`| base64url credential ids of the user's passkeys                 |
-| `UserVerification`       | Always `required`                                               |
+### Moving accounts over from the earlier protocol 3
 
-The fields of `FIDO2AssertionDTO` are the parts of the assertion, base64url (plain base64 is accepted too):
-`CredentialId` (the raw id), `ClientDataJson`, `AuthenticatorData`, `Signature` and, for discoverable
-credentials, `UserHandle`, which is the user id as UTF-8 text.
+Users of the earlier pre-releases kept an identity (`#` and a GUID) and session tokens. The client sends them once in
+`LegacyLoginDTO`, with the recovery keys of a phrase it made. `LegacyAccounts.MoveOverAsync` then, once the user is let
+in: sets the recovery keys, which drops `IdentityHash`; deletes the sessions without a key; adds the device. The
+identity does not work again. A user who had factors and no live token passes the second stage first.
 
-The server checks the challenge, the origin, the relying party, the signature, user verification and that the
-signature counter grows (a counter that does not grow means a cloned key).
+## Devices
 
-### Configuration
+`UserSessions` (the table keeps its name, `UserSessions`) holds the devices:
 
-Passkeys are off until the relying party is set:
+- A device ends after 90 days without a login, a temporary one (`NewDeviceDTO.IsTemporary`) after one day. Expired
+  ones are deleted at the next device added.
+- `AccountDevicesRequest`, `AccountDeviceRevokeRequest` (one device but the current one, or all others) and
+  `LogoutRequest` (the current one). A removed device that is connected gets `AccountDeviceEndedNotification` with
+  `Revoked` or `LoggedOut` and is closed.
+- The panel lists and removes devices in **Roles → Users → Login**, through `UserDevicesController`.
 
-```json
-"Fido2": {
-  "RelyingPartyId": "chat.example.com",
-  "RelyingPartyName": "FlowRate",
-  "Origins": []
-}
-```
+### Adding a device from another one
 
-With Docker, `PASSKEY_DOMAIN` in `.env` sets `RelyingPartyId`.
+`DeviceLinkStartRequest` (logged out, with the server password) gives the new device an eight-character code
+(`DeviceLinks`, no 0/O/1/I/L), good for five minutes. Its connection waits: `IClientConnection.WaitsForDeviceLinkUntil`
+keeps the authentication timeout from closing it until then. A device of the account looks the code up with
+`DeviceLinkInfoRequest` and answers `DeviceLinkApproveRequest`; approval runs the same `AddDeviceAsync` on the waiting
+connection, which gets `DeviceLinkCompletedNotification` and is logged in. A declined or failed link sends
+`DeviceLinkDeclinedNotification` and closes it.
 
-- `RelyingPartyId` is the domain users reach the server by, without scheme or port. Passkeys are bound to it:
-  changing it makes every registered passkey useless.
-- `Origins` are where a ceremony may come from. Empty allows the control panel alone,
-  `https://<RelyingPartyId>:<Orchestrator:Port>`; list the panel and every client origin otherwise
-  (`Fido2__Origins__0`, `Fido2__Origins__1`... as environment variables).
-- To add passkeys in the panel, open it by the relying party name over https. Through an ssh tunnel, point the
-  domain at 127.0.0.1 in the hosts file of the computer the browser runs on.
-- A user who has passkeys alone cannot log in while passkeys are off; the panel can still remove them.
+## Login codes
+
+The panel gives out a login code for a user in **Roles → Users → Login → Give out a login code**
+(`POST /api/coordinators/{id}/users/{userId}/login-code`): twelve characters in three groups, shown once, good for one
+device and 15 minutes. Codes given before and still unused are dropped. Only the SHA-256 of the code is kept
+(`UserLoginCodes`); case and dashes do not matter.
 
 ## Setting up from the client
 
@@ -102,39 +111,31 @@ Once logged in, the client sets up the sender's own account with the `User*` req
 | `UserPasskeyOptionsRequest`   | yes   | `PublicKeyCredentialCreationOptionsJSON` for a new passkey            |
 | `UserPasskeyRegisterRequest`  |       | The passkey made for those options, as `RegistrationResponseJSON`     |
 | `UserPasskeyDeleteRequest`    | yes   | Removes a passkey                                                     |
+| `UserRecoveryKeyResetRequest` | yes   | Replaces the recovery keys with those of a new phrase; the devices stay |
 
 - The proof (`UserSecurityProofDTO`) is the current password and one-time code, each when the user has it; a
   first password needs none. A missing or wrong one is answered `ProofRequired`. So an open session alone cannot
-  change how the account logs in, nor lock its owner out. Enabling codes and registering a passkey need no proof
-  of their own: they finish what a proven request started.
-- The options of a passkey are good for one answer and five minutes. In a browser,
-  `PublicKeyCredential.parseCreationOptionsFromJSON` takes them as they are and `credential.toJSON()` gives what
-  `UserPasskeyRegisterRequest` carries. The origin of the client has to be in `Fido2:Origins`.
-- Changes count against the logins per IP rate limit, as a proof can be guessed like a login.
+  change how the account logs in, nor lock its owner out.
+- The options of a passkey are good for one answer and five minutes.
+
+## Passkeys
+
+`FIDO2LoginOptionsDTO` holds what `navigator.credentials.get` (or a platform WebAuthn API) needs: `Challenge`, `RpId`,
+`Timeout`, `AllowedCredentials[].Id` and `UserVerification` (always `required`). The parts of `FIDO2AssertionDTO` are
+base64url (plain base64 is accepted too). The server checks the challenge, the origin, the relying party, the
+signature, user verification and that the signature counter grows.
+
+Passkeys are off until the relying party is set (`Fido2:RelyingPartyId`, `PASSKEY_DOMAIN` with Docker). Changing it
+makes every registered passkey useless. The client apps do not log in with passkeys yet; the panel registers them.
 
 ## Several devices
 
-A user can be logged in from several devices at once, each on its own connection. They are online while any of
-them is connected; others hear `CoordinatorUserConnectedNotification` when the first one logs in and
-`CoordinatorUserDisconnectedNotification` when the last one goes. What is sent to the user reaches all their
-devices, and banning or deleting the user closes all of them.
-
-`MaxOnlineUsers` counts distinct users, so additional devices of an online user do not consume another place.
-Each user may have at most five simultaneous connections, including when the online-user limit is disabled.
-A sixth connection is refused with `RateLimited`; existing devices stay connected. Closing one device frees
-a connection place. The same limits apply to identity logins and device-session token logins.
-
-- A connection that is logged in already is answered `AuthFailed` to another `UserAuthRequest`; it stays open and
-  keeps its user.
-- In a hybrid session the user takes part from one device. Joining it from another one takes the peer over: the
-  device the user was on gets `HybridSessionPeerKickedNotification` with the reason "Joined from another device",
-  and its media is gone. The others see the user rejoin.
-- The media of the peer is driven only from the device it is on: connecting the transport, starting voice, video
-  or a screen share, watching a screen, resuming inbounds, going AFK and leaving are refused from the other ones.
-  Voice to listen to and pokes go to that device alone.
-- When a device closes, the user leaves the hybrid sessions they took part in from it, and stays in the others.
+A user can be connected from up to five devices at once, each on its own connection; the sixth is refused with
+`RateLimited`. `MaxOnlineUsers` counts distinct users. In a hybrid session the user takes part from one device; joining
+from another takes the peer over.
 
 ## Not there yet
 
-TOTP secrets are kept in the database as they are, like the server's other data; whoever can read the database
-can make codes.
+- TOTP secrets are kept in the database as they are, like the server's other data; whoever can read the database can
+  make codes.
+- The account identity key is kept, not used: end-to-end encryption will sign the keys of devices with it.

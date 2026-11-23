@@ -1,3 +1,4 @@
+using Shared.Enums.Auth;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
@@ -107,15 +108,67 @@ public sealed class UserSessionRepositoryTests : IDisposable
     }
 
     [Fact]
-    public async Task NewIdentity_ReplacesTheOldOne()
+    public async Task RecoveryKeys_ReplaceTheIdentity_AndFindTheUser()
     {
         var userId = await MigrateWithLegacyUser("#old");
         var users = new UserRepository(_factory);
+        var hash = SecretHash.Of("recovery key");
 
-        await users.SetIdentityAsync(userId, "#new");
+        await users.SetRecoveryKeysAsync(userId, new UserRecoveryKeys(hash, [1, 2, 3]));
 
         Assert.Null(await users.GetByIdentityAsync(Coordinator, "#old"));
-        Assert.Equal(userId, (await users.GetByIdentityAsync(Coordinator, "#new"))?.Id);
+        Assert.Equal(userId, (await users.GetByRecoveryKeyHashAsync(Coordinator, hash))?.Id);
+        Assert.Null(await users.GetByRecoveryKeyHashAsync("other", hash));
+        Assert.True(await users.IsRecoveryKeyTakenAsync(hash, 0));
+        Assert.False(await users.IsRecoveryKeyTakenAsync(hash, userId));
+    }
+
+    [Fact]
+    public async Task Username_IsFoundIgnoringCase_AndAnUpdateKeepsTheRecoveryKeys()
+    {
+        var userId = await MigrateWithUser();
+        var users = new UserRepository(_factory);
+        var hash = SecretHash.Of("recovery key");
+        await users.SetRecoveryKeysAsync(userId, new UserRecoveryKeys(hash, [1]));
+
+        var user = await users.GetByUsernameAsync(Coordinator, "ALICE");
+        Assert.Equal(userId, user?.Id);
+        user!.Rename("Alice2");
+        await users.UpdateAsync(user);
+
+        Assert.Equal(userId, (await users.GetByRecoveryKeyHashAsync(Coordinator, hash))?.Id);
+        Assert.True(await users.IsUsernameTakenAsync("alice2", 0));
+    }
+
+    [Fact]
+    public async Task Device_IsFoundByItsId_AndItsKeyIsTaken()
+    {
+        var userId = await MigrateWithUser();
+        var repository = new UserSessionRepository(_factory);
+        var device = Session(userId, "unused") with { TokenHash = null, PublicKey = [9, 9, 9], IsTemporary = true,
+            AddedBy = DeviceLoginMethod.Recovery };
+        await repository.AddAsync(device);
+
+        var found = await repository.GetAsync(Coordinator, device.Id, _now);
+        Assert.Equal(DeviceLoginMethod.Recovery, found?.AddedBy);
+        Assert.True(found!.IsTemporary);
+        Assert.True(await repository.IsPublicKeyTakenAsync([9, 9, 9]));
+        Assert.False(await repository.IsPublicKeyTakenAsync([1]));
+        Assert.Null(await repository.GetAsync(Coordinator, device.Id, _now.AddDays(91)));
+    }
+
+    [Fact]
+    public async Task DeleteLegacy_KeepsTheDevicesWithKeys()
+    {
+        var userId = await MigrateWithUser();
+        var repository = new UserSessionRepository(_factory);
+        var legacy = Session(userId, "legacy");
+        var device = Session(userId, "unused") with { TokenHash = null, PublicKey = [7] };
+        await repository.AddAsync(legacy);
+        await repository.AddAsync(device);
+
+        Assert.Equal(legacy.Id, Assert.Single(await repository.DeleteLegacyAsync(Coordinator, userId)));
+        Assert.Equal(device.Id, Assert.Single(await repository.GetByUserAsync(Coordinator, userId, _now)).Id);
     }
 
     [Fact]

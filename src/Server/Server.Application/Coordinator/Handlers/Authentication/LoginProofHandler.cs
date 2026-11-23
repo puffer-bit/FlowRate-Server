@@ -2,29 +2,44 @@ using System.Buffers.Text;
 using Server.Application.Abstractions.Security;
 using Server.Application.Coordinator.Authentication;
 using Server.Application.Coordinator.Messaging;
-using Server.Application.Mappers;
-using Shared.Enums;
 using Shared.Models.DataTransferObjects;
 using Shared.Models.Requests.Auth;
 
 namespace Server.Application.Coordinator.Handlers.Authentication;
 
-/// <summary>
-/// Finishes a login with a passkey. The binary fields of the assertion are base64url, as WebAuthn gives them.
-/// </summary>
-public class Fido2AuthenticationHandler(IAuthenticator authenticator, SecondStageAuthentication secondStage)
-    : IMessageHandler<FIDO2UserAuthRequest>
+/// <summary>Finishes a login with the user's password and/or one-time code.</summary>
+public class LoginProofHandler(IAuthenticator authenticator, SecondStageAuthentication secondStage)
+    : IMessageHandler<LoginProofRequest>
 {
-    public Task<HandleMessageResult> HandleMessage(FIDO2UserAuthRequest? request, string connectionId)
+    public Task<HandleMessageResult> HandleMessage(LoginProofRequest? request, string connectionId)
     {
         if (request == null)
             return Task.FromResult(HandleMessageResult.ForbiddenRequest);
 
         return secondStage.HandleAsync(request, connectionId,
-            login => login.Challenge.Passkey is { } options && TryDecode(request.AssertionResponse) is { } assertion
+            login => login.Challenge.AcceptsCodes
+                ? authenticator.CheckUserLoginData(login.Challenge.UserId, request.Password, request.TwoFactorCode)
+                : Task.FromResult(false),
+            (user, deviceId) => request.ToResponse(LoginReplies.ToDto(user), deviceId));
+    }
+}
+
+/// <summary>
+/// Finishes a login with a passkey. The binary fields of the assertion are base64url, as WebAuthn gives them.
+/// </summary>
+public class LoginPasskeyHandler(IAuthenticator authenticator, SecondStageAuthentication secondStage)
+    : IMessageHandler<LoginPasskeyRequest>
+{
+    public Task<HandleMessageResult> HandleMessage(LoginPasskeyRequest? request, string connectionId)
+    {
+        if (request == null)
+            return Task.FromResult(HandleMessageResult.ForbiddenRequest);
+
+        return secondStage.HandleAsync(request, connectionId,
+            login => login.Challenge.Passkey is { } options && TryDecode(request.Assertion) is { } assertion
                 ? authenticator.CheckPasskeyAsync(login.Challenge.UserId, options.OptionsJson, assertion)
                 : Task.FromResult(false),
-            (user, token) => request.ToResponse(user.ToDto(user.Id), token));
+            (user, deviceId) => request.ToResponse(LoginReplies.ToDto(user), deviceId));
     }
 
     public static PasskeyAssertion? TryDecode(FIDO2AssertionDTO? dto)
