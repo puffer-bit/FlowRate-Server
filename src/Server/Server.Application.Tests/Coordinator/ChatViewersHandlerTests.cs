@@ -79,6 +79,22 @@ public sealed class ChatViewersHandlerTests : IDisposable
     }
 
     [Fact]
+    public async Task ChannelAllow_DoesNotListUsersWithoutCoordinatorViewPermission()
+    {
+        _permissions.SetupGet(p => p.Roles).Returns(new RoleSet([
+            new RoleModel(1, "coordinator", "@everyone", null, 0, Permission.None, true, 0),
+            new RoleModel(2, "coordinator", "channels", null, 1, Permission.ViewSessions, false, 0)]));
+        _chat.SetPermissionOverrides([new PermissionOverride(1, Permission.ViewSessions, Permission.None)]);
+        _all[3] = User(3, "No channels");
+        _all[4] = User(4, "Channels allowed", UserState.Normal, 2);
+
+        await Subscribe();
+
+        var snapshot = Assert.IsType<ChatViewersResponse>(Assert.Single(_sent));
+        Assert.Equal(4, Assert.Single(snapshot.Users).Id);
+    }
+
+    [Fact]
     public async Task GroupSnapshotLoadsOnlyMembersRegardlessOfServerRoles()
     {
         _chat.SetAudience(ChatKind.Group, [1, 4, 5]);

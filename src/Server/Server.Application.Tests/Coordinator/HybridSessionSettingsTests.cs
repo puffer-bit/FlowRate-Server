@@ -68,6 +68,7 @@ public class HybridSessionSettingsTests
         using var manager = await CreateManager();
         AddPeers(7, 3);
         var permissions = new Mock<ICoordinatorPermissions>();
+        permissions.Setup(p => p.HasIn(It.IsAny<int>(), _room, Permission.ViewSessions)).Returns(true);
         permissions.Setup(p => p.HasIn(2, _room, Permission.ViewSessions | Permission.Speak)).Returns(true);
         using var visibility = new SessionVisibility(Mock.Of<IMessageSender>());
         manager.WatchPermissions(permissions.Object, visibility);
@@ -85,6 +86,7 @@ public class HybridSessionSettingsTests
         using var manager = await CreateManager();
         AddPeers(7, 1);
         var permissions = new Mock<ICoordinatorPermissions>();
+        permissions.Setup(p => p.HasIn(1, _room, Permission.ViewSessions)).Returns(true);
         using var visibility = new SessionVisibility(Mock.Of<IMessageSender>());
         manager.WatchPermissions(permissions.Object, visibility);
 
@@ -94,6 +96,25 @@ public class HybridSessionSettingsTests
         permissions.Setup(p => p.HasIn(1, _room, Permission.ViewSessions | Permission.Speak)).Returns(true);
         visibility.Reconfigured(_room);
         _peerManagers[7].Verify(p => p.SetMicrophoneMutedAsync(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>()), Times.Once);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task LosingChannelView_RemovesAffectedPeersIncludingMutedListeners(bool microphoneMuted)
+    {
+        using var manager = await CreateManager();
+        _peers[7][1] = new PeerSnapshot(1, HybridSessionPeerState.Connected, microphoneMuted, true, false, false);
+        _peers[7][2] = new PeerSnapshot(2, HybridSessionPeerState.Connected, true, true, false, false);
+        var permissions = new Mock<ICoordinatorPermissions>();
+        using var visibility = new SessionVisibility(Mock.Of<IMessageSender>());
+        manager.WatchPermissions(permissions.Object, visibility);
+
+        permissions.Raise(p => p.PermissionsChanged += null, new[] { 1 });
+
+        _peerManagers[7].Verify(p => p.RemovePeerAsync(1), Times.Once);
+        _peerManagers[7].Verify(p => p.RemovePeerAsync(2), Times.Never);
+        _peerManagers[7].Verify(p => p.SetMicrophoneMutedAsync(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>()), Times.Never);
     }
 
     [Fact]

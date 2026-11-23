@@ -93,6 +93,7 @@ public sealed class ChatViewersHandler : IMessageHandler<ChatViewersRequest>, ID
         var roles = _permissions.Roles;
         return (await _users.GetAllUsersAsync()).Values
             .Where(user => !user.IsSystem
+                && roles.Has(user.RoleIds, Permission.ViewSessions)
                 && SessionPermissions.Resolve(roles.PermissionsOf(user.RoleIds), chat.PermissionOverrides,
                     roles.Everyone.Id, user.RoleIds).HasFlag(Permission.ViewSessions))
             .OrderBy(user => user.Username, StringComparer.OrdinalIgnoreCase)
