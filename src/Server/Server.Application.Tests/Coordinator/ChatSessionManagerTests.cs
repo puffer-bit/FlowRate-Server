@@ -134,6 +134,49 @@ public class ChatSessionManagerTests
     }
 
     [Fact]
+    public async Task GroupAvatar_OnlyOwnerSetsIt_AndItSurvivesMembershipChanges()
+    {
+        var (_, group) = await _manager.CreateAsync(new CreateSessionModel("Friends",
+            new ChatSessionCreateData(Kind: ChatKind.Group, MemberIds: [2, 3])), 1);
+        var (_, channel) = await _manager.CreateAsync(new CreateSessionModel("General", new ChatSessionCreateData()), 1);
+        Assert.Null(group!.AvatarUrl);
+
+        Assert.Equal(ErrorCode.InsufficientPermissions, (await _manager.SetGroupAvatarAsync(group.Id, "/media/avatars/a", 2)).result);
+        Assert.Equal(ErrorCode.ChatNotFound, (await _manager.SetGroupAvatarAsync(channel!.Id, "/media/avatars/a", 1)).result);
+        Assert.Empty(_events.Of<ChatSessionReconfiguredEvent>());
+
+        var (result, previous) = await _manager.SetGroupAvatarAsync(group.Id, "/media/avatars/a", 1);
+        Assert.Null(result);
+        Assert.Null(previous);
+        Assert.Equal("/media/avatars/a", group.AvatarUrl);
+        _chats.Verify(r => r.UpdateAsync(group, It.IsAny<CancellationToken>()), Times.Once);
+        Assert.Equal("/media/avatars/a", Assert.Single(_events.Of<ChatSessionReconfiguredEvent>()).Session.AvatarUrl);
+
+        Assert.Null(await _manager.ChangeGroupAsync(group.Id, "Renamed", [1, 2], 1, 1, false));
+        Assert.Equal("/media/avatars/a", group.AvatarUrl);
+        _chats.Verify(r => r.UpdateWithSystemMessagesAsync(
+            It.Is<Core.Models.TextChat.ChatSessionModel>(m => m.AvatarUrl == "/media/avatars/a"),
+            It.IsAny<IReadOnlyList<ChatMessageModel>>(), It.IsAny<CancellationToken>()), Times.Once);
+
+        (result, previous) = await _manager.SetGroupAvatarAsync(group.Id, null, 1);
+        Assert.Null(result);
+        Assert.Equal("/media/avatars/a", previous);
+        Assert.Null(group.AvatarUrl);
+    }
+
+    [Fact]
+    public async Task FailedGroupAvatarWrite_KeepsThePreviousPicture()
+    {
+        var (_, group) = await _manager.CreateAsync(new CreateSessionModel("Friends",
+            new ChatSessionCreateData(Kind: ChatKind.Group, MemberIds: [2])), 1);
+        _chats.Setup(r => r.UpdateAsync(It.IsAny<Core.Models.TextChat.ChatSessionModel>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new IOException());
+        Assert.Equal(ErrorCode.Internal, (await _manager.SetGroupAvatarAsync(group!.Id, "/media/avatars/a", 1)).result);
+        Assert.Null(group.AvatarUrl);
+        Assert.Empty(_events.Of<ChatSessionReconfiguredEvent>());
+    }
+
+    [Fact]
     public async Task MembershipChanges_StoreSystemMessages_AndRepeatingChangeDoesNotDuplicateThem()
     {
         var (_, group) = await _manager.CreateAsync(new CreateSessionModel("Friends",

@@ -83,7 +83,7 @@ public class ChatSessionManager : IChatSessionManager
             var oldName = chat.Name;
             var oldDescription = chat.Description;
             chat.Rename(name);
-            chat.Describe(description, chat.IconPath);
+            chat.Describe(description);
             try
             {
                 await _chatSessionRepository.UpdateAsync(chat);
@@ -91,7 +91,7 @@ public class ChatSessionManager : IChatSessionManager
             catch
             {
                 chat.Rename(oldName);
-                chat.Describe(oldDescription, chat.IconPath);
+                chat.Describe(oldDescription);
                 throw;
             }
             await _coordinatorEventBus.PublishAsync(new ChatSessionReconfiguredEvent(chat, userId));
@@ -138,7 +138,7 @@ public class ChatSessionManager : IChatSessionManager
             var chat = ChatSessionModel.Create(_coordinatorInstanceId, request.Name, userId);
             if (request.SessionData is ChatSessionCreateData chatData)
             {
-                chat.Describe(chatData.Description, chatData.IconPath);
+                chat.Describe(chatData.Description);
                 chat.Configure(new ChatSessionOptions(
                     IsAttachmentsAllowed: chatData.IsAttachmentsAllowed,
                     IsVoiceMessagesAllowed: chatData.IsVoiceMessagesAllowed,
@@ -180,6 +180,12 @@ public class ChatSessionManager : IChatSessionManager
 
             await _coordinatorEventBus.PublishAsync(new ChatSessionDeletedEvent(sessionId, userId));
             await DeleteMediaAsync(() => _mediaUploads.RemoveByChatAsync(sessionId));
+            if (AvatarAddress.UploadIdOf(chat.AvatarUrl) is { } avatarId)
+                await DeleteMediaAsync(async () =>
+                {
+                    await _mediaUploads.RemoveAsync(avatarId);
+                    return [avatarId];
+                });
             return null;
         }
         catch (Exception e)
@@ -211,7 +217,7 @@ public class ChatSessionManager : IChatSessionManager
                 return ErrorCode.InvalidValue;
             var changed = new ChatSessionModel(chat.Id, chat.CoordinatorInstanceId, leave ? chat.Name : name,
                 chat.CreatorUserId, leave ? chat.OwnerUserId : ownerId, chat.Options,
-                chat.Description, chat.IconPath, chat.IsArchived);
+                chat.Description, chat.AvatarUrl, chat.IsArchived);
             changed.SetAudience(ChatKind.Group, members);
             changed.SetLastMessage(chat.LastMessage);
             var now = DateTimeOffset.UtcNow;
@@ -243,6 +249,42 @@ public class ChatSessionManager : IChatSessionManager
         finally
         {
             writeLock.Release();
+            _lifecycleLock.Release();
+        }
+    }
+
+    public async Task<(ErrorCode? result, string? previousAvatarUrl)> SetGroupAvatarAsync(int sessionId,
+        string? avatarUrl, int userId)
+    {
+        await _lifecycleLock.WaitAsync();
+        try
+        {
+            if (!_sessions.TryGetValue(sessionId, out var chat) || chat.Kind != ChatKind.Group)
+                return (ErrorCode.ChatNotFound, null);
+            if (chat.OwnerUserId != userId)
+                return (ErrorCode.InsufficientPermissions, null);
+
+            var previous = chat.AvatarUrl;
+            chat.SetAvatar(avatarUrl);
+            try
+            {
+                await _chatSessionRepository.UpdateAsync(chat);
+            }
+            catch
+            {
+                chat.SetAvatar(previous);
+                throw;
+            }
+            await _coordinatorEventBus.PublishAsync(new ChatSessionReconfiguredEvent(chat, userId));
+            return (null, previous);
+        }
+        catch (Exception exception)
+        {
+            _logger.LogError(exception, "Failed to change the picture of group {SessionId}.", sessionId);
+            return (ErrorCode.Internal, null);
+        }
+        finally
+        {
             _lifecycleLock.Release();
         }
     }

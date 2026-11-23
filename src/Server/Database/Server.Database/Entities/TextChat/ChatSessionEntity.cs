@@ -14,6 +14,7 @@ public class ChatSessionEntity : SessionEntity
     public long LastRevision { get; set; }
 
     public string? Description { get; set; }
+    /// <summary>The picture of a group (ChatSessionModel.AvatarUrl); the column keeps its old name.</summary>
     public string? IconPath { get; set; }
 
     public bool IsReadOnly { get; set; }

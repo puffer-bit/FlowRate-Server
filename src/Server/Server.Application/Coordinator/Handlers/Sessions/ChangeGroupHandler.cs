@@ -1,3 +1,4 @@
+using Server.Application.Coordinator.Media;
 using Server.Application.Coordinator.Messaging;
 using Server.Application.Coordinator.Sessions.Chat;
 using Server.Application.Coordinator.Users;
@@ -44,5 +45,44 @@ public sealed class LeaveGroupHandler(IChatSessionManager chats, IMessageSender 
         var result = await chats.ChangeGroupAsync(request.SessionId, string.Empty, [], 0, request.SenderId, leave: true);
         sender.SendMessageById(connectionId, request.Answer(result, request.ToResponse));
         return HandleMessageResult.NoError;
+    }
+}
+
+/// <summary>
+/// The owner puts an avatar upload of theirs on a group, or takes the picture off. The replaced picture is removed.
+/// </summary>
+public sealed class SetGroupAvatarHandler(IChatSessionManager chats, IMediaService media, IMessageSender sender)
+    : IMessageHandler<SetGroupAvatarRequest>
+{
+    public async Task<HandleMessageResult> HandleMessage(SetGroupAvatarRequest? request, string connectionId)
+    {
+        if (request == null) return HandleMessageResult.ForbiddenRequest;
+        sender.SendMessageById(connectionId, request.Answer(await SetAvatarAsync(request), request.ToResponse));
+        return HandleMessageResult.NoError;
+    }
+
+    private async Task<ErrorCode?> SetAvatarAsync(SetGroupAvatarRequest request)
+    {
+        if (!chats.TryGetSession(request.SessionId, out var group) || group.Kind != ChatKind.Group)
+            return ErrorCode.ChatNotFound;
+        if (group.OwnerUserId != request.SenderId)
+            return ErrorCode.InsufficientPermissions;
+
+        var uploadId = request.UploadId?.ToLowerInvariant();
+        if (uploadId != null && !await media.AttachAvatarAsync(uploadId, request.SenderId))
+            return ErrorCode.UploadNotFound;
+
+        var (result, previous) = await chats.SetGroupAvatarAsync(request.SessionId,
+            uploadId == null ? null : AvatarAddress.Of(uploadId), request.SenderId);
+        if (result != null)
+        {
+            if (uploadId != null)
+                await media.RemoveAvatarAsync(uploadId);
+            return result;
+        }
+
+        if (AvatarAddress.UploadIdOf(previous) is { } previousId && previousId != uploadId)
+            await media.RemoveAvatarAsync(previousId);
+        return null;
     }
 }
