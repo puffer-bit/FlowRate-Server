@@ -24,6 +24,7 @@ public sealed class UserLogin(IUserManager userManager, UserSessions sessions,
     private async Task<LoginOutcome> AttachCoreAsync(string? userIdentity, DeviceInfoDTO? device,
         IClientConnection connection)
     {
+        connection.Device = ToDevice(device);
         var attachment = await userManager.AttachUser(userIdentity, connection);
         if (Rejected(attachment) is { } rejected)
             return rejected;
@@ -40,6 +41,7 @@ public sealed class UserLogin(IUserManager userManager, UserSessions sessions,
     private async Task<LoginOutcome> ResumeCoreAsync(UserSession session, string token, DeviceInfoDTO? device,
         IClientConnection connection)
     {
+        connection.Device = ToDevice(device);
         var attachment = await userManager.AttachUser(session.UserId, connection);
         if (Rejected(attachment) is { } rejected)
             return rejected;
@@ -47,6 +49,9 @@ public sealed class UserLogin(IUserManager userManager, UserSessions sessions,
         var nextToken = await sessions.ResumeAsync(session, token, device, connection);
         return new LoginOutcome(null, attachment.User, null, attachment.Result, nextToken);
     }
+
+    private static UserDevice? ToDevice(DeviceInfoDTO? device) =>
+        device == null ? null : new UserDevice(device.Platform, device.OsVersion, device.Architecture, device.AppVersion);
 
     private static LoginOutcome? Rejected(UserAttachment attachment) =>
         attachment is { Result: AttachUserResult.Attached, User: not null }
