@@ -8,47 +8,63 @@ using Shared.Models.DataTransferObjects;
 namespace Server.Application.Coordinator.Authentication;
 
 /// <summary>
-/// The last step of every login: the user is attached, the connection is theirs and the device gets the token of its
-/// session. The other connections of the user stay: a user can be connected from several devices.
+/// The last step of every login: bans are checked, the user is attached, the connection is theirs and the device is
+/// added or lives on. The other connections of the user stay: a user can be connected from several devices.
 /// </summary>
-public sealed class UserLogin(IUserManager userManager, UserSessions sessions,
+public sealed class UserLogin(IUserManager userManager, UserSessions devices,
     Server.Application.Coordinator.Moderation.ModerationService? moderation = null)
 {
-    public UserSessions Sessions => sessions;
+    public UserSessions Devices => devices;
 
-    /// <summary>A login with the identity, proven by the second stage when the user has one: a new session.</summary>
-    public Task<LoginOutcome> AttachAsync(string? userIdentity, DeviceInfoDTO? device, IClientConnection connection) =>
-        moderation == null ? AttachCoreAsync(userIdentity, device, connection) :
-        moderation.AdmitAsync(userIdentity, null, connection, () => AttachCoreAsync(userIdentity, device, connection));
+    /// <summary>A device of the account that signed the challenge.</summary>
+    public Task<LoginOutcome> ResumeAsync(UserSession device, DeviceInfoDTO? info, IClientConnection connection) =>
+        AdmitAsync(device.UserId, connection, async () =>
+        {
+            connection.Device = ToDevice(info);
+            var attachment = await userManager.AttachUser(device.UserId, connection);
+            if (Rejected(attachment) is { } rejected)
+                return rejected;
 
-    private async Task<LoginOutcome> AttachCoreAsync(string? userIdentity, DeviceInfoDTO? device,
-        IClientConnection connection)
-    {
-        connection.Device = ToDevice(device);
-        var attachment = await userManager.AttachUser(userIdentity, connection);
-        if (Rejected(attachment) is { } rejected)
-            return rejected;
+            await devices.ResumeAsync(device, info, connection);
+            return new LoginOutcome(null, attachment.User, device.Id);
+        });
 
-        var token = await sessions.StartAsync(attachment.User!.Id, device, connection);
-        return new LoginOutcome(null, attachment.User, attachment.UserIdentity, attachment.Result, token);
-    }
+    /// <summary>
+    /// A user who proved themselves another way gets a new device. <paramref name="onAttached"/> runs once the user is
+    /// let in, before the device is added.
+    /// </summary>
+    public Task<LoginOutcome> AddDeviceAsync(int userId, NewDevice device, DeviceInfoDTO? info,
+        DeviceLoginMethod method, IClientConnection connection, Func<Task>? onAttached = null) =>
+        AdmitAsync(userId, connection, async () =>
+        {
+            connection.Device = ToDevice(info);
+            var attachment = await userManager.AttachUser(userId, connection);
+            if (Rejected(attachment) is { } rejected)
+                return rejected;
 
-    /// <summary>A login with the token of a session: the session goes on with the next token.</summary>
-    public Task<LoginOutcome> ResumeAsync(UserSession session, string token, DeviceInfoDTO? device, IClientConnection connection) =>
-        moderation == null ? ResumeCoreAsync(session, token, device, connection) :
-        moderation.AdmitAsync(null, session.UserId, connection, () => ResumeCoreAsync(session, token, device, connection));
+            if (onAttached != null)
+                await onAttached();
+            var added = await devices.AddAsync(userId, device, info, method, connection);
+            return new LoginOutcome(null, attachment.User, added.Id);
+        });
 
-    private async Task<LoginOutcome> ResumeCoreAsync(UserSession session, string token, DeviceInfoDTO? device,
-        IClientConnection connection)
-    {
-        connection.Device = ToDevice(device);
-        var attachment = await userManager.AttachUser(session.UserId, connection);
-        if (Rejected(attachment) is { } rejected)
-            return rejected;
+    /// <summary>A new account, with the device that made it.</summary>
+    public Task<LoginOutcome> RegisterAsync(UserRecoveryKeys recoveryKeys, NewDevice device, DeviceInfoDTO? info,
+        IClientConnection connection) =>
+        AdmitAsync(null, connection, async () =>
+        {
+            connection.Device = ToDevice(info);
+            var attachment = await userManager.RegisterUser(recoveryKeys, connection);
+            if (Rejected(attachment) is { } rejected)
+                return rejected;
 
-        var nextToken = await sessions.ResumeAsync(session, token, device, connection);
-        return new LoginOutcome(null, attachment.User, null, attachment.Result, nextToken);
-    }
+            var user = attachment.User!;
+            var added = await devices.AddAsync(user.Id, device, info, DeviceLoginMethod.Registration, connection);
+            return new LoginOutcome(null, user, added.Id);
+        });
+
+    private Task<LoginOutcome> AdmitAsync(int? userId, IClientConnection connection, Func<Task<LoginOutcome>> attach) =>
+        moderation == null ? attach() : moderation.AdmitAsync(userId, connection, attach);
 
     private static UserDevice? ToDevice(DeviceInfoDTO? device) =>
         device == null ? null : new UserDevice(device.Platform, device.OsVersion, device.Architecture, device.AppVersion);
@@ -56,18 +72,19 @@ public sealed class UserLogin(IUserManager userManager, UserSessions sessions,
     private static LoginOutcome? Rejected(UserAttachment attachment) =>
         attachment is { Result: AttachUserResult.Attached, User: not null }
             ? null
-            : new LoginOutcome(attachment.Result switch
+            : LoginOutcome.Refused(attachment.Result switch
             {
                 AttachUserResult.OnlineLimitReached => ErrorCode.OnlineLimitReached,
                 AttachUserResult.UserLimitReached => ErrorCode.UserLimitReached,
                 AttachUserResult.ConnectionLimitReached => ErrorCode.RateLimited,
                 AttachUserResult.Banned => ErrorCode.Banned,
                 _ => ErrorCode.AuthFailed
-            }, null, null, attachment.Result, null);
+            });
 }
 
 /// <param name="Error">Why the user was not let in; null when it was.</param>
-/// <param name="UserIdentity">The identity the user logged in with, or got; null for a login with a session token.</param>
-/// <param name="SessionToken">The token the device logs in with next time.</param>
-public sealed record LoginOutcome(ErrorCode? Error, UserModel? User, string? UserIdentity, AttachUserResult Attach,
-    string? SessionToken, string? BanReason = null);
+/// <param name="DeviceId">The device the client logs in with from now on.</param>
+public sealed record LoginOutcome(ErrorCode? Error, UserModel? User, Guid? DeviceId, string? BanReason = null)
+{
+    public static LoginOutcome Refused(ErrorCode error, string? banReason = null) => new(error, null, null, banReason);
+}

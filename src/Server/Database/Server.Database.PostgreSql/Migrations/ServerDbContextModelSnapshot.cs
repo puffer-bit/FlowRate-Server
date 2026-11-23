@@ -965,6 +965,10 @@ namespace Server.Database.PostgreSql.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
+                    b.Property<byte[]>("AccountPublicKey")
+                        .HasMaxLength(128)
+                        .HasColumnType("bytea");
+
                     b.Property<string>("AvatarUrl")
                         .HasMaxLength(2048)
                         .HasColumnType("character varying(2048)");
@@ -982,7 +986,6 @@ namespace Server.Database.PostgreSql.Migrations
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<byte[]>("IdentityHash")
-                        .IsRequired()
                         .HasMaxLength(32)
                         .HasColumnType("bytea");
 
@@ -999,6 +1002,10 @@ namespace Server.Database.PostgreSql.Migrations
                     b.Property<string>("Prefix")
                         .HasMaxLength(10)
                         .HasColumnType("character varying(10)");
+
+                    b.Property<byte[]>("RecoveryKeyHash")
+                        .HasMaxLength(32)
+                        .HasColumnType("bytea");
 
                     b.Property<string>("RegionCode")
                         .HasMaxLength(10)
@@ -1020,7 +1027,44 @@ namespace Server.Database.PostgreSql.Migrations
 
                     b.HasIndex("CoordinatorInstanceId", "IdentityHash");
 
+                    b.HasIndex("CoordinatorInstanceId", "RecoveryKeyHash");
+
                     b.ToTable("UserEntities");
+                });
+
+            modelBuilder.Entity("Server.Database.Entities.UserLoginCodeEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<byte[]>("CodeHash")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("bytea");
+
+                    b.Property<string>("CoordinatorInstanceId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("UserId")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CodeHash")
+                        .IsUnique();
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("UserLoginCodes", (string)null);
                 });
 
             modelBuilder.Entity("Server.Database.Entities.UserPasskeyEntity", b =>
@@ -1122,6 +1166,9 @@ namespace Server.Database.PostgreSql.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<int>("AddedBy")
+                        .HasColumnType("integer");
+
                     b.Property<string>("AppVersion")
                         .IsRequired()
                         .HasMaxLength(32)
@@ -1148,6 +1195,9 @@ namespace Server.Database.PostgreSql.Migrations
                     b.Property<DateTime>("ExpiresAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<bool>("IsTemporary")
+                        .HasColumnType("boolean");
+
                     b.Property<string>("LastAddress")
                         .HasMaxLength(45)
                         .HasColumnType("character varying(45)");
@@ -1159,8 +1209,11 @@ namespace Server.Database.PostgreSql.Migrations
                         .HasMaxLength(32)
                         .HasColumnType("bytea");
 
+                    b.Property<byte[]>("PublicKey")
+                        .HasMaxLength(128)
+                        .HasColumnType("bytea");
+
                     b.Property<byte[]>("TokenHash")
-                        .IsRequired()
                         .HasMaxLength(32)
                         .HasColumnType("bytea");
 
@@ -1474,6 +1527,15 @@ namespace Server.Database.PostgreSql.Migrations
                         .IsRequired();
 
                     b.Navigation("ChatSession");
+                });
+
+            modelBuilder.Entity("Server.Database.Entities.UserLoginCodeEntity", b =>
+                {
+                    b.HasOne("Server.Database.Entities.UserEntity", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("Server.Database.Entities.UserPasskeyEntity", b =>

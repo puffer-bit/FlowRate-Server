@@ -21,13 +21,16 @@ public interface IUserManager
     int ConnectedUsersCount { get; }
 
     /// <summary>
-    /// Attaches the user and makes the connection theirs, unless the coordinator limits say no; see
-    /// <see cref="AttachUserResult"/>. A user can be on several connections, one per device: a user connected
+    /// Registers a new user with the recovery keys of the account and attaches them, unless the coordinator limits say
+    /// no; see <see cref="AttachUserResult"/>.
+    /// </summary>
+    Task<UserAttachment> RegisterUser(UserRecoveryKeys recoveryKeys, IClientConnection clientConnection);
+
+    /// <summary>
+    /// Attaches a user who proved themselves and makes the connection theirs, unless the coordinator limits say no;
+    /// see <see cref="AttachUserResult"/>. A user can be on several connections, one per device: a user connected
     /// already stays attached as they are, and <see cref="UserConnected"/> is raised only when they come online.
     /// </summary>
-    Task<UserAttachment> AttachUser(string? userIdentity, IClientConnection clientConnection);
-
-    /// <summary>Attaches the user of a device session, who proved themselves when the session started.</summary>
     Task<UserAttachment> AttachUser(int userId, IClientConnection clientConnection);
     Task<ErrorCode?> ChangeUsername(int userId, string newUsername);
     Task<ErrorCode?> SetAvatar(int userId, string? avatarUrl);

@@ -21,6 +21,7 @@ namespace Server.Application.Coordinator;
 public partial class CoordinatorInstance : ICoordinatorInstance
 {
     public Moderation.ModerationService? Moderation { get; }
+    public Authentication.UserSessions? Devices { get; set; }
     public ICoordinatorInstanceContext Context { get; }
     public CoordinatorState State { get; private set; } = CoordinatorState.Offline;
 

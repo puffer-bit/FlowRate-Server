@@ -2,6 +2,7 @@ using Server.Core.Models.Coordinator.Settings;
 using Shared.Models;
 using Shared.Models.Requests.Auth;
 using Shared.Models.Requests.Coordinator;
+using Shared.Models.Requests.Coordinator.Devices;
 using Shared.Models.Requests.Coordinator.Security;
 using Shared.Models.Requests.SessionActions.ChatSession;
 using Shared.Models.Requests.SessionActions.Generic;
@@ -94,7 +95,9 @@ public sealed class RequestRateLimits
         // A proof can be guessed like a login, so it counts against the same limit per IP
         UserSetPasswordRequest or UserTwoFactorSetupRequest or UserTwoFactorEnableRequest
             or UserTwoFactorDisableRequest or UserPasskeyOptionsRequest or UserPasskeyRegisterRequest
-            or UserPasskeyDeleteRequest or UserIdentityResetRequest => RequestRateGroup.Authentication,
+            or UserPasskeyDeleteRequest or UserRecoveryKeyResetRequest => RequestRateGroup.Authentication,
+        // A link code can be guessed like a login code
+        DeviceLinkInfoRequest or DeviceLinkApproveRequest => RequestRateGroup.Authentication,
         CreateSessionRequest or DeleteSessionRequest or ChangeChatSessionSettingsRequest or ChangeHybridSessionSettingsRequest
             or ChangeSessionPermissionsRequest
             => RequestRateGroup.SessionManagement,

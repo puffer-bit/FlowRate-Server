@@ -186,17 +186,17 @@ public class UserManagerTests
     }
 
     [Fact]
-    public async Task AttachUser_LooksTheIdentityUpInThisCoordinatorOnly()
+    public async Task AttachUser_OfAnotherCoordinator_IsRejected()
     {
+        var bob = UserModel.Create("other", "bob", null, DateTimeOffset.UtcNow);
+        bob.Id = 1;
+        _users.Setup(r => r.GetByIdAsync(1, It.IsAny<CancellationToken>())).ReturnsAsync(bob);
         var connection = new Mock<IClientConnection>();
         connection.SetupGet(c => c.IpEndpoint).Returns("127.0.0.1");
 
-        var attachment = await _manager.AttachUser("#alice", connection.Object);
+        var attachment = await _manager.AttachUser(1, connection.Object);
 
-        Assert.Equal(AttachUserResult.UnknownIdentity, attachment.Result);
-        _users.Verify(r => r.GetByIdentityAsync(CoordinatorId, "#alice", It.IsAny<CancellationToken>()), Times.Once);
-        _users.Verify(r => r.GetByIdentityAsync(It.Is<string>(id => id != CoordinatorId), It.IsAny<string>(),
-            It.IsAny<CancellationToken>()), Times.Never);
+        Assert.Equal(AttachUserResult.UnknownUser, attachment.Result);
     }
 
     [Fact]
@@ -205,26 +205,26 @@ public class UserManagerTests
         var alice = UserModel.Create(CoordinatorId, "alice", null, DateTimeOffset.UtcNow);
         alice.Id = 1;
         alice.Ban();
-        _users.Setup(r => r.GetByIdentityAsync(It.IsAny<string>(), "#alice", It.IsAny<CancellationToken>())).ReturnsAsync(alice);
+        _users.Setup(r => r.GetByIdAsync(1, It.IsAny<CancellationToken>())).ReturnsAsync(alice);
         var connection = new Mock<IClientConnection>();
         connection.SetupGet(c => c.IpEndpoint).Returns("127.0.0.1");
 
-        var attachment = await _manager.AttachUser("#alice", connection.Object);
+        var attachment = await _manager.AttachUser(1, connection.Object);
 
         Assert.Equal(AttachUserResult.Banned, attachment.Result);
         Assert.False(_manager.TryGetConnectedUser(1, out _));
     }
 
     [Fact]
-    public async Task AttachUser_UnknownIdentity_IsRejectedWithoutCreatingUser()
+    public async Task AttachUser_UnknownUser_IsRejectedWithoutCreatingUser()
     {
         var connection = new Mock<IClientConnection>();
 
-        var attachment = await _manager.AttachUser("#nobody", connection.Object);
+        var attachment = await _manager.AttachUser(404, connection.Object);
 
-        Assert.Equal(AttachUserResult.UnknownIdentity, attachment.Result);
+        Assert.Equal(AttachUserResult.UnknownUser, attachment.Result);
         Assert.Equal(0, _manager.ConnectedUsersCount);
-        _users.Verify(r => r.AddAsync(It.IsAny<UserModel>(), It.IsAny<string>(), It.IsAny<CancellationToken>()),
+        _users.Verify(r => r.AddAsync(It.IsAny<UserModel>(), It.IsAny<UserRecoveryKeys>(), It.IsAny<CancellationToken>()),
             Times.Never);
     }
 
@@ -266,12 +266,12 @@ public class UserManagerTests
         var alice = UserModel.Create(CoordinatorId, "alice", null, DateTimeOffset.UtcNow);
         alice.Id = 1;
         alice.SetStatus(UserStatus.Away);
-        _users.Setup(r => r.GetByIdentityAsync(It.IsAny<string>(), "#alice", It.IsAny<CancellationToken>())).ReturnsAsync(alice);
+        _users.Setup(r => r.GetByIdAsync(1, It.IsAny<CancellationToken>())).ReturnsAsync(alice);
         var connection = new Mock<IClientConnection>();
         UserModel? disconnected = null;
         _manager.UserDisconnected += (user, _) => disconnected = user;
 
-        await _manager.AttachUser("#alice", connection.Object);
+        await _manager.AttachUser(1, connection.Object);
         Assert.Equal(UserStatus.Away, alice.Presence);
 
         _manager.DetachUser(1, "bye");
@@ -285,7 +285,7 @@ public class UserManagerTests
     {
         var alice = UserModel.Create(CoordinatorId, "alice", null, DateTimeOffset.UtcNow);
         alice.Id = 1;
-        _users.Setup(r => r.GetByIdentityAsync(It.IsAny<string>(), "#alice", It.IsAny<CancellationToken>())).ReturnsAsync(alice);
+        _users.Setup(r => r.GetByIdAsync(1, It.IsAny<CancellationToken>())).ReturnsAsync(alice);
         var phone = Connection("phone");
         var desktop = Connection("desktop");
         var connects = 0;
@@ -293,8 +293,8 @@ public class UserManagerTests
         _manager.UserConnected += _ => connects++;
         _manager.UserDisconnected += (_, _) => disconnects++;
 
-        await _manager.AttachUser("#alice", phone.Object);
-        await _manager.AttachUser("#alice", desktop.Object);
+        await _manager.AttachUser(1, phone.Object);
+        await _manager.AttachUser(1, desktop.Object);
 
         Assert.Equal(1, connects);
         Assert.Equal(["phone", "desktop"], _connections.UserConnections[1]);
@@ -315,13 +315,13 @@ public class UserManagerTests
     {
         var first = Stored(1, "alice", CoordinatorId);
         var second = Stored(1, "alice", CoordinatorId);
-        _users.SetupSequence(r => r.GetByIdentityAsync(It.IsAny<string>(), "#alice", It.IsAny<CancellationToken>()))
+        _users.SetupSequence(r => r.GetByIdAsync(1, It.IsAny<CancellationToken>()))
             .ReturnsAsync(first)
             .ReturnsAsync(second);
 
-        await _manager.AttachUser("#alice", Connection("phone").Object);
+        await _manager.AttachUser(1, Connection("phone").Object);
         first.SetStatus(UserStatus.Away);
-        var attachment = await _manager.AttachUser("#alice", Connection("desktop").Object);
+        var attachment = await _manager.AttachUser(1, Connection("desktop").Object);
 
         Assert.Same(first, attachment.User);
         Assert.Equal(UserStatus.Away, attachment.User!.Status);
@@ -331,11 +331,11 @@ public class UserManagerTests
     public async Task AttachUser_ConnectionClosedDuringTheLogin_AttachesNothing()
     {
         var alice = Stored(1, "alice", CoordinatorId);
-        _users.Setup(r => r.GetByIdentityAsync(It.IsAny<string>(), "#alice", It.IsAny<CancellationToken>())).ReturnsAsync(alice);
+        _users.Setup(r => r.GetByIdAsync(1, It.IsAny<CancellationToken>())).ReturnsAsync(alice);
         var connection = Connection("closed");
         connection.SetupGet(c => c.IsClosed).Returns(true);
 
-        var attachment = await _manager.AttachUser("#alice", connection.Object);
+        var attachment = await _manager.AttachUser(1, connection.Object);
 
         Assert.Equal(AttachUserResult.ConnectionClosed, attachment.Result);
         Assert.False(_manager.TryGetConnectedUser(1, out _));
@@ -347,8 +347,8 @@ public class UserManagerTests
     public async Task DetachConnection_NotOfTheUser_DetachesNothing()
     {
         var alice = Stored(1, "alice", CoordinatorId);
-        _users.Setup(r => r.GetByIdentityAsync(It.IsAny<string>(), "#alice", It.IsAny<CancellationToken>())).ReturnsAsync(alice);
-        await _manager.AttachUser("#alice", Connection("desktop").Object);
+        _users.Setup(r => r.GetByIdAsync(1, It.IsAny<CancellationToken>())).ReturnsAsync(alice);
+        await _manager.AttachUser(1, Connection("desktop").Object);
         var stranger = Connection("stranger");
         stranger.Object.UserId = 1;
 

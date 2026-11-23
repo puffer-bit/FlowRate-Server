@@ -11,8 +11,8 @@ public enum AttachUserResult
     UserLimitReached,
     /// <summary>The user is banned from the coordinator.</summary>
     Banned,
-    /// <summary>No user of the coordinator has the identity given.</summary>
-    UnknownIdentity,
+    /// <summary>The coordinator has no such user.</summary>
+    UnknownUser,
     /// <summary>The connection closed before the user was attached.</summary>
     ConnectionClosed,
     /// <summary>The user already has five connections open.</summary>
@@ -20,8 +20,7 @@ public enum AttachUserResult
 }
 
 /// <param name="User">Set when the user was attached.</param>
-/// <param name="UserIdentity">Set when the user was attached: the identity the client has to keep.</param>
-public sealed record UserAttachment(AttachUserResult Result, UserModel? User = null, string? UserIdentity = null)
+public sealed record UserAttachment(AttachUserResult Result, UserModel? User = null)
 {
     public static UserAttachment Rejected(AttachUserResult result) => new(result);
 }

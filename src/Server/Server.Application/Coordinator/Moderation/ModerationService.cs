@@ -50,7 +50,8 @@ public sealed class ModerationService(
         return snapshot;
     }
 
-    public async Task<LoginOutcome> AdmitAsync(string? identity, int? userId, IClientConnection connection,
+    /// <param name="userId">The user logging in; null for a new account, which only an IP ban keeps out.</param>
+    public async Task<LoginOutcome> AdmitAsync(int? userId, IClientConnection connection,
         Func<Task<LoginOutcome>> attach)
     {
         await _gate.WaitAsync();
@@ -59,13 +60,11 @@ public sealed class ModerationService(
             var bans = await SnapshotAsync();
             if (bans.Any(b => !b.IsActive(Now)))
                 bans = (await LoadAndRestoreAsync()).ToArray();
-            if (userId == null && identity != null)
-                userId = (await users.GetByIdentityAsync(coordinatorId, identity))?.Id;
             var ip = Ban.NormalizeAddress(connection.IpEndpoint);
             var ban = bans.FirstOrDefault(b => b.IsActive(Now) &&
                 (b.Kind == BanKind.Account && b.UserId == userId || b.Kind == BanKind.Ip && b.Address == ip));
             if (ban != null)
-                return new LoginOutcome(ErrorCode.Banned, null, null, AttachUserResult.Banned, null, ban.Reason);
+                return LoginOutcome.Refused(ErrorCode.Banned, ban.Reason);
             if (userId is { } id) await RestoreAccountAsync(id, bans.Where(b => b.Kind == BanKind.Account && b.UserId == id), Now);
             return await attach();
         }

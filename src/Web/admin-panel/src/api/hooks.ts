@@ -17,6 +17,9 @@ import {
   getSfuNodes,
   getPasskeyOptions,
   getUserSecurity,
+  getUserDevices,
+  revokeUserDevice,
+  createLoginCode,
   isConflict,
   offerTwoFactor,
   queryKeys,
@@ -163,6 +166,21 @@ export const useAddPasskey = (id: string, userId: number) =>
 
 export const useDeletePasskey = (id: string, userId: number) =>
   useSecurityMutation(id, userId, (passkeyId: number) => deletePasskey(id, userId, passkeyId))
+
+export const useUserDevices = (id: string, userId: number) =>
+  useQuery({ queryKey: queryKeys.userDevices(id, userId), queryFn: () => getUserDevices(id, userId) })
+
+export const useRevokeUserDevice = (id: string, userId: number) => {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (deviceId: string) => revokeUserDevice(id, userId, deviceId),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.userDevices(id, userId) }),
+  })
+}
+
+export const useCreateLoginCode = (id: string, userId: number) =>
+  useMutation({ mutationFn: () => createLoginCode(id, userId) })
 
 /** What a change signal makes stale; 'all' when the panel may have missed signals. */
 function staleQueries(event: PanelEvent): QueryKey[] | 'all' {

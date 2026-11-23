@@ -151,6 +151,22 @@ export const registerPasskey = (id: string, userId: number, label: string | null
 export const deletePasskey = (id: string, userId: number, passkeyId: number) =>
   send<UserSecurity>('DELETE', `${securityPath(id, userId)}/passkeys/${passkeyId}`)
 
+export type UserDevice = Schemas['UserDeviceDto']
+export type LoginCode = Schemas['LoginCodeDto']
+
+const userPath = (id: string, userId: number) => `${coordinatorPath(id)}/users/${userId}`
+
+/** The devices of the user's account, the latest used first. */
+export const getUserDevices = (id: string, userId: number) => get<UserDevice[]>(`${userPath(id, userId)}/devices`)
+
+/** Removes a device; a connected one is disconnected. */
+export const revokeUserDevice = (id: string, userId: number, deviceId: string) =>
+  send<void>('DELETE', `${userPath(id, userId)}/devices/${encodeURIComponent(deviceId)}`)
+
+/** A one-time login code, shown once; codes given before stop working. */
+export const createLoginCode = (id: string, userId: number) =>
+  send<LoginCode>('POST', `${userPath(id, userId)}/login-code`)
+
 // Everything about one coordinator starts with ['coordinator', id]
 export const queryKeys = {
   overview: ['overview'] as const,
@@ -160,6 +176,7 @@ export const queryKeys = {
   roles: (id: string) => ['coordinator', id, 'roles'] as const,
   coordinatorUsers: (id: string) => ['coordinator', id, 'users'] as const,
   userSecurity: (id: string, userId: number) => ['coordinator', id, 'users', userId, 'security'] as const,
+  userDevices: (id: string, userId: number) => ['coordinator', id, 'users', userId, 'devices'] as const,
 }
 
 export type GlobalBan = Schemas['BanDTO']

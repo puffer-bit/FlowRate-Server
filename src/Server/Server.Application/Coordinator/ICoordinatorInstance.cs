@@ -9,6 +9,8 @@ namespace Server.Application.Coordinator;
 public interface ICoordinatorInstance : IDisposable
 {
     Moderation.ModerationService? Moderation => null;
+    /// <summary>The devices of the users' accounts, to remove one and disconnect it from the control panel.</summary>
+    Authentication.UserSessions? Devices => null;
     ICoordinatorInstanceContext Context { get; }
     CoordinatorState State { get; }
     TimeSpan UpTime => Context.UpTime;

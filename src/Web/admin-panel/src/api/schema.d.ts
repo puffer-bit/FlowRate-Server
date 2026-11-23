@@ -1255,6 +1255,30 @@ export interface components {
             connectedUsersCount: number;
             coordinators: components["schemas"]["CoordinatorSummaryDto"][];
         };
+        /** @enum {string} */
+        DeviceLoginMethod: "Registration" | "Recovery" | "Factors" | "LoginCode" | "DeviceLink" | "Legacy";
+        LoginCodeDto: {
+            code: string;
+            /** Format: date-time */
+            expiresAtUtc: string;
+        };
+        UserDeviceDto: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            platform: string;
+            appVersion: string;
+            /** Format: date-time */
+            createdAtUtc: string;
+            /** Format: date-time */
+            lastUsedAtUtc: string;
+            /** Format: date-time */
+            expiresAtUtc: string;
+            lastAddress: null | string;
+            isTemporary: boolean;
+            addedBy: components["schemas"]["DeviceLoginMethod"];
+            isOnline: boolean;
+        };
         PasskeyDto: {
             /** Format: int32 */
             id: number;

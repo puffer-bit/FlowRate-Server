@@ -935,6 +935,10 @@ namespace Server.Database.Sqlite.Migrations
                         .HasMaxLength(36)
                         .HasColumnType("INTEGER");
 
+                    b.Property<byte[]>("AccountPublicKey")
+                        .HasMaxLength(128)
+                        .HasColumnType("BLOB");
+
                     b.Property<string>("AvatarUrl")
                         .HasMaxLength(2048)
                         .HasColumnType("TEXT");
@@ -952,7 +956,6 @@ namespace Server.Database.Sqlite.Migrations
                         .HasColumnType("TEXT");
 
                     b.Property<byte[]>("IdentityHash")
-                        .IsRequired()
                         .HasMaxLength(32)
                         .HasColumnType("BLOB");
 
@@ -969,6 +972,10 @@ namespace Server.Database.Sqlite.Migrations
                     b.Property<string>("Prefix")
                         .HasMaxLength(10)
                         .HasColumnType("TEXT");
+
+                    b.Property<byte[]>("RecoveryKeyHash")
+                        .HasMaxLength(32)
+                        .HasColumnType("BLOB");
 
                     b.Property<string>("RegionCode")
                         .HasMaxLength(10)
@@ -990,7 +997,44 @@ namespace Server.Database.Sqlite.Migrations
 
                     b.HasIndex("CoordinatorInstanceId", "IdentityHash");
 
+                    b.HasIndex("CoordinatorInstanceId", "RecoveryKeyHash");
+
                     b.ToTable("UserEntities");
+                });
+
+            modelBuilder.Entity("Server.Database.Entities.UserLoginCodeEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT");
+
+                    b.Property<byte[]>("CodeHash")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("BLOB");
+
+                    b.Property<string>("CoordinatorInstanceId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("ExpiresAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("UserId")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CodeHash")
+                        .IsUnique();
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("UserLoginCodes", (string)null);
                 });
 
             modelBuilder.Entity("Server.Database.Entities.UserPasskeyEntity", b =>
@@ -1090,6 +1134,9 @@ namespace Server.Database.Sqlite.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("TEXT");
 
+                    b.Property<int>("AddedBy")
+                        .HasColumnType("INTEGER");
+
                     b.Property<string>("AppVersion")
                         .IsRequired()
                         .HasMaxLength(32)
@@ -1116,6 +1163,9 @@ namespace Server.Database.Sqlite.Migrations
                     b.Property<DateTime>("ExpiresAt")
                         .HasColumnType("TEXT");
 
+                    b.Property<bool>("IsTemporary")
+                        .HasColumnType("INTEGER");
+
                     b.Property<string>("LastAddress")
                         .HasMaxLength(45)
                         .HasColumnType("TEXT");
@@ -1127,8 +1177,11 @@ namespace Server.Database.Sqlite.Migrations
                         .HasMaxLength(32)
                         .HasColumnType("BLOB");
 
+                    b.Property<byte[]>("PublicKey")
+                        .HasMaxLength(128)
+                        .HasColumnType("BLOB");
+
                     b.Property<byte[]>("TokenHash")
-                        .IsRequired()
                         .HasMaxLength(32)
                         .HasColumnType("BLOB");
 
@@ -1442,6 +1495,15 @@ namespace Server.Database.Sqlite.Migrations
                         .IsRequired();
 
                     b.Navigation("ChatSession");
+                });
+
+            modelBuilder.Entity("Server.Database.Entities.UserLoginCodeEntity", b =>
+                {
+                    b.HasOne("Server.Database.Entities.UserEntity", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("Server.Database.Entities.UserPasskeyEntity", b =>

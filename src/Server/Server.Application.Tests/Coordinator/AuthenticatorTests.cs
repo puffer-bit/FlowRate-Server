@@ -14,7 +14,6 @@ namespace Server.Application.Tests.Coordinator;
 
 public class AuthenticatorTests
 {
-    private const string Identity = "identity";
     private const int UserId = 1;
 
     private readonly Mock<IUserRepository> _users = new();
@@ -29,7 +28,7 @@ public class AuthenticatorTests
     public AuthenticatorTests()
     {
         var model = CoordinatorInstanceModel.Create("coordinator", "127.0.0.1", 5000, DateTimeOffset.UtcNow);
-        _users.Setup(u => u.GetByIdentityAsync(model.Id, Identity, It.IsAny<CancellationToken>()))
+        _users.Setup(u => u.GetByIdAsync(UserId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(() => new UserModel(UserId, model.Id, "user", _state, UserStatus.Online, DateTimeOffset.UtcNow,
                 DateTimeOffset.UtcNow));
         _hasher.Setup(h => h.VerifyPassword("hash", "secret")).Returns(true);
@@ -74,13 +73,13 @@ public class AuthenticatorTests
     {
         Security(_ => { });
 
-        Assert.Null(await _authenticator.BeginUserLoginAsync(Identity));
+        Assert.Null(await _authenticator.BeginFactorLoginAsync(UserId));
     }
 
     [Fact]
-    public async Task UnknownIdentity_NeedsNoSecondStage()
+    public async Task UnknownUser_HasNoFactors()
     {
-        Assert.Null(await _authenticator.BeginUserLoginAsync("someone else"));
+        Assert.Null(await _authenticator.BeginFactorLoginAsync(404));
     }
 
     [Fact]
@@ -89,7 +88,7 @@ public class AuthenticatorTests
         Security(data => data.SetPassword("hash"));
         _state = UserState.Banned;
 
-        Assert.NotNull(await _authenticator.BeginUserLoginAsync(Identity));
+        Assert.NotNull(await _authenticator.BeginFactorLoginAsync(UserId));
     }
 
     [Fact]
@@ -98,12 +97,12 @@ public class AuthenticatorTests
         Security(data => data.SetPassword("hash"));
         EnableCodes();
 
-        var challenge = await _authenticator.BeginUserLoginAsync(Identity);
+        var challenge = await _authenticator.BeginFactorLoginAsync(UserId);
 
         Assert.NotNull(challenge);
         Assert.True(challenge.AcceptsCodes);
         Assert.Null(challenge.Passkey);
-        Assert.Equal([SecondStageAuthType.Password, SecondStageAuthType.TwoFactor], challenge.Methods);
+        Assert.Equal([LoginFactor.Password, LoginFactor.TwoFactor], challenge.Methods);
     }
 
     [Fact]
@@ -111,12 +110,12 @@ public class AuthenticatorTests
     {
         AddPasskey();
 
-        var challenge = await _authenticator.BeginUserLoginAsync(Identity);
+        var challenge = await _authenticator.BeginFactorLoginAsync(UserId);
 
         Assert.NotNull(challenge);
         Assert.False(challenge.AcceptsCodes);
         Assert.NotNull(challenge.Passkey);
-        Assert.Equal([SecondStageAuthType.FIDO2], challenge.Methods);
+        Assert.Equal([LoginFactor.Passkey], challenge.Methods);
     }
 
     [Fact]
@@ -125,7 +124,7 @@ public class AuthenticatorTests
         AddPasskey();
         _passkeyService.Setup(p => p.IsAvailable).Returns(false);
 
-        var challenge = await _authenticator.BeginUserLoginAsync(Identity);
+        var challenge = await _authenticator.BeginFactorLoginAsync(UserId);
 
         Assert.NotNull(challenge);
         Assert.False(challenge.AcceptsCodes);
@@ -137,7 +136,7 @@ public class AuthenticatorTests
     {
         AddPasskey(enabled: false);
 
-        Assert.Null(await _authenticator.BeginUserLoginAsync(Identity));
+        Assert.Null(await _authenticator.BeginFactorLoginAsync(UserId));
     }
 
     [Fact]

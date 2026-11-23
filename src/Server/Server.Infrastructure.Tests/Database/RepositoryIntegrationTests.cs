@@ -34,19 +34,20 @@ public sealed class RepositoryIntegrationTests : IDisposable
 
     public void Dispose() => _database.Dispose();
 
-    private Task<int> AddUser(string identity) => new UserRepository(_database).AddAsync(
-        UserModel.Create(Coordinator, "alice", null, Now), identity);
+    private Task<int> AddUser(string recoveryKey) => new UserRepository(_database).AddAsync(
+        UserModel.Create(Coordinator, "alice", null, Now), new UserRecoveryKeys(SecretHash.Of(recoveryKey), [1, 2]));
 
     [Fact]
     public async Task UsersAndTokens_AreFoundByBinaryHashAndScopedToCoordinator()
     {
-        var userId = await AddUser("identity");
+        var userId = await AddUser("recovery");
         var users = new UserRepository(_database);
-        Assert.Equal(userId, (await users.GetByIdentityAsync(Coordinator, "identity"))!.Id);
-        Assert.Null(await users.GetByIdentityAsync("other", "identity"));
-        await users.SetIdentityAsync(userId, "new-identity");
-        Assert.Null(await users.GetByIdentityAsync(Coordinator, "identity"));
-        Assert.Equal(userId, (await users.GetByIdentityAsync(Coordinator, "new-identity"))!.Id);
+        Assert.Equal(userId, (await users.GetByRecoveryKeyHashAsync(Coordinator, SecretHash.Of("recovery")))!.Id);
+        Assert.Null(await users.GetByRecoveryKeyHashAsync("other", SecretHash.Of("recovery")));
+        await users.SetRecoveryKeysAsync(userId, new UserRecoveryKeys(SecretHash.Of("new"), [3]));
+        Assert.Null(await users.GetByRecoveryKeyHashAsync(Coordinator, SecretHash.Of("recovery")));
+        Assert.Equal(userId, (await users.GetByRecoveryKeyHashAsync(Coordinator, SecretHash.Of("new")))!.Id);
+        Assert.Equal(userId, (await users.GetByUsernameAsync(Coordinator, "ALICE"))!.Id);
 
         var sessions = new UserSessionRepository(_database);
         var session = new UserSession(Guid.NewGuid(), Coordinator, userId, SecretHash.Of("first"), null,

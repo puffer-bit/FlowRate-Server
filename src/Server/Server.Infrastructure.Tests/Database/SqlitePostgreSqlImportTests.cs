@@ -34,6 +34,7 @@ public sealed class SqlitePostgreSqlImportTests : IDisposable
     private readonly string _path = Path.Combine(Path.GetTempPath(), $"flowrate-import-{Guid.NewGuid():N}.db");
     private static readonly DateTimeOffset Now = new(2026, 11, 19, 12, 0, 0, TimeSpan.Zero);
     private static readonly Guid SessionId = Guid.Parse("01234567-89ab-cdef-0123-456789abcdef");
+    private static readonly Guid LoginCodeId = Guid.Parse("fedcba98-7654-3210-fedc-ba9876543210");
     private readonly SqlitePostgreSqlImporter _importer = new();
 
     public SqlitePostgreSqlImportTests()
@@ -74,6 +75,7 @@ public sealed class SqlitePostgreSqlImportTests : IDisposable
         Assert.Equal("password-hash", (await target.Set<UserSecurityDataEntity>().SingleAsync()).PasswordHash);
         Assert.Equal(uint.MaxValue, (await target.Set<UserPasskeyEntity>().SingleAsync()).SignatureCounter);
         Assert.Equal(SessionId, (await target.UserSessions.SingleAsync()).Id);
+        Assert.Equal(LoginCodeId, (await target.UserLoginCodes.SingleAsync()).Id);
         Assert.Equal(2, await target.ChatMessagesEntities.IgnoreQueryFilters().CountAsync());
         var message = await target.ChatMessagesEntities.Include(x => x.Reactions).Include(x => x.Videos).SingleAsync();
         Assert.Equal(401, message.Id);
@@ -257,6 +259,11 @@ public sealed class SqlitePostgreSqlImportTests : IDisposable
         {
             Id = SessionId, UserId = 101, CoordinatorInstanceId = "coordinator", TokenHash = SecretHash.Of("token"),
             DeviceName = "desktop", DevicePlatform = "Linux", AppVersion = "1", CreatedAt = Now, LastUsedAt = Now, ExpiresAt = Now.AddDays(1)
+        });
+        source.UserLoginCodes.Add(new UserLoginCodeEntity
+        {
+            Id = LoginCodeId, CoordinatorInstanceId = "coordinator", UserId = 101, CodeHash = SecretHash.Of("code"),
+            CreatedAt = Now, ExpiresAt = Now.AddHours(1)
         });
         source.Roles.Add(new RoleEntity { Id = 51, CoordinatorInstanceId = "coordinator", Name = "admin", Permissions = Permission.All });
         source.UserRoles.Add(new UserRoleEntity { UserId = 101, RoleId = 51 });

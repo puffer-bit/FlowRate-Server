@@ -1,15 +1,15 @@
 using Server.Application.Abstractions.Persistence;
 using Server.Application.Coordinator.Connections;
 using Server.Core.Models.User;
-using Shared.Enums.User;
+using Shared.Enums.Auth;
 using Shared.Models.DataTransferObjects;
 using Shared.Models.Notifications.CoordinatorInfo;
 
 namespace Server.Application.Coordinator.Authentication;
 
 /// <summary>
-/// The devices users are logged in from. A login with the identity starts a session; the device then logs in with the
-/// session token, which changes on every login, until the session goes unused for <see cref="Lifetime"/> or is ended.
+/// The devices of users' accounts. A device logs in by signing a challenge with its key, until it goes unused for its
+/// lifetime (<see cref="Lifetime"/>, <see cref="TemporaryLifetime"/> for temporary ones) or is removed.
 /// </summary>
 public sealed class UserSessions(
     IUserSessionRepository repository,
@@ -18,89 +18,110 @@ public sealed class UserSessions(
     TimeProvider timeProvider)
 {
     public static readonly TimeSpan Lifetime = TimeSpan.FromDays(90);
+    public static readonly TimeSpan TemporaryLifetime = TimeSpan.FromDays(1);
 
     private const string UnknownDevice = "Unknown";
 
     private DateTimeOffset Now => timeProvider.GetUtcNow();
 
-    public Task<UserSession?> FindAsync(string token) =>
+    /// <summary>A device with a key, unless it has expired.</summary>
+    public async Task<UserSession?> GetAsync(Guid deviceId) =>
+        await repository.GetAsync(coordinatorInstanceId, deviceId, Now) is { PublicKey: not null } device ? device : null;
+
+    /// <summary>The session of the earlier protocol 3 the token belongs to, unless it has expired.</summary>
+    public Task<UserSession?> FindLegacyAsync(string token) =>
         repository.FindByTokenAsync(coordinatorInstanceId, SecretHash.Of(token), Now);
 
-    /// <summary>Starts a session for a device that logged in with the identity; returns its token.</summary>
-    public async Task<string> StartAsync(int userId, DeviceInfoDTO? device, IClientConnection connection)
+    public Task<bool> IsPublicKeyTakenAsync(byte[] publicKey) => repository.IsPublicKeyTakenAsync(publicKey);
+
+    /// <summary>
+    /// Adds a device to the account of the user the connection is attached to, and tells the user's other devices.
+    /// </summary>
+    public async Task<UserSession> AddAsync(int userId, NewDevice device, DeviceInfoDTO? info,
+        DeviceLoginMethod method, IClientConnection connection)
     {
-        var token = SecretHash.CreateToken();
         var now = Now;
-        var session = new UserSession(Guid.NewGuid(), coordinatorInstanceId, userId, SecretHash.Of(token), null,
-            device?.Name ?? UnknownDevice, device?.Platform ?? string.Empty, device?.AppVersion ?? string.Empty,
-            now, now, now + Lifetime, connection.IpEndpoint);
+        var session = new UserSession(Guid.NewGuid(), coordinatorInstanceId, userId, null, null,
+            info?.Name ?? UnknownDevice, info?.Platform ?? string.Empty, info?.AppVersion ?? string.Empty,
+            now, now, now + LifetimeOf(device.IsTemporary), connection.IpEndpoint, device.PublicKey,
+            device.IsTemporary, method);
 
         await repository.DeleteExpiredAsync(now);
         await repository.AddAsync(session);
         connection.UserSessionId = session.Id;
-        return token;
+
+        var added = new AccountDeviceAddedNotification(ToDto(session, null, isOnline: true));
+        foreach (var other in connectionManager.GetUserConnections(userId))
+        {
+            if (other.ConnectionId != connection.ConnectionId)
+                other.Send(added);
+        }
+
+        return session;
     }
 
-    /// <summary>Lets the device of the session in again with the token it sent; returns the next token.</summary>
-    public async Task<string> ResumeAsync(UserSession session, string presentedToken, DeviceInfoDTO? device,
-        IClientConnection connection)
+    /// <summary>The device logged in again: it lives on for another lifetime.</summary>
+    public async Task ResumeAsync(UserSession device, DeviceInfoDTO? info, IClientConnection connection)
     {
-        var token = SecretHash.CreateToken();
         var now = Now;
-        await repository.UpdateAsync(session with
+        await repository.UpdateAsync(device with
         {
-            TokenHash = SecretHash.Of(token),
-            PreviousTokenHash = SecretHash.Of(presentedToken),
-            DeviceName = device?.Name ?? session.DeviceName,
-            DevicePlatform = device?.Platform ?? session.DevicePlatform,
-            AppVersion = device?.AppVersion ?? session.AppVersion,
+            DeviceName = info?.Name ?? device.DeviceName,
+            DevicePlatform = info?.Platform ?? device.DevicePlatform,
+            AppVersion = info?.AppVersion ?? device.AppVersion,
             LastUsedAt = now,
-            ExpiresAt = now + Lifetime,
+            ExpiresAt = now + LifetimeOf(device.IsTemporary),
             LastAddress = connection.IpEndpoint
         });
-        connection.UserSessionId = session.Id;
-        return token;
+        connection.UserSessionId = device.Id;
     }
 
-    public async Task<List<UserSessionDTO>> GetAsync(int userId, Guid? currentSessionId)
+    public async Task<List<AccountDeviceDTO>> GetAsync(int userId, Guid? currentDeviceId)
     {
         var online = connectionManager.GetUserConnections(userId)
             .Select(connection => connection.UserSessionId)
             .ToHashSet();
-        var sessions = await repository.GetByUserAsync(coordinatorInstanceId, userId, Now);
-        return sessions
-            .Select(session => new UserSessionDTO(session.Id,
-                new DeviceInfoDTO(session.DeviceName, session.DevicePlatform, session.AppVersion),
-                session.CreatedAt, session.LastUsedAt, session.ExpiresAt, session.LastAddress,
-                session.Id == currentSessionId, online.Contains(session.Id)))
+        var devices = await repository.GetByUserAsync(coordinatorInstanceId, userId, Now);
+        return devices
+            .Select(device => ToDto(device, currentDeviceId, online.Contains(device.Id)))
             .ToList();
     }
 
-    /// <summary>Ends one session of the user and disconnects its device; false when the user has no such session.</summary>
-    public async Task<bool> EndAsync(int userId, Guid sessionId)
+    /// <summary>Removes one device of the user and disconnects it; false when the user has no such device.</summary>
+    public async Task<bool> EndAsync(int userId, Guid deviceId, DeviceEndReason reason = DeviceEndReason.Revoked)
     {
-        if (!await repository.DeleteAsync(coordinatorInstanceId, userId, sessionId))
+        if (!await repository.DeleteAsync(coordinatorInstanceId, userId, deviceId))
             return false;
 
-        Disconnect(userId, new HashSet<Guid> { sessionId }, UserSessionEndReason.Revoked);
+        Disconnect(userId, new HashSet<Guid> { deviceId }, reason);
         return true;
     }
 
-    /// <summary>Ends every session of the user but <paramref name="keep"/> and disconnects their devices.</summary>
-    public async Task EndAllButAsync(int userId, Guid? keep, UserSessionEndReason reason)
+    /// <summary>Removes every device of the user but <paramref name="keep"/> and disconnects them.</summary>
+    public async Task EndAllButAsync(int userId, Guid? keep, DeviceEndReason reason = DeviceEndReason.Revoked)
     {
         var ended = await repository.DeleteAllButAsync(coordinatorInstanceId, userId, keep);
         Disconnect(userId, ended.ToHashSet(), reason);
     }
 
-    private void Disconnect(int userId, IReadOnlySet<Guid> sessionIds, UserSessionEndReason reason)
+    /// <summary>Removes the sessions of the earlier protocol 3 of a user whose account moved over to devices.</summary>
+    public Task EndLegacyAsync(int userId) => repository.DeleteLegacyAsync(coordinatorInstanceId, userId);
+
+    private static TimeSpan LifetimeOf(bool isTemporary) => isTemporary ? TemporaryLifetime : Lifetime;
+
+    private static AccountDeviceDTO ToDto(UserSession device, Guid? currentDeviceId, bool isOnline) =>
+        new(device.Id, new DeviceInfoDTO(device.DeviceName, device.DevicePlatform, device.AppVersion),
+            device.CreatedAt, device.LastUsedAt, device.ExpiresAt, device.LastAddress, device.Id == currentDeviceId,
+            isOnline, device.IsTemporary, device.AddedBy);
+
+    private void Disconnect(int userId, IReadOnlySet<Guid> deviceIds, DeviceEndReason reason)
     {
         foreach (var connection in connectionManager.GetUserConnections(userId))
         {
-            if (connection.UserSessionId is not { } id || !sessionIds.Contains(id))
+            if (connection.UserSessionId is not { } id || !deviceIds.Contains(id))
                 continue;
 
-            connection.Send(new CoordinatorUserSessionEndedNotification(reason));
+            connection.Send(new AccountDeviceEndedNotification(reason));
             connection.Close();
         }
     }

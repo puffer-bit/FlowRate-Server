@@ -76,8 +76,8 @@ public class ModerationServiceTests
         (await _service.BanAsync(actor, request)).Error;
 
     private Task<LoginOutcome> Admit(IClientConnection connection, int? id = 1) =>
-        _service.AdmitAsync(null, id, connection, () => Task.FromResult(
-            new LoginOutcome(null, _models[id ?? 1], null, AttachUserResult.Attached, "token")));
+        _service.AdmitAsync(id, connection, () => Task.FromResult(
+            new LoginOutcome(null, _models[id ?? 1], Guid.NewGuid())));
 
     [Fact]
     public async Task AccountBan_StoresDetails_ClosesEveryDevice_AndDoesNotBanOtherAccountsOnTheAddress()
@@ -216,11 +216,11 @@ public class ModerationServiceTests
         var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var device = Device(1, "192.0.2.1");
-        var login = _service.AdmitAsync(null, 1, device.Object, async () =>
+        var login = _service.AdmitAsync(1, device.Object, async () =>
         {
             entered.SetResult();
             await release.Task;
-            return new LoginOutcome(null, _models[1], null, AttachUserResult.Attached, "token");
+            return new LoginOutcome(null, _models[1], Guid.NewGuid());
         });
         await entered.Task;
         var ban = BanAsync(10, Ban());

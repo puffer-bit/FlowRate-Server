@@ -11,8 +11,19 @@ public class UserSessionEntity
 
     public int UserId { get; set; }
 
+    /// <summary>The session token of the earlier protocol 3; null for devices with a key.</summary>
     [MaxLength(32)]
-    public required byte[] TokenHash { get; set; }
+    public byte[]? TokenHash { get; set; }
+
+    /// <summary>The P-256 public key of the device (SubjectPublicKeyInfo); null for sessions of the earlier protocol 3.</summary>
+    [MaxLength(128)]
+    public byte[]? PublicKey { get; set; }
+
+    /// <summary>Not remembered by the client: the device ends after a day without a login.</summary>
+    public bool IsTemporary { get; set; }
+
+    /// <summary>How the device was added, a <c>DeviceLoginMethod</c>.</summary>
+    public int AddedBy { get; set; }
 
     [MaxLength(32)]
     public byte[]? PreviousTokenHash { get; set; }

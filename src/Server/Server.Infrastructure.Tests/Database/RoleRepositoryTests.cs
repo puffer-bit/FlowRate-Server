@@ -33,7 +33,8 @@ public sealed class RoleRepositoryTests : IDisposable
     }
 
     private Task<int> AddUserAsync(string name, string coordinatorId = CoordinatorId) =>
-        _users.AddAsync(UserModel.Create(coordinatorId, name, null, DateTimeOffset.UtcNow), Guid.NewGuid().ToString());
+        _users.AddAsync(UserModel.Create(coordinatorId, name, null, DateTimeOffset.UtcNow),
+            new UserRecoveryKeys(Guid.NewGuid().ToByteArray(), [1]));
 
     [Fact]
     public async Task SavedRoles_ComeBackLowestFirst_WithAllPermissionBits()

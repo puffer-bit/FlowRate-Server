@@ -8,9 +8,23 @@ namespace Server.Database.Entities
         [MaxLength(36)]
         public required int Id { get; set; }
         
-        /// <summary>SHA-256 of the identity the user logs in with; the identity itself is not kept.</summary>
+        /// <summary>
+        /// SHA-256 of the identity of the earlier protocol 3; null for accounts made with devices, and once the account
+        /// moved over to devices.
+        /// </summary>
         [MaxLength(32)]
-        public required byte[] IdentityHash { get; set; }
+        public byte[]? IdentityHash { get; set; }
+
+        /// <summary>
+        /// SHA-256 of the public key the recovery phrase derives (SubjectPublicKeyInfo); finds the account of a login
+        /// with the phrase. The phrase itself never reaches the server.
+        /// </summary>
+        [MaxLength(32)]
+        public byte[]? RecoveryKeyHash { get; set; }
+
+        /// <summary>The identity key of the account for end-to-end encryption (SubjectPublicKeyInfo), kept for later.</summary>
+        [MaxLength(128)]
+        public byte[]? AccountPublicKey { get; set; }
         
         [MaxLength(32)]
         public required string Username { get; set; }

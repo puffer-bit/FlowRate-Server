@@ -14,7 +14,7 @@ public static class UserEntityMapper
             entity.Roles.Select(role => role.RoleId));
     }
 
-    public static UserEntity ToEntity(this UserModel? model, byte[] identityHash)
+    public static UserEntity ToEntity(this UserModel? model, byte[]? identityHash)
     {
         if (model == null) return null!;
         return new UserEntity
