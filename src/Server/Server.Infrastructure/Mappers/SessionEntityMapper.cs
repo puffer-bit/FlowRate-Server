@@ -128,7 +128,7 @@ public static class SessionEntityMapper
             AdminUserId = model.OwnerUserId,
             Name = model.Name,
             Description = model.Description,
-            IconPath = model.IconPath,
+            IconPath = model.AvatarUrl,
             IsReadOnly = model.Options.IsReadOnly,
             IsArchived = model.IsArchived,
             IsAttachmentsAllowed = model.Options.IsAttachmentsAllowed,

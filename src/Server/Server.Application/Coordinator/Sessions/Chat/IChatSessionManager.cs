@@ -26,6 +26,8 @@ public interface IChatSessionManager
     Task<(ErrorCode? result, ChatSessionModel? session)> CreateAsync(CreateSessionModel request, int userId);
     Task<ErrorCode?> DeleteAsync(int sessionId, int userId);
     Task<ErrorCode?> ChangeGroupAsync(int sessionId, string name, int[] memberIds, int ownerId, int userId, bool leave);
+    /// <summary>The owner sets or (with null) clears the picture of a group; answers the one it replaced.</summary>
+    Task<(ErrorCode? result, string? previousAvatarUrl)> SetGroupAvatarAsync(int sessionId, string? avatarUrl, int userId);
 
     bool TryGetSession(int sessionId, [NotNullWhen(true)] out ChatSessionModel? session);
     IReadOnlyCollection<ChatSessionModel> GetAllSessions();

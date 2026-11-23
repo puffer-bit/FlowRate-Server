@@ -54,7 +54,7 @@ public static class SessionMapperExtensions
             OwnerUserId = model.OwnerUserId,
             Name = model.Name,
             Description = model.Description,
-            IconPath = model.IconPath,
+            AvatarUrl = model.AvatarUrl,
             Users = model.Users.ToDictionary(
                 x => x.Key,
                 x => new TextChatUserDTO { UserId = x.Value.UserId, IsAdmin = x.Value.IsAdmin }),

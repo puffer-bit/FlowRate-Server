@@ -45,6 +45,7 @@ public static class RequestPolicies
         CreateSessionRequest => Require(Permission.CreateSessions),
         ChangeGroupRequest request => InSession(request.SessionId, View),
         LeaveGroupRequest request => InSession(request.SessionId, View),
+        SetGroupAvatarRequest request => InSession(request.SessionId, View),
         DeleteSessionRequest request => InSession(request.SessionId, Permission.ManageSessions),
         ChangeChatSessionSettingsRequest request => InSession(request.SessionId, Permission.ManageSessions),
         ChangeHybridSessionSettingsRequest request => InSession(request.SessionId, Permission.ManageSessions),

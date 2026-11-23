@@ -34,7 +34,8 @@ public sealed class ChatSessionModel : SessionModel
     public int CreatorUserId { get; }
     public int OwnerUserId { get; private set; }
     public string? Description { get; private set; }
-    public string? IconPath { get; private set; }
+    /// <summary>The picture of a group (an avatar address); null shows the first letter of its name.</summary>
+    public string? AvatarUrl { get; private set; }
     public ChatSessionOptions Options { get; private set; }
     public bool IsArchived { get; private set; }
 
@@ -44,14 +45,14 @@ public sealed class ChatSessionModel : SessionModel
 
     public ChatSessionModel(int id, string coordinatorInstanceId, string name,
         int creatorUserId, int adminUserId, ChatSessionOptions options,
-        string? description = null, string? iconPath = null, bool isArchived = false)
+        string? description = null, string? avatarUrl = null, bool isArchived = false)
         : base(id, coordinatorInstanceId, name)
     {
         CreatorUserId = creatorUserId;
         OwnerUserId = adminUserId;
         Options = options;
         Description = description;
-        IconPath = iconPath;
+        AvatarUrl = avatarUrl;
         IsArchived = isArchived;
     }
 
@@ -75,11 +76,9 @@ public sealed class ChatSessionModel : SessionModel
 
     public void ChangeAdmin(int userId) => OwnerUserId = userId;
 
-    public void Describe(string? description, string? iconPath)
-    {
-        Description = description;
-        IconPath = iconPath;
-    }
+    public void Describe(string? description) => Description = description;
+
+    public void SetAvatar(string? avatarUrl) => AvatarUrl = avatarUrl;
 
     public void Configure(ChatSessionOptions options) => Options = options;
 
