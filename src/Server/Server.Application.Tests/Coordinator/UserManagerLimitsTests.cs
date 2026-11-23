@@ -293,10 +293,71 @@ public class UserManagerLimitsTests
         Assert.Equal(3, _manager.ConnectedUsersCount);
     }
 
-    private static IClientConnection Connection(string id)
+    [Fact]
+    public async Task Devices_TheLastConnectedIsShown_AndTheOneBeforeWhenItCloses()
+    {
+        _users.Setup(r => r.GetByIdAsync(1, It.IsAny<CancellationToken>())).ReturnsAsync(() => User(1));
+        var updated = new List<UserDevice?>();
+        _manager.UserUpdated += user => updated.Add(user.Device);
+        var desktop = new UserDevice("Windows", "Windows 11 (26100)", "x64", "0.7.1");
+        var phone = new UserDevice("Android", "Android 16", "arm64", "0.7.1");
+        var desktopConnection = Connection("desktop", desktop);
+        var phoneConnection = Connection("phone", phone);
+
+        var user = (await _manager.AttachUser(1, desktopConnection)).User!;
+        Assert.Equal(desktop, user.Device);
+        Assert.Empty(updated);
+
+        await _manager.AttachUser(1, phoneConnection);
+        Assert.Equal(phone, user.Device);
+        Assert.Equal([phone], updated);
+
+        Assert.False(_manager.DetachConnection(phoneConnection, "closed"));
+        Assert.Equal(desktop, user.Device);
+        Assert.Equal([phone, desktop], updated);
+
+        Assert.True(_manager.DetachConnection(desktopConnection, "closed"));
+        Assert.Null(user.Device);
+    }
+
+    [Fact]
+    public async Task Devices_APhone_IsShownBeforeAComputerConnectedAfterIt()
+    {
+        _users.Setup(r => r.GetByIdAsync(1, It.IsAny<CancellationToken>())).ReturnsAsync(() => User(1));
+        var phone = Connection("phone", new UserDevice("Android", "Android 16", "arm64", "0.7.1"));
+        var desktop = Connection("desktop", new UserDevice("Windows", "Windows 11 (26100)", "x64", "0.7.1"));
+        var user = (await _manager.AttachUser(1, phone)).User!;
+        var updates = 0;
+        _manager.UserUpdated += _ => updates++;
+
+        await _manager.AttachUser(1, desktop);
+
+        Assert.Equal("Android", user.Device?.Platform);
+        Assert.Equal(0, updates);
+    }
+
+    [Fact]
+    public async Task Devices_ClosingAnOlderOne_ChangesNothing()
+    {
+        _users.Setup(r => r.GetByIdAsync(1, It.IsAny<CancellationToken>())).ReturnsAsync(() => User(1));
+        var desktop = Connection("desktop", new UserDevice("Linux", "Ubuntu 26.04 LTS", "x64", "0.7.1"));
+        var phone = Connection("phone", new UserDevice("Android", "Android 16", "arm64", "0.7.1"));
+        var user = (await _manager.AttachUser(1, desktop)).User!;
+        await _manager.AttachUser(1, phone);
+        var updates = 0;
+        _manager.UserUpdated += _ => updates++;
+
+        Assert.False(_manager.DetachConnection(desktop, "closed"));
+
+        Assert.Equal("Android", user.Device?.Platform);
+        Assert.Equal(0, updates);
+    }
+
+    private static IClientConnection Connection(string id, UserDevice? device = null)
     {
         var connection = new Mock<IClientConnection>();
         connection.SetupGet(c => c.ConnectionId).Returns(id);
+        connection.SetupGet(c => c.Device).Returns(device);
         connection.SetupProperty(c => c.UserId);
         return connection.Object;
     }
