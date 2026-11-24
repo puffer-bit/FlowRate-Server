@@ -60,6 +60,14 @@ public class GatewayService : IGatewayService
         _certificate = certificate;
     }
 
+    // The response headers the browser client reads: tus uploads, ranged downloads, the ban reason
+    private static readonly string[] BrowserExposedHeaders =
+    [
+        "Location", "Upload-Offset", "Upload-Length", "Upload-Expires", "Upload-Metadata",
+        "Tus-Resumable", "Tus-Version", "Tus-Extension", "Tus-Max-Size",
+        "Content-Range", "Accept-Ranges", "Content-Disposition", "FlowRate-Ban-Reason"
+    ];
+
     public async Task StartAsync(IMessageRouter messageRouter)
     {
         if (!IPAddress.TryParse(_ip, out var address))
@@ -72,6 +80,13 @@ public class GatewayService : IGatewayService
         var builder = WebApplication.CreateEmptyBuilder(new WebApplicationOptions());
         builder.Services.AddLogging();
         builder.Services.AddRouting();
+        // The browser client is served from another origin. Media and push use a Bearer token, not cookies,
+        // so any origin may call them; the WebSocket is not subject to CORS
+        builder.Services.AddCors(cors => cors.AddDefaultPolicy(policy => policy
+            .AllowAnyOrigin()
+            .AllowAnyMethod()
+            .AllowAnyHeader()
+            .WithExposedHeaders(BrowserExposedHeaders)));
         builder.WebHost.UseKestrelCore();
         builder.WebHost.ConfigureKestrel(kestrel =>
         {
@@ -86,6 +101,8 @@ public class GatewayService : IGatewayService
         var app = builder.Build();
         var stopping = new CancellationTokenSource();
 
+        // First, so that preflight requests and refusals reach the browser too
+        app.UseCors();
         app.Use(async (context, next) =>
         {
             var ip = Server.Core.Models.Moderation.Ban.NormalizeAddress(context.Connection.RemoteIpAddress?.ToString()) ?? "";

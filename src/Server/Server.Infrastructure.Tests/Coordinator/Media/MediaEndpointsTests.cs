@@ -431,6 +431,23 @@ public sealed class MediaEndpointsTests : IDisposable
     }
 
     [Fact]
+    public async Task BrowserFromAnotherOrigin_PassesThePreflight_AndReadsTheUploadLocation()
+    {
+        var preflight = new HttpRequestMessage(HttpMethod.Options, MediaEndpoints.Uploads);
+        preflight.Headers.Add("Origin", "http://localhost:5235");
+        preflight.Headers.Add("Access-Control-Request-Method", "POST");
+        preflight.Headers.Add("Access-Control-Request-Headers", "authorization,tus-resumable,upload-length,upload-metadata");
+        using var allowed = await _http.SendAsync(preflight);
+        Assert.Equal(HttpStatusCode.NoContent, allowed.StatusCode);
+        Assert.Equal("*", allowed.Headers.GetValues("Access-Control-Allow-Origin").Single());
+
+        _http.DefaultRequestHeaders.Add("Origin", "http://localhost:5235");
+        using var created = await CreateAsync(Png.Length);
+        Assert.Equal(HttpStatusCode.Created, created.StatusCode);
+        Assert.Contains("Location", created.Headers.GetValues("Access-Control-Expose-Headers").Single().Split(','));
+    }
+
+    [Fact]
     public async Task Requests_WithoutAToken_AreRefused()
     {
         _http.DefaultRequestHeaders.Authorization = null;
