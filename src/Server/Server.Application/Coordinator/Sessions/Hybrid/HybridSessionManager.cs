@@ -57,6 +57,15 @@ public partial class HybridSessionManager : IHybridSessionManager
                 {
                     if (userIds != null && !userIds.Contains(peer.UserId))
                         continue;
+                    if (!_permissions.HasIn(peer.UserId, session.Model, Permission.ViewSessions))
+                    {
+                        // Stop receiving media as well as sending it after channel access is revoked.
+                        var leaveResult = await session.PeerManager.RemovePeerAsync(peer.UserId);
+                        if (leaveResult != null)
+                            _logger.LogError("Removing user {UserId} from hidden session {SessionId} failed: {Error}",
+                                peer.UserId, session.Model.Id, leaveResult);
+                        continue;
+                    }
                     if (peer.IsMicrophoneMuted || _permissions.HasIn(peer.UserId, session.Model,
                             Permission.ViewSessions | Permission.Speak))
                         continue;

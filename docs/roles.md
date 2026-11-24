@@ -41,9 +41,21 @@ be renamed, given a color, moved, deleted, assigned or unassigned. Only its perm
 | `ApproveMembers`            | Approving or rejecting users who wait to enter a hybrid session.                |
 | `ManageMessages`            | Deleting other users' chat messages.                                            |
 | `ManageUsers`               | Changing other users' names and avatars.                                        |
+| `ViewSessions`              | Access to server channels; channel overrides can further restrict visibility.   |
 
 A user's permissions are the bitwise OR of their roles and `@everyone`. If the result contains `Administrator`,
 it becomes `Permission.All`.
+
+Without coordinator-wide `ViewSessions`, a user cannot see or access any server channel, even if a channel
+override allows viewing. Direct messages, groups and their calls still use membership rather than server roles.
+To restrict channels to selected roles, remove `ViewSessions` from `@everyone` and grant it to the roles that
+need channels. Leaving it out of one role does not cancel a grant from `@everyone` or another role.
+Revoking channel visibility updates connected users' channel lists and removes them from affected voice channels.
+
+Clients can distinguish missing channel permission from an empty channel list using the existing
+`CoordinatorRolesResponse.Permissions` and `CoordinatorPermissionsChangedNotification.Permissions` fields.
+The channel switch should be hidden only when the coordinator-wide `ViewSessions` flag is absent, regardless
+of the number of visible channels. No new protocol fields are required.
 
 ### Role order
 

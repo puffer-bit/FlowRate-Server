@@ -108,7 +108,13 @@ public sealed class CoordinatorRoles : ICoordinatorPermissions, IDisposable
     private Permission Resolve(SessionModel session, IReadOnlyCollection<int> roleIds)
     {
         var roles = Roles;
-        return SessionPermissions.Resolve(roles.PermissionsOf(roleIds), session.PermissionOverrides,
+        var permissions = roles.PermissionsOf(roleIds);
+        // Viewing server channels requires the coordinator-wide right. Channel overrides
+        // can restrict the visible channels, but cannot give access to channels as a whole.
+        if (!permissions.HasFlag(Permission.ViewSessions))
+            return Permission.None;
+
+        return SessionPermissions.Resolve(permissions, session.PermissionOverrides,
             roles.Everyone.Id, roleIds);
     }
 
