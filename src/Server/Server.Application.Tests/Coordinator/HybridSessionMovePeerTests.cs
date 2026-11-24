@@ -94,6 +94,9 @@ public class HybridSessionMovePeerTests : IDisposable
         var replaced = Assert.Single(_events.Of<HybridSessionPeerReplacedEvent>());
         Assert.Equal((RoomId, UserId, "phone"),
             (replaced.SessionId, replaced.UserId, replaced.ReplacedConnectionId));
+        var departure = Assert.Single(_events.Of<HybridSessionPeerLeftEvent>());
+        Assert.True(_events.Events.ToList().IndexOf(replaced) < _events.Events.ToList().IndexOf(departure),
+            "The old device must receive the replacement notice before a departure closes its session.");
         await _manager.RemoveConnectionFromAllSessionsAsync(UserId, "phone");
         Assert.True(_peers[HallId].HasPeer(UserId));
     }

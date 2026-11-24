@@ -250,6 +250,12 @@ public partial class HybridSessionPeerManager : IHybridSessionPeerManager
         LockedAsync(() => RemovePeerLockedAsync(userId, new HybridSessionPeerLeftEvent(Model.Id, userId)),
             ErrorCode.TimedOut);
 
+    public Task<ErrorCode?> RemoveReplacedPeerAsync(int userId) => LockedAsync(() =>
+    {
+        _peers.TryGetValue(userId, out var peer);
+        return RemovePeerLockedAsync(userId, new HybridSessionPeerLeftEvent(Model.Id, userId), peer?.ConnectionId);
+    }, ErrorCode.TimedOut);
+
     public Task<ErrorCode?> RemovePeerOfConnectionAsync(int userId, string connectionId) =>
         LockedAsync(() => _peers.TryGetValue(userId, out var peer) && peer.ConnectionId == connectionId
                 ? RemovePeerLockedAsync(userId, new HybridSessionPeerLeftEvent(Model.Id, userId))
@@ -326,7 +332,8 @@ public partial class HybridSessionPeerManager : IHybridSessionPeerManager
     public IReadOnlyDictionary<int, PeerSnapshot> GetAllPeerSnapshots() =>
         _peers.Values.ToDictionary(peer => peer.UserId, peer => peer.ToSnapshot());
 
-    private async Task<ErrorCode?> RemovePeerLockedAsync<TEvent>(int userId, TEvent removedEvent)
+    private async Task<ErrorCode?> RemovePeerLockedAsync<TEvent>(int userId, TEvent removedEvent,
+        string? replacedConnectionId = null)
         where TEvent : HybridSessionUpdatedEvent
     {
         if (!_peers.TryRemove(userId, out var peer))
@@ -340,6 +347,11 @@ public partial class HybridSessionPeerManager : IHybridSessionPeerManager
         peer.Close();
         // Membership is already removed. Clients can release tracks and animate the row immediately,
         // without waiting for SFU round trips. Preserve the concrete event type for dispatch.
+        // A normal departure closes the old client's session and detaches its kick handler.
+        // Tell it why it lost membership first, while it can still show the notice and play the sound.
+        if (replacedConnectionId != null)
+            await _coordinatorEventBus.PublishAsync(
+                new HybridSessionPeerReplacedEvent(Model.Id, userId, replacedConnectionId));
         await _coordinatorEventBus.PublishAsync(removedEvent);
 
         // Without a reachable node the SFU state is already dropped, so leaving must not depend on it

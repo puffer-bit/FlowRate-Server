@@ -43,6 +43,37 @@ public class HybridSessionPeerManagerTests
     private static HybridSessionPeerState StateOf(HybridSessionPeerManager manager, int userId) =>
         manager.GetAllPeerSnapshots()[userId].State;
 
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task RemoveReplacedPeer_NotifiesTheDeviceBeforeDeparture(bool nodeAvailable)
+    {
+        using var manager = await CreateManager();
+        if (!nodeAvailable) await manager.ChangeGatewayAsync(null);
+        Assert.Null((await manager.AddPeerAsync(GuestId, "epoch", "phone")).result);
+
+        Assert.Null(await manager.RemoveReplacedPeerAsync(GuestId));
+
+        Assert.False(manager.HasPeer(GuestId));
+        var replaced = Assert.Single(_events.Of<HybridSessionPeerReplacedEvent>());
+        Assert.Equal(new HybridSessionPeerReplacedEvent(7, GuestId, "phone"), replaced);
+        var left = Assert.Single(_events.Of<HybridSessionPeerLeftEvent>());
+        var events = _events.Events.ToList();
+        Assert.True(events.IndexOf(replaced) < events.IndexOf(left));
+        if (nodeAvailable) Assert.Equal(1, _gateway.CallCount("ClosePeerTransport"));
+    }
+
+    [Fact]
+    public async Task RemoveReplacedPeer_MissingPeerDoesNotNotifyADevice()
+    {
+        using var manager = await CreateManager();
+
+        Assert.Equal(ErrorCode.PeerNotFound, await manager.RemoveReplacedPeerAsync(GuestId));
+
+        Assert.Empty(_events.Of<HybridSessionPeerReplacedEvent>());
+        Assert.Empty(_events.Of<HybridSessionPeerLeftEvent>());
+    }
+
     [Fact]
     public async Task Camera_AutoRoutesToConnectedPeers_AndLateJoiners_WithoutScreenAudio()
     {

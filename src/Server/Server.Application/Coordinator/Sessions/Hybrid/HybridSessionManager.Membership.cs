@@ -1,4 +1,3 @@
-using Server.Application.Coordinator.Events;
 using Shared.Enums;
 using Shared.Models.Media.Transport;
 
@@ -35,14 +34,6 @@ public partial class HybridSessionManager
         finally { _callsLock.Release(); }
     }
 
-    private async Task<ErrorCode?> ReleaseMediaPeerAsync(IHybridSession session, int userId)
-    {
-        session.PeerManager.TryGetPeerConnection(userId, out var previous);
-        var error = await session.PeerManager.RemovePeerAsync(userId);
-        if (error is not (null or ErrorCode.PeerNotFound)) return error;
-        if (previous != null)
-            await _coordinatorEventBus.PublishAsync(
-                new HybridSessionPeerReplacedEvent(session.Model.Id, userId, previous));
-        return null;
-    }
+    private Task<ErrorCode?> ReleaseMediaPeerAsync(IHybridSession session, int userId) =>
+        session.PeerManager.RemoveReplacedPeerAsync(userId);
 }

@@ -231,7 +231,8 @@ public partial class HybridSessionManager
     }
 
     /// <summary>Takes the user out of the call; the call ends with its last member.</summary>
-    private async Task<ErrorCode?> LeaveAsync(Call call, int userId, int? kickedBy = null, string? reason = null)
+    private async Task<ErrorCode?> LeaveAsync(Call call, int userId, int? kickedBy = null, string? reason = null,
+        bool replaced = false)
     {
         if (call.Session is { } session && session.PeerManager.HasPeer(userId))
         {
@@ -239,7 +240,9 @@ public partial class HybridSessionManager
             {
                 var error = kickedBy is { } initiator
                     ? await session.PeerManager.KickPeerAsync(initiator, userId, reason)
-                    : await session.PeerManager.RemovePeerAsync(userId);
+                    : replaced
+                        ? await ReleaseMediaPeerAsync(session, userId)
+                        : await session.PeerManager.RemovePeerAsync(userId);
                 if (error is not (null or ErrorCode.PeerNotFound))
                 {
                     _logger.LogWarning("Removing user {UserId} from call {CallId} failed: {Error}", userId, call.Id, error);
@@ -266,7 +269,7 @@ public partial class HybridSessionManager
         foreach (var other in _calls.Values.Where(c => c != joining && c.State == ChatCallState.Active
                      && c.IsJoined(userId)).ToList())
         {
-            var error = await LeaveAsync(other, userId);
+            var error = await LeaveAsync(other, userId, replaced: true);
             if (error != null) return error;
         }
         foreach (var session in _sessions.Values.Where(s => s.Model.CallDevices == null

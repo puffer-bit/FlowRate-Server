@@ -128,7 +128,7 @@ public sealed class ChatCallTests : IDisposable
         peers.Setup(p => p.AddPeerAsync(It.IsAny<int>(), It.IsAny<string>(), It.IsAny<string>(), false, false))
             .Callback((int user, string _, string _, bool _, bool _) => members.Add(user))
             .ReturnsAsync((null, null));
-        peers.Setup(p => p.RemovePeerAsync(It.IsAny<int>()))
+        peers.Setup(p => p.RemoveReplacedPeerAsync(It.IsAny<int>()))
             .Callback((int user) => members.Remove(user)).ReturnsAsync((ErrorCode?)null);
         var model = HybridSessionModel.Create("server", "Voice", 10, Shared.Enums.WebRTC.WebRTCEngine.Mediasoup);
         model.Id = 20;
@@ -260,10 +260,8 @@ public sealed class ChatCallTests : IDisposable
         await Act(id, ChatCallAction.Start);
         await Act(id, ChatCallAction.Join, 2, "callee");
         _peers.Setup(p => p.HasPeer(2)).Returns(true);
-        string? previous = "callee";
-        _peers.Setup(p => p.TryGetPeerConnection(2, out previous)).Returns(true);
         Assert.Null((await Act(id, ChatCallAction.Join, 2, "callee-other")).Error);
-        _peers.Verify(p => p.RemovePeerAsync(2), Times.Once);
+        _peers.Verify(p => p.RemoveReplacedPeerAsync(2), Times.Once);
         Assert.Contains(_sent, s => s.Device == "callee" && !s.Call.IsSelectedDevice);
         Assert.True(_sent.Last(s => s.Device == "callee-other").Call.IsSelectedDevice);
         Assert.Equal(ErrorCode.NotMember, (await Act(id, ChatCallAction.Leave, 2, "callee")).Error);
@@ -384,10 +382,10 @@ public sealed class ChatCallTests : IDisposable
         var channel = await AddVoiceChannelAsync(1, 2);
         var id = Guid.NewGuid();
         await Act(id, ChatCallAction.Start);
-        channel.Verify(p => p.RemovePeerAsync(1), Times.Once);
-        channel.Verify(p => p.RemovePeerAsync(2), Times.Never);
+        channel.Verify(p => p.RemoveReplacedPeerAsync(1), Times.Once);
+        channel.Verify(p => p.RemoveReplacedPeerAsync(2), Times.Never);
         await Act(id, ChatCallAction.Join, 2, "callee");
-        channel.Verify(p => p.RemovePeerAsync(2), Times.Once);
+        channel.Verify(p => p.RemoveReplacedPeerAsync(2), Times.Once);
         await _manager.LeaveCallsAsync(2);
         Assert.False(_manager.IsInCall(2));
         Assert.True(_manager.IsInCall(1));
@@ -399,9 +397,12 @@ public sealed class ChatCallTests : IDisposable
         var channel = await AddVoiceChannelAsync();
         var id = Guid.NewGuid();
         await Act(id, ChatCallAction.Start);
+        _peers.Setup(p => p.HasPeer(1)).Returns(true);
 
         Assert.Null((await _manager.JoinPeerAsync(20, 1, "epoch", "caller-other")).result);
 
+        _peers.Verify(p => p.RemoveReplacedPeerAsync(1), Times.Once);
+        _peers.Verify(p => p.RemovePeerAsync(1), Times.Never);
         Assert.False(_manager.IsInCall(1));
         channel.Verify(p => p.AddPeerAsync(1, "epoch", "caller-other", false, false), Times.Once);
         Assert.Equal(ChatCallState.Ended, _sent.Last(s => s.Device == "caller").Call.State);
@@ -429,7 +430,7 @@ public sealed class ChatCallTests : IDisposable
 
         Assert.Null((await joining).result);
         Assert.Null((await calling).Error);
-        channel.Verify(p => p.RemovePeerAsync(1), Times.Once);
+        channel.Verify(p => p.RemoveReplacedPeerAsync(1), Times.Once);
         Assert.True(_manager.IsInCall(1));
     }
 
@@ -442,6 +443,7 @@ public sealed class ChatCallTests : IDisposable
         await Act(Guid.NewGuid(), ChatCallAction.Start);
         _peers.Setup(p => p.HasPeer(1)).Returns(true);
         _peers.Setup(p => p.RemovePeerAsync(1)).ReturnsAsync(ErrorCode.TimedOut);
+        _peers.Setup(p => p.RemoveReplacedPeerAsync(1)).ReturnsAsync(ErrorCode.TimedOut);
 
         var error = joiningCall
             ? (await Act(Guid.NewGuid(), ChatCallAction.Start, device: "caller-other", chat: 8)).Error

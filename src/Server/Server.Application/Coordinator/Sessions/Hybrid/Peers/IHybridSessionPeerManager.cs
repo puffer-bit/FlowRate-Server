@@ -35,6 +35,8 @@ public interface IHybridSessionPeerManager : IDisposable
     Task<ErrorCode?> RejectPeerAsync(int initiatorId, int userId, string? reason = null);
     Task<ErrorCode?> KickPeerAsync(int initiatorId, int userId, string? reason = null);
     Task<ErrorCode?> RemovePeerAsync(int userId);
+    /// <summary>Releases membership, notifying the previous device before announcing the departure.</summary>
+    Task<ErrorCode?> RemoveReplacedPeerAsync(int userId);
     /// <summary>Removes the peer only while it takes part from this connection.</summary>
     Task<ErrorCode?> RemovePeerOfConnectionAsync(int userId, string connectionId);
     Task KickAllPeersAsync(string? reason = null);
