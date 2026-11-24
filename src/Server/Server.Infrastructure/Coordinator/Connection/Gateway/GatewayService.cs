@@ -134,7 +134,10 @@ public class GatewayService : IGatewayService
             remoteAddress = remoteAddress.MapToIPv4();
         var ip = remoteAddress?.ToString() ?? string.Empty;
 
+        // A browser cannot set headers on a WebSocket: it names the version in the query
         var clientVersion = context.Request.Headers[ProtocolVersion.Header].ToString();
+        if (clientVersion.Length == 0)
+            clientVersion = context.Request.Query[ProtocolVersion.Header].ToString();
         if (!ProtocolVersion.IsSupported(clientVersion))
         {
             _logger.LogInformation("Rejected a connection from {Ip}: protocol version '{ClientVersion}' is outside {MinVersion}..{Version}.",
