@@ -124,6 +124,10 @@ public sealed class ChatCallTests : IDisposable
         var members = users.ToHashSet();
         var peers = new Mock<IHybridSessionPeerManager>();
         peers.Setup(p => p.HasPeer(It.IsAny<int>())).Returns((int user) => members.Contains(user));
+        peers.Setup(p => p.GetAllPeerSnapshots()).Returns(new Dictionary<int, PeerSnapshot>());
+        peers.Setup(p => p.AddPeerAsync(It.IsAny<int>(), It.IsAny<string>(), It.IsAny<string>(), false, false))
+            .Callback((int user, string _, string _, bool _, bool _) => members.Add(user))
+            .ReturnsAsync((null, null));
         peers.Setup(p => p.RemovePeerAsync(It.IsAny<int>()))
             .Callback((int user) => members.Remove(user)).ReturnsAsync((ErrorCode?)null);
         var model = HybridSessionModel.Create("server", "Voice", 10, Shared.Enums.WebRTC.WebRTCEngine.Mediasoup);
@@ -255,9 +259,15 @@ public sealed class ChatCallTests : IDisposable
         var id = Guid.NewGuid();
         await Act(id, ChatCallAction.Start);
         await Act(id, ChatCallAction.Join, 2, "callee");
-        Assert.Equal(ErrorCode.CallAnsweredElsewhere, (await Act(id, ChatCallAction.Join, 2, "callee-other")).Error);
-        Assert.Equal(ErrorCode.NotMember, (await Act(id, ChatCallAction.Leave, 2, "callee-other")).Error);
-        Assert.Null((await Act(id, ChatCallAction.Join, 2, "callee")).Error);
+        _peers.Setup(p => p.HasPeer(2)).Returns(true);
+        string? previous = "callee";
+        _peers.Setup(p => p.TryGetPeerConnection(2, out previous)).Returns(true);
+        Assert.Null((await Act(id, ChatCallAction.Join, 2, "callee-other")).Error);
+        _peers.Verify(p => p.RemovePeerAsync(2), Times.Once);
+        Assert.Contains(_sent, s => s.Device == "callee" && !s.Call.IsSelectedDevice);
+        Assert.True(_sent.Last(s => s.Device == "callee-other").Call.IsSelectedDevice);
+        Assert.Equal(ErrorCode.NotMember, (await Act(id, ChatCallAction.Leave, 2, "callee")).Error);
+        Assert.Null((await Act(id, ChatCallAction.Join, 2, "callee-other")).Error);
     }
 
     [Fact]
@@ -381,6 +391,77 @@ public sealed class ChatCallTests : IDisposable
         await _manager.LeaveCallsAsync(2);
         Assert.False(_manager.IsInCall(2));
         Assert.True(_manager.IsInCall(1));
+    }
+
+    [Fact]
+    public async Task JoiningChannelOnAnotherDevice_EndsTheCall()
+    {
+        var channel = await AddVoiceChannelAsync();
+        var id = Guid.NewGuid();
+        await Act(id, ChatCallAction.Start);
+
+        Assert.Null((await _manager.JoinPeerAsync(20, 1, "epoch", "caller-other")).result);
+
+        Assert.False(_manager.IsInCall(1));
+        channel.Verify(p => p.AddPeerAsync(1, "epoch", "caller-other", false, false), Times.Once);
+        Assert.Equal(ChatCallState.Ended, _sent.Last(s => s.Device == "caller").Call.State);
+    }
+
+    [Fact]
+    public async Task ConcurrentChannelJoinAndCallStart_ReleaseTheChannelBeforeCalling()
+    {
+        var channel = await AddVoiceChannelAsync();
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        channel.Setup(p => p.AddPeerAsync(1, "epoch", "caller", false, false))
+            .Returns(async () =>
+            {
+                entered.SetResult();
+                await release.Task;
+                channel.Setup(p => p.HasPeer(1)).Returns(true);
+                return ((ErrorCode?)null, (Shared.Models.Media.Transport.TransportData?)null);
+            });
+        var joining = _manager.JoinPeerAsync(20, 1, "epoch", "caller");
+        await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        var calling = Act(Guid.NewGuid(), ChatCallAction.Start, device: "caller-other");
+        Assert.False(calling.IsCompleted);
+        release.SetResult();
+
+        Assert.Null((await joining).result);
+        Assert.Null((await calling).Error);
+        channel.Verify(p => p.RemovePeerAsync(1), Times.Once);
+        Assert.True(_manager.IsInCall(1));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task FailureToReleaseCall_PreventsJoiningOtherMedia(bool joiningCall)
+    {
+        var channel = await AddVoiceChannelAsync();
+        await Act(Guid.NewGuid(), ChatCallAction.Start);
+        _peers.Setup(p => p.HasPeer(1)).Returns(true);
+        _peers.Setup(p => p.RemovePeerAsync(1)).ReturnsAsync(ErrorCode.TimedOut);
+
+        var error = joiningCall
+            ? (await Act(Guid.NewGuid(), ChatCallAction.Start, device: "caller-other", chat: 8)).Error
+            : (await _manager.JoinPeerAsync(20, 1, "epoch", "caller-other")).result;
+
+        Assert.Equal(ErrorCode.TimedOut, error);
+        Assert.True(_manager.IsInCall(1));
+        channel.Verify(p => p.AddPeerAsync(1, It.IsAny<string>(), It.IsAny<string>(), false, false), Times.Never);
+    }
+
+    [Fact]
+    public async Task MediaJoinAuthorizedBeforeCallTakeover_IsRejectedAfterwards()
+    {
+        var id = Guid.NewGuid();
+        await Act(id, ChatCallAction.Start);
+        await Act(id, ChatCallAction.Join, 1, "caller-other");
+
+        Assert.Equal(ErrorCode.NotMember,
+            (await _manager.JoinPeerAsync(7, 1, "old-epoch", "caller")).result);
+        _peers.Verify(p => p.AddPeerAsync(It.IsAny<int>(), It.IsAny<string>(), "caller", false, false), Times.Never);
     }
 
     [Fact]

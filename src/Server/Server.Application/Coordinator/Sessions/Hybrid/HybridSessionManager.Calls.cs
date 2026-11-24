@@ -171,7 +171,17 @@ public partial class HybridSessionManager
     private async Task<ErrorCode?> JoinAsync(Call call, int userId, string connectionId)
     {
         if (call.Devices.TryGetValue(userId, out var selected))
-            return selected == connectionId ? null : ErrorCode.CallAnsweredElsewhere;
+        {
+            if (selected == connectionId) return null;
+            if (call.Session is { } current && current.PeerManager.HasPeer(userId))
+            {
+                var error = await ReleaseMediaPeerAsync(current, userId);
+                if (error != null) return error;
+            }
+            call.Devices[userId] = connectionId;
+            PublishCall(call, []);
+            return null;
+        }
         if (call.Session is { } session && session.Model.IsFull(call.Devices.Count)) return ErrorCode.SessionFull;
         var leaveError = await LeaveOtherMediaAsync(userId, call);
         if (leaveError != null) return leaveError;
@@ -223,9 +233,6 @@ public partial class HybridSessionManager
     /// <summary>Takes the user out of the call; the call ends with its last member.</summary>
     private async Task<ErrorCode?> LeaveAsync(Call call, int userId, int? kickedBy = null, string? reason = null)
     {
-        call.Devices.TryRemove(userId, out _);
-        if (call.Participants.TryGetValue(userId, out var participant))
-            participant.State = ChatCallParticipantState.Left;
         if (call.Session is { } session && session.PeerManager.HasPeer(userId))
         {
             try
@@ -234,25 +241,39 @@ public partial class HybridSessionManager
                     ? await session.PeerManager.KickPeerAsync(initiator, userId, reason)
                     : await session.PeerManager.RemovePeerAsync(userId);
                 if (error is not (null or ErrorCode.PeerNotFound))
+                {
                     _logger.LogWarning("Removing user {UserId} from call {CallId} failed: {Error}", userId, call.Id, error);
+                    return error;
+                }
             }
-            catch (Exception ex) { _logger.LogError(ex, "Removing user {UserId} from call {CallId} failed", userId, call.Id); }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Removing user {UserId} from call {CallId} failed", userId, call.Id);
+                return ErrorCode.Internal;
+            }
         }
+        call.Devices.TryRemove(userId, out _);
+        if (call.Participants.TryGetValue(userId, out var participant))
+            participant.State = ChatCallParticipantState.Left;
         if (call.Devices.IsEmpty) await FinishCallAsync(call, null, userId);
         else PublishCall(call, []);
         return null;
     }
 
     /// <summary>Joining a call leaves the voice channels and the other call the user was in.</summary>
-    private async Task<ErrorCode?> LeaveOtherMediaAsync(int userId, Call? joining)
+    private async Task<ErrorCode?> LeaveOtherMediaAsync(int userId, Call? joining, int? joiningSessionId = null)
     {
         foreach (var other in _calls.Values.Where(c => c != joining && c.State == ChatCallState.Active
                      && c.IsJoined(userId)).ToList())
-            await LeaveAsync(other, userId);
-        foreach (var session in _sessions.Values.Where(s => s.Model.CallDevices == null))
+        {
+            var error = await LeaveAsync(other, userId);
+            if (error != null) return error;
+        }
+        foreach (var session in _sessions.Values.Where(s => s.Model.CallDevices == null
+                     && s.Model.Id != joiningSessionId))
         {
             if (!session.PeerManager.HasPeer(userId)) continue;
-            var error = await session.PeerManager.RemovePeerAsync(userId);
+            var error = await ReleaseMediaPeerAsync(session, userId);
             if (error is not (null or ErrorCode.PeerNotFound)) return error;
         }
         return null;

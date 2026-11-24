@@ -81,6 +81,61 @@ public class HybridSessionMovePeerTests : IDisposable
         _manager.MovePeerAsync(ModeratorId, sessionId, userId, targetId);
 
     [Fact]
+    public async Task JoiningAnotherChannel_ReleasesTheOldDeviceAndItsTransport()
+    {
+        await JoinAsync(RoomId, UserId, "phone");
+        var closed = _gateway.CallCount("ClosePeerTransport");
+
+        Assert.Null((await _manager.JoinPeerAsync(HallId, UserId, "epoch", "desktop")).result);
+
+        Assert.False(_peers[RoomId].HasPeer(UserId));
+        Assert.True(_peers[HallId].HasPeer(UserId));
+        Assert.True(_gateway.CallCount("ClosePeerTransport") > closed);
+        var replaced = Assert.Single(_events.Of<HybridSessionPeerReplacedEvent>());
+        Assert.Equal((RoomId, UserId, "phone"),
+            (replaced.SessionId, replaced.UserId, replaced.ReplacedConnectionId));
+        await _manager.RemoveConnectionFromAllSessionsAsync(UserId, "phone");
+        Assert.True(_peers[HallId].HasPeer(UserId));
+    }
+
+    [Fact]
+    public async Task ConcurrentChannelJoins_LeaveOnlyOneMembership()
+    {
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        _events.BeforePublish = async evt =>
+        {
+            if (evt is HybridSessionPeerJoinedEvent { SessionId: RoomId })
+            {
+                entered.TrySetResult();
+                await release.Task;
+            }
+        };
+        var first = _manager.JoinPeerAsync(RoomId, UserId, "epoch", "phone");
+        await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        var second = _manager.JoinPeerAsync(HallId, UserId, "epoch", "desktop");
+        Assert.False(second.IsCompleted);
+        release.SetResult();
+        Assert.Null((await first).result);
+        Assert.Null((await second).result);
+        Assert.False(_peers[RoomId].HasPeer(UserId));
+        Assert.True(_peers[HallId].HasPeer(UserId));
+    }
+
+    [Fact]
+    public async Task JoiningFullChannel_KeepsTheOriginalMembership()
+    {
+        await JoinAsync(RoomId, UserId);
+        await JoinAsync(HallId, ModeratorId);
+        await JoinAsync(HallId, OtherUserId);
+
+        Assert.Equal(ErrorCode.SessionFull,
+            (await _manager.JoinPeerAsync(HallId, UserId, "epoch", "phone")).result);
+        Assert.True(_peers[RoomId].HasPeer(UserId));
+        Assert.False(_peers[HallId].HasPeer(UserId));
+    }
+
+    [Fact]
     public async Task Move_TakesThePeerOut_AndKeepsAPlaceInTheTarget_PastCapacityAndApproval()
     {
         await JoinAsync(HallId, ModeratorId);

@@ -10,6 +10,13 @@ public partial class HybridSessionManager
 
     public async Task<ErrorCode?> MovePeerAsync(int initiatorId, int sessionId, int userId, int targetSessionId)
     {
+        await _callsLock.WaitAsync();
+        try { return await MovePeerLockedAsync(initiatorId, sessionId, userId, targetSessionId); }
+        finally { _callsLock.Release(); }
+    }
+
+    private async Task<ErrorCode?> MovePeerLockedAsync(int initiatorId, int sessionId, int userId, int targetSessionId)
+    {
         if (initiatorId == userId)
             return ErrorCode.CannotTargetSelf;
         if (sessionId == targetSessionId)

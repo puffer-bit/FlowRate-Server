@@ -13,6 +13,10 @@ namespace Server.Application.Coordinator.Sessions.Hybrid;
 public interface IHybridSessionManager : IDisposable
 {
     Task LoadAsync();
+    /// <summary>Joins from one device, releasing the user's other channel or call first.</summary>
+    Task<(ErrorCode? result, Shared.Models.Media.Transport.TransportData? transportData)> JoinPeerAsync(
+        int sessionId, int userId, string clientEpoch, string? connectionId = null,
+        bool pastCapacity = false, bool mayApprove = false);
     /// <summary>Whether the user takes part in a chat call.</summary>
     bool IsInCall(int userId);
     /// <summary>Sends the running calls of the user's chats to a connection that has just loaded them.</summary>

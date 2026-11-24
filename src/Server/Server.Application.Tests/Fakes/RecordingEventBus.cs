@@ -16,9 +16,11 @@ internal sealed class RecordingEventBus : ICoordinatorEventBus
     public IReadOnlyList<TEvent> Of<TEvent>() =>
         _events.Where(e => e.PublishedAs == typeof(TEvent)).Select(e => (TEvent)e.Event).ToList();
 
-    public Task PublishAsync<TEvent>(TEvent @event, CancellationToken ct = default)
+    public Func<object, Task>? BeforePublish { get; set; }
+
+    public async Task PublishAsync<TEvent>(TEvent @event, CancellationToken ct = default)
     {
+        if (BeforePublish != null) await BeforePublish(@event!);
         _events.Enqueue((typeof(TEvent), @event!));
-        return Task.CompletedTask;
     }
 }

@@ -35,24 +35,18 @@ public class HybridSessionJoinHandler : HybridSessionRequestHandler<HybridSessio
 
     protected override int GetSessionId(HybridSessionJoinRequest request) => request.SessionId;
 
-    // Joining from another device takes the peer over from the one the user was on
-    protected override async Task<BaseMessage> HandleAsync(HybridSessionJoinRequest request, IHybridSession session,
-        string connectionId)
+    protected override Task<BaseMessage> HandleAsync(HybridSessionJoinRequest request, IHybridSession session,
+        string connectionId) => JoinAsync(request, session, connectionId);
+
+    protected override Task<BaseMessage> HandleAsync(HybridSessionJoinRequest request, IHybridSession session) =>
+        JoinAsync(request, session, null);
+
+    private async Task<BaseMessage> JoinAsync(HybridSessionJoinRequest request, IHybridSession session,
+        string? connectionId)
     {
-        // Entering a voice channel hangs up the call the user was in
-        if (session.Model.CallDevices == null && _callSessions.IsInCall(request.SenderId))
-            await _callSessions.LeaveCallsAsync(request.SenderId);
-        var (result, transportData) = await session.PeerManager.AddPeerAsync(request.SenderId,
+        var (result, transportData) = await _callSessions.JoinPeerAsync(session.Model.Id, request.SenderId,
             request.ClientEpoch ?? string.Empty, connectionId, MayJoinPastCapacity(request.SenderId, session),
             MayApprove(request.SenderId, session));
-        return request.Answer(result, () => request.ToResponse(transportData));
-    }
-
-    protected override async Task<BaseMessage> HandleAsync(HybridSessionJoinRequest request, IHybridSession session)
-    {
-        var (result, transportData) = await session.PeerManager.AddPeerAsync(request.SenderId,
-            request.ClientEpoch ?? string.Empty, pastCapacity: MayJoinPastCapacity(request.SenderId, session),
-            mayApprove: MayApprove(request.SenderId, session));
         return request.Answer(result, () => request.ToResponse(transportData));
     }
 }

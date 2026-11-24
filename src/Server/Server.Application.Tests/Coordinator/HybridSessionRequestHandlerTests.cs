@@ -101,12 +101,12 @@ public class HybridSessionRequestHandlerTests
     [Fact]
     public async Task Join_TakesPartFromTheConnectionOfTheRequest()
     {
-        _peers.Setup(p => p.AddPeerAsync(GuestId, It.IsAny<string>(), "desktop", false))
+        _sessions.Setup(p => p.JoinPeerAsync(SessionId, GuestId, It.IsAny<string>(), "desktop", false, false))
             .ReturnsAsync((null, null));
 
         await _join.HandleMessage(new HybridSessionJoinRequest(SessionId) { SenderId = GuestId }, "desktop");
 
-        _peers.Verify(p => p.AddPeerAsync(GuestId, It.IsAny<string>(), "desktop", false), Times.Once);
+        _sessions.Verify(p => p.JoinPeerAsync(SessionId, GuestId, It.IsAny<string>(), "desktop", false, false), Times.Once);
     }
 
     [Theory]
@@ -119,11 +119,11 @@ public class HybridSessionRequestHandlerTests
             .Returns(mayMove);
         var sender = new Mock<IMessageSender>();
         var join = new HybridSessionJoinHandler(_sessions.Object, sender.Object, permissions.Object);
-        _peers.Setup(p => p.AddPeerAsync(GuestId, It.IsAny<string>(), "desktop", mayMove))
+        _sessions.Setup(p => p.JoinPeerAsync(SessionId, GuestId, It.IsAny<string>(), "desktop", mayMove, false))
             .ReturnsAsync((null, null));
 
         await join.HandleMessage(new HybridSessionJoinRequest(SessionId) { SenderId = GuestId }, "desktop");
 
-        _peers.Verify(p => p.AddPeerAsync(GuestId, It.IsAny<string>(), "desktop", mayMove), Times.Once);
+        _sessions.Verify(p => p.JoinPeerAsync(SessionId, GuestId, It.IsAny<string>(), "desktop", mayMove, false), Times.Once);
     }
 }
