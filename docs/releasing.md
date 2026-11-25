@@ -2,7 +2,7 @@
 
 The release version comes from `InformationalVersion` in
 `src/Server/Server.Asp/Server.Asp.csproj`. Keep `src/Shared` at the tested commit;
-the client must support the server's protocol range (currently 4–5).
+the client must support the server's protocol range (currently 3 only).
 
 ## Validate the candidate
 

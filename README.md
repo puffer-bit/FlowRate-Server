@@ -17,7 +17,7 @@ Deploy it on your own Linux server, then share the server address with your comm
 Personal chats and groups belong to their coordinator and use persistent membership, separate from
 server channels and role permissions. Only participants receive their messages and attachments;
 server administration permissions do not grant access to personal conversations. A compatible
-protocol 5 client is required. Existing text chats remain server channels after the database migration.
+protocol 3 client is required. Existing text chats remain server channels after the database migration.
 Membership is stored in `ChatSessionMembers`, one row per participant, with indexes for both chat and
 user lookups. Chat lists load membership in a single database query. Membership updates retain unchanged
 rows and their joining dates. The migration transfers existing JSON membership before removing the old
