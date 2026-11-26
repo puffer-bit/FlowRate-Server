@@ -35,4 +35,5 @@ public sealed record ConnectedUserSnapshot(
     string Username,
     string? DisplayName,
     UserStatus Status,
-    DateTimeOffset LastConnectionTime);
+    DateTimeOffset LastConnectionTime,
+    UserKind Kind = UserKind.User);

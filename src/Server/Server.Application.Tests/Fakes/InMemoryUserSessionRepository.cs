@@ -80,6 +80,15 @@ public sealed class InMemoryUserSessionRepository : IUserSessionRepository
             _sessions.Remove(session.Id);
         return Task.CompletedTask;
     }
+
+    public Task ExtendAsync(string coordinatorInstanceId, IReadOnlyCollection<Guid> deviceIds, DateTimeOffset now,
+        DateTimeOffset expiresAt, DateTimeOffset temporaryExpiresAt, CancellationToken cancellationToken = default)
+    {
+        foreach (var session in _sessions.Values.Where(x => deviceIds.Contains(x.Id)
+                     && x.CoordinatorInstanceId == coordinatorInstanceId && x.ExpiresAt > now).ToList())
+            _sessions[session.Id] = session with { ExpiresAt = session.IsTemporary ? temporaryExpiresAt : expiresAt };
+        return Task.CompletedTask;
+    }
 }
 
 public sealed class InMemoryUserLoginCodeRepository : IUserLoginCodeRepository

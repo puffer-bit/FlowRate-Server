@@ -36,5 +36,5 @@ public static class PanelContractsMapper
             .ToList());
 
     private static ConnectedUserDto ToDto(ConnectedUserSnapshot user) => new(
-        user.Id, user.Username, user.DisplayName, user.Status, user.LastConnectionTime);
+        user.Id, user.Username, user.DisplayName, user.Status, user.LastConnectionTime, user.Kind);
 }

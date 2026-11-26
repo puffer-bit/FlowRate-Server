@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Shared.Enums.User;
 using Server.Core.Models.User;
 using Server.Database.Entities;
 using Server.Database;
@@ -114,17 +115,58 @@ public class UserRepository : IUserRepository
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
 
         return await context.UserEntities
-            .CountAsync(entity => entity.CoordinatorInstanceId == coordinatorInstanceId, cancellationToken);
+            .CountAsync(entity => entity.CoordinatorInstanceId == coordinatorInstanceId
+                                  && entity.Kind == UserKind.User, cancellationToken);
     }
 
-    public async Task<int> AddAsync(UserModel model, UserRecoveryKeys recoveryKeys,
+    public async Task<int> CountBotsAsync(string coordinatorInstanceId, CancellationToken cancellationToken = default)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+
+        return await context.UserEntities
+            .CountAsync(entity => entity.CoordinatorInstanceId == coordinatorInstanceId
+                                  && entity.Kind == UserKind.Bot, cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<UserModel>> GetBotsAsync(string coordinatorInstanceId,
+        CancellationToken cancellationToken = default)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+
+        var bots = await context.UserEntities
+            .AsNoTracking()
+            .Include(x => x.Roles)
+            .Where(x => x.CoordinatorInstanceId == coordinatorInstanceId
+                        && (x.Kind == UserKind.Bot || x.Kind == UserKind.DebugBot))
+            .OrderBy(x => x.Id)
+            .ToListAsync(cancellationToken);
+        return bots.Select(entity => entity.ToModel()).ToList();
+    }
+
+    public async Task<IReadOnlyList<int>> ClearBotOwnerAsync(int ownerUserId,
+        CancellationToken cancellationToken = default)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+
+        var ids = await context.UserEntities
+            .Where(x => x.OwnerUserId == ownerUserId)
+            .Select(x => x.Id)
+            .ToListAsync(cancellationToken);
+        if (ids.Count > 0)
+            await context.UserEntities
+                .Where(x => ids.Contains(x.Id))
+                .ExecuteUpdateAsync(setters => setters.SetProperty(x => x.OwnerUserId, (int?)null), cancellationToken);
+        return ids;
+    }
+
+    public async Task<int> AddAsync(UserModel model, UserRecoveryKeys? recoveryKeys,
         CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
 
         var userEntity = model.ToEntity(null);
-        userEntity.RecoveryKeyHash = recoveryKeys.RecoveryKeyHash;
-        userEntity.AccountPublicKey = recoveryKeys.AccountPublicKey;
+        userEntity.RecoveryKeyHash = recoveryKeys?.RecoveryKeyHash;
+        userEntity.AccountPublicKey = recoveryKeys?.AccountPublicKey;
         userEntity.SecurityData = new UserSecurityDataEntity();
         await context.UserEntities.AddAsync(userEntity, cancellationToken);
         await context.SaveChangesAsync(cancellationToken);

@@ -73,6 +73,7 @@ interface Form {
   newPassword: string
   maxOnlineUsers: number | string
   maxUsers: number | string
+  maxBots: number | string
   motdEnabled: boolean
   motdText: string
   allowedIps: string[]
@@ -104,6 +105,7 @@ function toForm(settings: CoordinatorSettings): Form {
     newPassword: '',
     maxOnlineUsers: settings.maxOnlineUsers,
     maxUsers: settings.maxUsers,
+    maxBots: settings.maxBots ?? 0,
     motdEnabled: settings.motd.isEnabled ?? false,
     motdText: settings.motd.text ?? '',
     allowedIps: settings.accessList.allowedIps ?? [],
@@ -144,6 +146,7 @@ function toUpdate(form: Form, expectedRevision: number): UpdateCoordinatorSettin
     removePassword: form.passwordMode === 'remove',
     maxOnlineUsers: toNumber(form.maxOnlineUsers),
     maxUsers: toNumber(form.maxUsers),
+    maxBots: toNumber(form.maxBots),
     motd: { isEnabled: form.motdEnabled, text: toOptionalText(form.motdText) },
     accessList: { allowedIps: form.allowedIps },
     heartbeat: { intervalSeconds: toNumber(form.heartbeatInterval), timeoutSeconds: toNumber(form.heartbeatTimeout) },
@@ -307,6 +310,9 @@ function SettingsForm({ id, saved: latest }: { id: string, saved: CoordinatorSet
             <NumberInput label="Max registered users" description="New users are refused once this many are registered"
               required min={1} allowDecimal={false} thousandSeparator=" " value={form.maxUsers}
               onChange={set('maxUsers')} error={fieldErrors.take('MaxUsers')} />
+            <NumberInput label="Max bots" description="Bots count apart from users; 0 lets none be made. Debug bots are not counted"
+              required min={0} allowDecimal={false} thousandSeparator=" " value={form.maxBots}
+              onChange={set('maxBots')} error={fieldErrors.take('MaxBots')} />
           </SimpleGrid>
           {onlineCount !== undefined && onlineCount > toNumber(form.maxOnlineUsers) && (
             <Alert color="yellow">

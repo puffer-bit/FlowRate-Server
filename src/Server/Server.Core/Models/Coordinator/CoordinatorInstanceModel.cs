@@ -21,6 +21,14 @@ public sealed class CoordinatorInstanceModel
 
     public const int NoUserLimit = 0;
 
+    /// <summary>
+    /// How many bots the coordinator may have; 0 lets none be made. Bots count neither in <see cref="MaxUsers"/> nor
+    /// in <see cref="MaxOnlineUsers"/>.
+    /// </summary>
+    public int MaxBots { get; private set; }
+
+    public const int DefaultMaxBots = 5;
+
     public MotdSettings Motd { get; private set; }
     public AccessListSettings AccessList { get; private set; }
     public CoordinatorHeartbeatSettings Heartbeat { get; private set; }
@@ -39,7 +47,7 @@ public sealed class CoordinatorInstanceModel
         int maxOnlineUsers, int maxUsers,
         MotdSettings motd, AccessListSettings accessList, CoordinatorHeartbeatSettings heartbeat,
         CoordinatorMediaSettings media, CoordinatorUploadSettings uploads, CoordinatorRateLimitSettings rateLimits,
-        IEnumerable<int> sfuNodeIds, string? passwordHash = null, long revision = 0)
+        IEnumerable<int> sfuNodeIds, string? passwordHash = null, long revision = 0, int maxBots = DefaultMaxBots)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(id);
 
@@ -52,6 +60,7 @@ public sealed class CoordinatorInstanceModel
         FirstLaunchTime = firstLaunchTime;
         CurrentLaunchTime = currentLaunchTime;
         (MaxOnlineUsers, MaxUsers) = ValidateLimits(maxOnlineUsers, maxUsers);
+        MaxBots = ValidateBotLimit(maxBots);
         Motd = motd;
         AccessList = accessList;
         Heartbeat = heartbeat;
@@ -78,6 +87,8 @@ public sealed class CoordinatorInstanceModel
 
     public void SetUserLimits(int maxOnlineUsers, int maxUsers) =>
         (MaxOnlineUsers, MaxUsers) = ValidateLimits(maxOnlineUsers, maxUsers);
+
+    public void SetBotLimit(int maxBots) => MaxBots = ValidateBotLimit(maxBots);
 
     public void SetMotd(MotdSettings motd) => Motd = motd;
 
@@ -109,6 +120,12 @@ public sealed class CoordinatorInstanceModel
         ArgumentOutOfRangeException.ThrowIfNegative(port);
         ArgumentOutOfRangeException.ThrowIfGreaterThan(port, ushort.MaxValue);
         return (ip, port);
+    }
+
+    private static int ValidateBotLimit(int maxBots)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(maxBots);
+        return maxBots;
     }
 
     private static (int, int) ValidateLimits(int maxOnlineUsers, int maxUsers)

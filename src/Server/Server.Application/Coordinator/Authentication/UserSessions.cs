@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging;
 using Server.Application.Abstractions.Persistence;
 using Server.Application.Coordinator.Connections;
 using Server.Core.Models.User;
@@ -9,18 +10,27 @@ namespace Server.Application.Coordinator.Authentication;
 
 /// <summary>
 /// The devices of users' accounts. A device logs in by signing a challenge with its key, until it goes unused for its
-/// lifetime (<see cref="Lifetime"/>, <see cref="TemporaryLifetime"/> for temporary ones) or is removed.
+/// lifetime (<see cref="Lifetime"/>, <see cref="TemporaryLifetime"/> for temporary ones) or is removed. Unused means
+/// offline: a login and every hour online (<see cref="KeepAliveInterval"/>) and the disconnect start the lifetime anew,
+/// so a bot that stays connected for months keeps its device.
 /// </summary>
 public sealed class UserSessions(
     IUserSessionRepository repository,
     IConnectionManager connectionManager,
     string coordinatorInstanceId,
-    TimeProvider timeProvider)
+    TimeProvider timeProvider,
+    ILogger? logger = null) : IDisposable
 {
     public static readonly TimeSpan Lifetime = TimeSpan.FromDays(90);
     public static readonly TimeSpan TemporaryLifetime = TimeSpan.FromDays(1);
 
+    /// <summary>How often the devices online live on; well under the shortest lifetime.</summary>
+    public static readonly TimeSpan KeepAliveInterval = TimeSpan.FromHours(1);
+
     private const string UnknownDevice = "Unknown";
+
+    private readonly CancellationTokenSource _stopping = new();
+    private Task? _keepAliveTask;
 
     private DateTimeOffset Now => timeProvider.GetUtcNow();
 
@@ -106,6 +116,50 @@ public sealed class UserSessions(
 
     /// <summary>Removes the sessions of the earlier protocol 3 of a user whose account moved over to devices.</summary>
     public Task EndLegacyAsync(int userId) => repository.DeleteLegacyAsync(coordinatorInstanceId, userId);
+
+    /// <summary>Starts giving the devices online another lifetime every <see cref="KeepAliveInterval"/>.</summary>
+    public void Start() => _keepAliveTask ??= KeepAliveLoopAsync();
+
+    /// <summary>The devices with a connection now live on for another lifetime from now.</summary>
+    public Task KeepOnlineAliveAsync() => KeepAliveAsync(connectionManager.GetAllConnections()
+        .Select(connection => connection.UserSessionId)
+        .OfType<Guid>()
+        .Distinct()
+        .ToList());
+
+    /// <summary>
+    /// The devices live on for another lifetime from now; expired and removed ones stay so. The last login stays too.
+    /// </summary>
+    public Task KeepAliveAsync(IReadOnlyCollection<Guid> deviceIds)
+    {
+        if (deviceIds.Count == 0)
+            return Task.CompletedTask;
+
+        var now = Now;
+        return repository.ExtendAsync(coordinatorInstanceId, deviceIds, now, now + Lifetime, now + TemporaryLifetime);
+    }
+
+    private async Task KeepAliveLoopAsync()
+    {
+        using var timer = new PeriodicTimer(KeepAliveInterval, timeProvider);
+        try
+        {
+            while (await timer.WaitForNextTickAsync(_stopping.Token))
+            {
+                try
+                {
+                    await KeepOnlineAliveAsync();
+                }
+                catch (Exception ex)
+                {
+                    logger?.LogError(ex, "Keeping the devices online alive failed.");
+                }
+            }
+        }
+        catch (OperationCanceledException) when (_stopping.IsCancellationRequested) { }
+    }
+
+    public void Dispose() => _stopping.Cancel();
 
     private static TimeSpan LifetimeOf(bool isTemporary) => isTemporary ? TemporaryLifetime : Lifetime;
 

@@ -21,9 +21,23 @@ public interface IUserRepository
     Task<IDictionary<int, UserModel>> GetAllAsync(CancellationToken cancellationToken = default);
     Task<IReadOnlySet<string>> GetUsernamesStartingWithAsync(string prefix, CancellationToken cancellationToken = default);
     Task<bool> IsUsernameTakenAsync(string username, int exceptUserId, CancellationToken cancellationToken = default);
+    /// <summary>The people of the coordinator, without bots.</summary>
     Task<int> CountAsync(string coordinatorInstanceId, CancellationToken cancellationToken = default);
-    /// <summary>Saves a new user with the recovery keys of the account; returns its id.</summary>
-    Task<int> AddAsync(UserModel model, UserRecoveryKeys recoveryKeys, CancellationToken cancellationToken = default);
+
+    /// <summary>The bots of the coordinator that count in its limit: debug bots do not.</summary>
+    Task<int> CountBotsAsync(string coordinatorInstanceId, CancellationToken cancellationToken = default);
+
+    /// <summary>The bots of the coordinator, debug ones too, by id.</summary>
+    Task<IReadOnlyList<UserModel>> GetBotsAsync(string coordinatorInstanceId,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>The bots made by the user lose their owner; returns their ids.</summary>
+    Task<IReadOnlyList<int>> ClearBotOwnerAsync(int ownerUserId, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Saves a new user with the recovery keys of the account; returns its id. A bot has no recovery keys.
+    /// </summary>
+    Task<int> AddAsync(UserModel model, UserRecoveryKeys? recoveryKeys, CancellationToken cancellationToken = default);
     Task UpdateAsync(UserModel model, CancellationToken cancellationToken = default);
     Task RemoveAsync(int userId, CancellationToken cancellationToken = default);
     

@@ -11,7 +11,7 @@ public static class UserEntityMapper
         return new UserModel(entity.Id, entity.CoordinatorInstanceId, entity.Username, entity.State, entity.LastStatus,
             entity.FirstConnectionTime, entity.LastConnectionTime,
             entity.Ip, entity.RegionName, entity.RegionCode, entity.DisplayName, entity.Prefix, entity.AvatarUrl,
-            entity.Roles.Select(role => role.RoleId));
+            entity.Roles.Select(role => role.RoleId), entity.Kind, entity.OwnerUserId);
     }
 
     public static UserEntity ToEntity(this UserModel? model, byte[]? identityHash)
@@ -22,6 +22,8 @@ public static class UserEntityMapper
             Id = model.Id,
             IdentityHash = identityHash,
             Username = model.Username,
+            Kind = model.Kind,
+            OwnerUserId = model.OwnerUserId,
             Ip = model.Ip ?? string.Empty,
             CoordinatorInstanceId = model.CoordinatorInstanceId,
             RegionName = model.RegionName,

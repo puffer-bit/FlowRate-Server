@@ -1121,6 +1121,7 @@ export interface components {
             status: components["schemas"]["UserStatus"];
             /** Format: date-time */
             connectedAtUtc: string;
+            kind: components["schemas"]["UserKind"];
         };
         CoordinatorCreatedDto: {
             id: string;
@@ -1152,6 +1153,8 @@ export interface components {
             uploads: components["schemas"]["UploadSettingsDto"];
             rateLimits: components["schemas"]["RateLimitSettingsDto"];
             sfuNodeIds: number[];
+            /** Format: int32 */
+            maxBots?: number;
         };
         /** @enum {unknown} */
         CoordinatorState: "Offline" | "Starting" | "Online" | "Restarting" | "Closing" | "Failed" | "Closed";
@@ -1427,6 +1430,8 @@ export interface components {
             uploads: components["schemas"]["UploadSettingsDto"];
             rateLimits: components["schemas"]["RateLimitSettingsDto"];
             sfuNodeIds: number[];
+            /** Format: int32 */
+            maxBots?: null | number;
         };
         UpdateRoleDto: {
             /** Format: int64 */
@@ -1451,6 +1456,8 @@ export interface components {
             passkeysAvailable: boolean;
             passkeys: components["schemas"]["PasskeyDto"][];
         };
+        /** @enum {unknown} */
+        UserKind: "User" | "Bot" | "DebugBot";
         /** @enum {unknown} */
         UserState: "Unknown" | "Banned" | "Suspended" | "Normal" | "System";
         /** @enum {unknown} */

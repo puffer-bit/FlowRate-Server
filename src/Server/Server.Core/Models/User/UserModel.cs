@@ -86,14 +86,24 @@ public sealed class UserModel
     /// <summary>The coordinator roles of the user, without the everyone role.</summary>
     public IReadOnlyCollection<int> RoleIds { get; private set; } = [];
 
+    /// <summary>A person or a bot; never changes.</summary>
+    public UserKind Kind { get; }
+
+    /// <summary>The user who made the bot; null for people, and once that user is deleted.</summary>
+    public int? OwnerUserId { get; private set; }
+
     public bool IsSystem => State == UserState.System;
+
+    /// <summary>A bot of either kind, debug ones too.</summary>
+    public bool IsBot => Kind.IsBot();
+
     public bool IsBanned => State == UserState.Banned;
 
     public UserModel(int id, string coordinatorInstanceId, string username, UserState state, UserStatus status,
         DateTimeOffset firstConnectionTime, DateTimeOffset lastConnectionTime,
         string? ip = null, string? regionName = null, string? regionCode = null,
         string? displayName = null, string? prefix = null, string? avatarUrl = null,
-        IEnumerable<int>? roleIds = null)
+        IEnumerable<int>? roleIds = null, UserKind kind = UserKind.User, int? ownerUserId = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(coordinatorInstanceId);
         ArgumentException.ThrowIfNullOrWhiteSpace(username);
@@ -113,11 +123,25 @@ public sealed class UserModel
         Prefix = prefix;
         AvatarUrl = avatarUrl;
         RoleIds = roleIds?.ToHashSet() ?? [];
+        Kind = kind;
+        OwnerUserId = kind.IsBot() ? ownerUserId : null;
     }
 
     /// <summary>A new user connecting for the first time; not saved yet.</summary>
     public static UserModel Create(string coordinatorInstanceId, string username, string? ip, DateTimeOffset now) =>
         new(0, coordinatorInstanceId, username, UserState.Normal, UserStatus.Online, now, now, ip);
+
+    /// <summary>
+    /// A new bot made by <paramref name="ownerUserId"/>, a debug bot with <paramref name="isDebug"/>; not saved yet,
+    /// and not connected before its first login.
+    /// </summary>
+    public static UserModel CreateBot(string coordinatorInstanceId, string username, int ownerUserId, bool isDebug,
+        DateTimeOffset now) =>
+        new(0, coordinatorInstanceId, username, UserState.Normal, UserStatus.Online, now, now,
+            kind: isDebug ? UserKind.DebugBot : UserKind.Bot, ownerUserId: ownerUserId);
+
+    /// <summary>The owner of the bot was deleted.</summary>
+    public void ClearOwner() => OwnerUserId = null;
 
     /// <summary>The in-process user the server itself acts as. Never saved.</summary>
     public static UserModel CreateSystem(string coordinatorInstanceId, string? ip, DateTimeOffset now) =>

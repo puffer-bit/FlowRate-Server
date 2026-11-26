@@ -38,4 +38,11 @@ public interface IUserSessionRepository
         CancellationToken cancellationToken = default);
 
     Task DeleteExpiredAsync(DateTimeOffset now, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Moves the expiry of those of the devices that have not expired yet to <paramref name="expiresAt"/>, or to
+    /// <paramref name="temporaryExpiresAt"/> for temporary ones. Their last login stays as it is.
+    /// </summary>
+    Task ExtendAsync(string coordinatorInstanceId, IReadOnlyCollection<Guid> deviceIds, DateTimeOffset now,
+        DateTimeOffset expiresAt, DateTimeOffset temporaryExpiresAt, CancellationToken cancellationToken = default);
 }

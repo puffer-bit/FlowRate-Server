@@ -140,7 +140,7 @@ public class CoordinatorInstanceFactory : ICoordinatorInstanceFactory
         };
 
         var userSessions = new UserSessions(_provider.GetRequiredService<IUserSessionRepository>(), connectionManager,
-            coordinatorInstanceModel.Id, _provider.GetRequiredService<TimeProvider>());
+            coordinatorInstanceModel.Id, _provider.GetRequiredService<TimeProvider>(), logger);
         var chatViewers = new ChatViewersHandler(chatSessionManager, userManager, roles, messageSender,
             connectionManager, visibility, logger);
         var messagesHandlers = CreateMessageHandlers(logger, 
@@ -150,7 +150,8 @@ public class CoordinatorInstanceFactory : ICoordinatorInstanceFactory
             .Append(new ChatLinkPreviewHandler(chatSessionManager, linkPreviews, messageSender, logger));
         
         var messageRouter = CreateMessageRouter(logger, messagesHandlers, connectionManager, rateLimits,
-            new RequestAuthorizer(roles, hybridSessionManager, sessionManager));
+            new RequestAuthorizer(roles, hybridSessionManager, sessionManager,
+                userId => userManager.TryGetConnectedUser(userId, out var sender) && sender!.IsBot));
         var settingsApplier = new CoordinatorSettingsApplier(logger, coordinatorInstanceContext, heartbeatManager,
             sfuPool, messageSender, userManager, rateLimits, mediaService, connectionManager);
         
@@ -367,6 +368,12 @@ public class CoordinatorInstanceFactory : ICoordinatorInstanceFactory
         yield return new RevokeBanHandler(messageSender, moderation);
         yield return new BanHandler(messageSender, userManager, moderation);
         yield return new DeleteUserHandler(logger, messageSender, userManager, connectionManager);
+        var botLoginCodes = new BotLoginCodes(coordinatorInstanceId,
+            _provider.GetRequiredService<IUserLoginCodeRepository>(), timeProvider);
+        yield return new BotsHandler(messageSender, userManager);
+        yield return new CreateBotHandler(logger, messageSender, userManager, botLoginCodes);
+        yield return new BotLoginCodeHandler(logger, messageSender, userManager, userSessions, botLoginCodes);
+        yield return new DeleteBotHandler(logger, messageSender, userManager, connectionManager);
         yield return ActivatorUtilities.CreateInstance<RegisterPushTokenHandler>(_provider, logger, messageSender, coordinatorInstanceId);
         yield return ActivatorUtilities.CreateInstance<UnregisterPushTokenHandler>(_provider, logger, messageSender, coordinatorInstanceId);
         yield return new MediaTokenHandler(messageSender, mediaService);

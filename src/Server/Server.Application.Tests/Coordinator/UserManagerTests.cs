@@ -20,6 +20,7 @@ public class UserManagerTests
 
     public UserManagerTests()
     {
+        _users.Setup(r => r.ClearBotOwnerAsync(It.IsAny<int>(), It.IsAny<CancellationToken>())).ReturnsAsync([]);
         _manager = new UserManager(_context, NullLogger.Instance, CoordinatorId, _users.Object, connections: _connections);
     }
 

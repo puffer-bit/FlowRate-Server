@@ -34,6 +34,9 @@ public static class RequestPolicies
         CoordinatorBansRequest or CoordinatorRevokeBanRequest => Require(Permission.BanMembers),
         CoordinatorDeleteUserRequest request => Require(Permission.BanMembers).Against(request.TargetUserId),
         CoordinatorSettingsRequest or CoordinatorUserListRequest => Require(Permission.ViewCoordinatorSettings),
+        CoordinatorBotsRequest or CoordinatorCreateBotRequest => Require(Permission.ManageBots),
+        CoordinatorBotLoginCodeRequest request => Require(Permission.ManageBots).Against(request.TargetUserId),
+        CoordinatorDeleteBotRequest request => Require(Permission.ManageBots).Against(request.TargetUserId),
         CoordinatorUpdateSettingsRequest => Require(Permission.ManageCoordinatorSettings),
 
         // Role hierarchy depends on the role and the user, so the role service checks it
@@ -111,6 +114,18 @@ public static class RequestPolicies
 
         _ => null
     };
+
+    /// <summary>
+    /// What a bot may not do, whatever its roles: secure an account it has no factors for, link devices, get push
+    /// notifications, or manage bots.
+    /// </summary>
+    public static bool IsRefusedForBots(BaseMessage message) => message is
+        UserSecurityInfoRequest or UserSetPasswordRequest or UserTwoFactorSetupRequest or UserTwoFactorEnableRequest
+        or UserTwoFactorDisableRequest or UserPasskeyOptionsRequest or UserPasskeyRegisterRequest
+        or UserPasskeyDeleteRequest or UserRecoveryKeyResetRequest or DeviceLinkInfoRequest or DeviceLinkApproveRequest
+        or RegisterPushTokenRequest
+        or CoordinatorBotsRequest or CoordinatorCreateBotRequest or CoordinatorBotLoginCodeRequest
+        or CoordinatorDeleteBotRequest;
 
     /// <summary>What a frozen user may still do: stay connected and read.</summary>
     public static bool IsAllowedWhenFrozen(BaseMessage message) => message switch

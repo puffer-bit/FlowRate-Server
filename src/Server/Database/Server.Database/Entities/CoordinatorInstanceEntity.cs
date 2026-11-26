@@ -1,3 +1,4 @@
+using Server.Core.Models.Coordinator;
 using Server.Core.Models.Coordinator.Settings;
 
 namespace Server.Database.Entities
@@ -15,6 +16,8 @@ namespace Server.Database.Entities
         public DateTimeOffset CurrentLaunchTime { get; set; }
         public int MaxOnlineUsers { get; set; }
         public int MaxUsers { get; set; }
+        /// <summary>How many bots may be made; 0 lets none be.</summary>
+        public int MaxBots { get; set; } = CoordinatorInstanceModel.DefaultMaxBots;
         public long Revision { get; set; }
 
         // Security parametrs
