@@ -35,7 +35,8 @@ public abstract class HybridSessionRequestHandler<TRequest> : IMessageHandler<TR
         if (!_sessionManager.TryGetSession(GetSessionId(request), out var session))
             response = request.ToError(SessionNotFound(request));
         else if (session.Model.CallDevices is { } devices &&
-            (!devices.TryGetValue(request.SenderId, out var selected) || selected != connectionId))
+            (!devices.TryGetValue(request.SenderId, out var selected) || selected != connectionId)
+            && !MayReadCall(request, session))
             response = request.ToError(ErrorCode.NotMember);
         else if (DrivesOwnPeer && !session.PeerManager.IsPeerOf(request.SenderId, connectionId))
             response = request.ToError(ErrorCode.NotMember);
@@ -47,6 +48,12 @@ public abstract class HybridSessionRequestHandler<TRequest> : IMessageHandler<TR
     }
 
     protected abstract int GetSessionId(TRequest request);
+
+    /// <summary>
+    /// Whether the sender may send the request to a chat call without being in it from this connection. Only the
+    /// device selected for the call acts in it otherwise.
+    /// </summary>
+    protected virtual bool MayReadCall(TRequest request, IHybridSession session) => false;
 
     /// <summary>The request drives the peer of the sender, so only the connection the peer is on may send it.</summary>
     protected virtual bool DrivesOwnPeer => false;

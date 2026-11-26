@@ -324,7 +324,7 @@ public class CoordinatorInstanceFactory : ICoordinatorInstanceFactory
         yield return new Server.Application.Coordinator.Handlers.Chat.ChatCallHandler(hybridSessionManager, messageSender);
         yield return new HybridSessionJoinHandler(hybridSessionManager, messageSender, permissions);
         yield return ActivatorUtilities.CreateInstance<HybridSessionConnectHandler>(_provider, hybridSessionManager, messageSender);
-        yield return ActivatorUtilities.CreateInstance<HybridSessionPeerListRequestHandler>(_provider, hybridSessionManager, messageSender);
+        yield return ActivatorUtilities.CreateInstance<HybridSessionPeerListRequestHandler>(_provider, hybridSessionManager, messageSender, sessionManager);
         yield return ActivatorUtilities.CreateInstance<HybridSessionStartVideoShareHandler>(_provider, hybridSessionManager, messageSender);
         yield return ActivatorUtilities.CreateInstance<HybridSessionStopVideoShareHandler>(_provider, hybridSessionManager, messageSender);
         yield return ActivatorUtilities.CreateInstance<HybridSessionStartScreenShareHandler>(_provider, hybridSessionManager, messageSender);

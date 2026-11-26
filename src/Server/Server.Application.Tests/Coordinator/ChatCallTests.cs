@@ -564,6 +564,31 @@ public sealed class ChatCallTests : IDisposable
     }
 
     [Fact]
+    public async Task MembersOfTheChat_ReadThePeersOfItsCall_WithoutBeingInIt()
+    {
+        await Act(Guid.NewGuid(), ChatCallAction.Start, chat: 8);
+        var replies = new List<BaseMessage>();
+        var sender = new Mock<IMessageSender>();
+        sender.Setup(s => s.SendMessageById(It.IsAny<string>(), It.IsAny<BaseMessage>()))
+            .Callback((string _, BaseMessage message) => replies.Add(message));
+        var sessions = new Mock<Server.Application.Coordinator.Sessions.ISessionManager>();
+        Server.Core.Models.SessionModel? group = _group;
+        sessions.Setup(s => s.TryGetSessionModel(8, out group)).Returns(true);
+        var peers = new Server.Application.Coordinator.Handlers.Hybrid.HybridSessionPeerListRequestHandler(
+            _manager, sender.Object, sessions.Object);
+
+        // A member who logged in while the call runs, and the caller on a device that is not the call's
+        await peers.HandleMessage(new Shared.Models.Requests.SessionActions.HybridSession.HybridSessionPeerListRequest(8)
+            { SenderId = 3 }, "outsider");
+        await peers.HandleMessage(new Shared.Models.Requests.SessionActions.HybridSession.HybridSessionPeerListRequest(8)
+            { SenderId = 1 }, "caller-other");
+
+        Assert.Equal(2, replies.Count);
+        Assert.All(replies, response =>
+            Assert.IsType<Shared.Models.Responses.SessionActions.HybridSession.HybridSessionPeerListResponse>(response));
+    }
+
+    [Fact]
     public async Task MediaCleanupFailureStillRecordsAndAnnouncesTheOutcome()
     {
         var id = Guid.NewGuid();
