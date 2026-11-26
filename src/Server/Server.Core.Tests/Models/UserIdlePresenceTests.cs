@@ -23,7 +23,18 @@ public class UserIdlePresenceTests
         Assert.True(user.SetIdleLevel("pc", IdleLevel.Idle));
 
         Assert.Equal(UserStatus.Idle, user.Presence);
+        Assert.Equal(UserStatus.Idle, user.OwnPresence);
         Assert.Equal(UserStatus.Online, user.Status);
+    }
+
+    [Fact]
+    public void InvisibleUser_SeesThemselvesInvisible_WhileOthersSeeThemOffline()
+    {
+        var user = ConnectedUser(UserStatus.Invisible, "pc");
+        user.SetIdleLevel("pc", IdleLevel.Sleeping);
+
+        Assert.Equal(UserStatus.Invisible, user.OwnPresence);
+        Assert.Equal(UserStatus.Offline, user.Presence);
     }
 
     [Fact]

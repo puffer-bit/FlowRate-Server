@@ -26,19 +26,23 @@ public sealed class UserModel
     public bool IsConnected { get; private set; }
 
     /// <summary>
-    /// The status others see: offline while the user is not connected or invisible; idle or sleeping instead of
-    /// online while every open connection reports that level.
+    /// The status others see: offline while the user is not connected or invisible, otherwise
+    /// <see cref="OwnPresence"/>.
     /// </summary>
-    public UserStatus Presence => !IsConnected || Status == UserStatus.Invisible
-        ? UserStatus.Offline
-        : Status != UserStatus.Online
-            ? Status
-            : IdleLevel switch
-            {
-                IdleLevel.Sleeping => UserStatus.Sleeping,
-                IdleLevel.Idle => UserStatus.Idle,
-                _ => UserStatus.Online
-            };
+    public UserStatus Presence => !IsConnected || Status == UserStatus.Invisible ? UserStatus.Offline : OwnPresence;
+
+    /// <summary>
+    /// The status the user sees on themselves: the one they picked, but idle or sleeping instead of online while every
+    /// open connection reports that level, as others see it. Invisible stays invisible, unlike for others.
+    /// </summary>
+    public UserStatus OwnPresence => Status != UserStatus.Online
+        ? Status
+        : IdleLevel switch
+        {
+            IdleLevel.Sleeping => UserStatus.Sleeping,
+            IdleLevel.Idle => UserStatus.Idle,
+            _ => UserStatus.Online
+        };
 
     /// <summary>The least idle level among the open connections; active while none is open. Not saved.</summary>
     public IdleLevel IdleLevel
