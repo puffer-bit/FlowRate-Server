@@ -1451,7 +1451,7 @@ export interface components {
         /** @enum {unknown} */
         UserState: "Unknown" | "Banned" | "Suspended" | "Normal" | "System";
         /** @enum {unknown} */
-        UserStatus: "Offline" | "Online" | "Away" | "DoNotDisturb" | "Invisible";
+        UserStatus: "Offline" | "Online" | "Away" | "DoNotDisturb" | "Invisible" | "Idle" | "Sleeping";
         ValidationProblemDetails: {
             type?: null | string;
             title?: null | string;

@@ -218,7 +218,7 @@ public class UserManager : IUserManager
 
     public async Task<ErrorCode?> SetStatus(int userId, UserStatus status)
     {
-        if (status == UserStatus.Offline || !Enum.IsDefined(status))
+        if (!UserModel.CanPick(status))
             return ErrorCode.InvalidValue;
 
         if (!_context.AttachedUsers.TryGetValue(userId, out var user) || user.IsSystem)
@@ -231,6 +231,22 @@ public class UserManager : IUserManager
         await _userRepository.UpdateAsync(user);
 
         _logger.LogTrace("User {Id} is now {Status}.", userId, status);
+        UserUpdated?.Invoke(user);
+        return null;
+    }
+
+    public ErrorCode? SetIdleLevel(int userId, string connectionId, IdleLevel level)
+    {
+        if (!Enum.IsDefined(level))
+            return ErrorCode.InvalidValue;
+
+        if (!_context.AttachedUsers.TryGetValue(userId, out var user) || user.IsSystem)
+            return ErrorCode.UserNotFound;
+
+        if (!user.SetIdleLevel(connectionId, level))
+            return null;
+
+        _logger.LogTrace("User {Id} is now seen {Presence}.", userId, user.Presence);
         UserUpdated?.Invoke(user);
         return null;
     }

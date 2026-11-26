@@ -18,7 +18,7 @@ public class UserManagerLimitsTests
     private readonly UserManagerContext _context = new();
     private readonly ConnectionsContext _connections = new();
     private readonly CoordinatorInstanceContext _coordinator = new(Model(maxOnlineUsers: 2, maxUsers: 10), "1.0");
-    private readonly IClientConnection _connection = Mock.Of<IClientConnection>(c => c.IpEndpoint == "127.0.0.1");
+    private readonly IClientConnection _connection = Mock.Of<IClientConnection>(c => c.ConnectionId == "connection" && c.IpEndpoint == "127.0.0.1");
     private readonly UserManager _manager;
     private int _nextId = 100;
     private static readonly UserRecoveryKeys Keys = new([1, 2, 3], [4, 5, 6]);

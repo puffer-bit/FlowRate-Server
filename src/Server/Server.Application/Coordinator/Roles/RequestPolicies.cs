@@ -27,7 +27,7 @@ public static class RequestPolicies
             or RegisterPushTokenRequest or UnregisterPushTokenRequest or MediaTokenRequest => Open,
         CoordinatorChangeUsernameRequest request => OnUser(request.SenderId, request.TargetUserId),
         CoordinatorSetAvatarRequest request => OnUser(request.SenderId, request.TargetUserId),
-        CoordinatorSetUserStatusRequest => Open,
+        CoordinatorSetUserStatusRequest or CoordinatorSetIdleRequest => Open,
         // Acting on oneself is refused by the handlers
         CoordinatorSetUserStateRequest request => Require(Permission.BanMembers).Against(request.TargetUserId),
         CoordinatorBanRequest request => Require(Permission.BanMembers).Against(request.TargetUserId),

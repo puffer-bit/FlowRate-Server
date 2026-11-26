@@ -25,8 +25,34 @@ public sealed class UserModel
     /// <summary>Whether the user is connected now. Not saved: a user read from the database is not.</summary>
     public bool IsConnected { get; private set; }
 
-    /// <summary>The status others see: offline while the user is not connected or invisible.</summary>
-    public UserStatus Presence => IsConnected && Status != UserStatus.Invisible ? Status : UserStatus.Offline;
+    /// <summary>
+    /// The status others see: offline while the user is not connected or invisible, otherwise
+    /// <see cref="OwnPresence"/>.
+    /// </summary>
+    public UserStatus Presence => !IsConnected || Status == UserStatus.Invisible ? UserStatus.Offline : OwnPresence;
+
+    /// <summary>
+    /// The status the user sees on themselves: the one they picked, but idle or sleeping instead of online while every
+    /// open connection reports that level, as others see it. Invisible stays invisible, unlike for others.
+    /// </summary>
+    public UserStatus OwnPresence => Status != UserStatus.Online
+        ? Status
+        : IdleLevel switch
+        {
+            IdleLevel.Sleeping => UserStatus.Sleeping,
+            IdleLevel.Idle => UserStatus.Idle,
+            _ => UserStatus.Online
+        };
+
+    /// <summary>The least idle level among the open connections; active while none is open. Not saved.</summary>
+    public IdleLevel IdleLevel
+    {
+        get
+        {
+            lock (_devices)
+                return _idleLevels.Count == 0 ? IdleLevel.Active : _idleLevels.Values.Min();
+        }
+    }
 
     /// <summary>
     /// The device others see, among the connections open now: a phone first, since one is connected only while it is
@@ -50,6 +76,9 @@ public sealed class UserModel
 
     // The devices of the open connections, the last connected at the end
     private readonly List<(string ConnectionId, UserDevice Device)> _devices = [];
+
+    // The idle level of every open connection, guarded by the lock of _devices
+    private readonly Dictionary<string, IdleLevel> _idleLevels = [];
 
     public DateTimeOffset FirstConnectionTime { get; }
     public DateTimeOffset LastConnectionTime { get; private set; }
@@ -104,36 +133,69 @@ public sealed class UserModel
     {
         IsConnected = connected;
         if (!connected)
-            lock (_devices) _devices.Clear();
+            lock (_devices)
+            {
+                _devices.Clear();
+                _idleLevels.Clear();
+            }
     }
 
-    /// <summary>The connection the user connected on has this device; true when <see cref="Device"/> changed.</summary>
+    /// <summary>
+    /// The connection the user connected on has this device and starts active; true when <see cref="Device"/> or
+    /// <see cref="Presence"/> changed.
+    /// </summary>
     public bool AddDevice(string connectionId, UserDevice? device)
     {
         lock (_devices)
         {
-            var before = Device;
+            var before = (Device, Presence);
             _devices.RemoveAll(entry => entry.ConnectionId == connectionId);
             if (device != null)
                 _devices.Add((connectionId, device));
-            return before != Device;
+            _idleLevels[connectionId] = IdleLevel.Active;
+            return before != (Device, Presence);
         }
     }
 
-    /// <summary>The connection closed; true when <see cref="Device"/> changed.</summary>
+    /// <summary>The connection closed; true when <see cref="Device"/> or <see cref="Presence"/> changed.</summary>
     public bool RemoveDevice(string connectionId)
     {
         lock (_devices)
         {
-            var before = Device;
+            var before = (Device, Presence);
             _devices.RemoveAll(entry => entry.ConnectionId == connectionId);
-            return before != Device;
+            _idleLevels.Remove(connectionId);
+            return before != (Device, Presence);
         }
     }
 
+    /// <summary>
+    /// An open connection reports how long its device has gone without input; true when <see cref="Presence"/>
+    /// changed. A connection that is not open is ignored.
+    /// </summary>
+    public bool SetIdleLevel(string connectionId, IdleLevel level)
+    {
+        if (!Enum.IsDefined(level))
+            throw new ArgumentOutOfRangeException(nameof(level), level, null);
+
+        lock (_devices)
+        {
+            if (!_idleLevels.ContainsKey(connectionId))
+                return false;
+
+            var before = Presence;
+            _idleLevels[connectionId] = level;
+            return before != Presence;
+        }
+    }
+
+    /// <summary>Whether a user may pick the status; offline, idle and sleeping are only shown.</summary>
+    public static bool CanPick(UserStatus status) =>
+        status is UserStatus.Online or UserStatus.Away or UserStatus.DoNotDisturb or UserStatus.Invisible;
+
     public void SetStatus(UserStatus status)
     {
-        if (status == UserStatus.Offline || !Enum.IsDefined(status))
+        if (!CanPick(status))
             throw new ArgumentOutOfRangeException(nameof(status), status, "A user cannot pick this status.");
         Status = status;
     }

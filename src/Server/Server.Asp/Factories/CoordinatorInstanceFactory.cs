@@ -361,6 +361,7 @@ public class CoordinatorInstanceFactory : ICoordinatorInstanceFactory
         yield return ActivatorUtilities.CreateInstance<ChangeUserNameHandler>(_provider, messageSender, userManager, logger);
         yield return new SetAvatarHandler(logger, messageSender, userManager, mediaService);
         yield return new SetUserStatusHandler(logger, messageSender, userManager);
+        yield return new SetIdleHandler(logger, messageSender, userManager);
         yield return new SetUserStateHandler(messageSender, userManager, moderation);
         yield return new BansHandler(messageSender, moderation);
         yield return new RevokeBanHandler(messageSender, moderation);

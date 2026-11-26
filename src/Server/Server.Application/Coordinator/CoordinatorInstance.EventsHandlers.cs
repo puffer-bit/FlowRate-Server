@@ -74,12 +74,12 @@ public partial class CoordinatorInstance
     }
 
     /// <summary>
-    /// Sends the user to everyone, and to the user themselves with the status they picked when others see
+    /// Sends the user to everyone, and to the user themselves with their own presence when others see
     /// another one.
     /// </summary>
     private void BroadcastUser(UserModel user, Func<UserDTO, BaseMessage> notification)
     {
-        if (user.Status == user.Presence)
+        if (user.OwnPresence == user.Presence)
         {
             _messageSender.BroadcastMessage(notification(user.ToDto()));
             return;
