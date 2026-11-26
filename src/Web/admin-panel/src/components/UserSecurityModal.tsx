@@ -125,6 +125,14 @@ function DevicesSection({ coordinatorId, user }: { coordinatorId: string, user: 
                 Give it to {user.username} yourself. On the new device: Log in to an existing account → Login code.
                 It adds one device and works until {formatDateTime(code.expiresAtUtc)}. It is not shown again.
               </Text>
+              <Text size="sm">
+                Or let FlowRate fill it in: open the link on the new device, or scan the QR code with its camera.
+                The link points at {window.location.hostname}, the address this page is open on.
+              </Text>
+              <Group align="flex-end">
+                <QrCode value={loginLink(code)} alt="QR code of the login link" />
+                <Button component="a" href={loginLink(code)} variant="light">Open in FlowRate</Button>
+              </Group>
             </Stack>
           </Alert>
         )
@@ -254,7 +262,23 @@ function TwoFactorSection({ coordinatorId, user, security }: {
   )
 }
 
-function QrCode({ value }: { value: string }) {
+// The default port of a coordinator, left out of the link
+const DefaultCoordinatorPort = 26666
+
+/**
+ * The flowrate:// link that opens the client on the server with the code filled in. The client asks before it logs
+ * in, and trusts the certificate of the link only for this server.
+ */
+function loginLink(code: LoginCode) {
+  const params = new URLSearchParams({ host: window.location.hostname })
+  if (code.port != null && code.port !== DefaultCoordinatorPort)
+    params.set('port', String(code.port))
+  params.set('cert', code.certificateFingerprint)
+  params.set('code', code.code)
+  return `flowrate://login?${params.toString()}`
+}
+
+function QrCode({ value, alt = 'QR code for the authenticator app' }: { value: string, alt?: string }) {
   const [src, setSrc] = useState<string>()
   useEffect(() => {
     let current = true
@@ -264,7 +288,7 @@ function QrCode({ value }: { value: string }) {
     }
   }, [value])
 
-  return <Image src={src} w={160} h={160} alt="QR code for the authenticator app" bg="white" radius="sm" />
+  return <Image src={src} w={160} h={160} alt={alt} bg="white" radius="sm" />
 }
 
 function PasskeysSection({ coordinatorId, userId, security }: {

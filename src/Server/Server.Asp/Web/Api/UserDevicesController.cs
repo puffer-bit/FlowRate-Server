@@ -3,6 +3,7 @@ using Server.Application.Abstractions.Persistence;
 using Server.Application.Coordinator.Authentication;
 using Server.Application.Orchestrator;
 using Server.Asp.Web.Api.Contracts;
+using Server.Infrastructure.Security;
 using Shared.Enums.Auth;
 
 namespace Server.Asp.Web.Api;
@@ -19,6 +20,7 @@ public class UserDevicesController(
     IUserRepository users,
     IUserSessionRepository devices,
     IUserLoginCodeRepository loginCodes,
+    ServerCertificate certificate,
     TimeProvider timeProvider) : ControllerBase
 {
     [HttpGet("devices")]
@@ -69,7 +71,9 @@ public class UserDevicesController(
         var expiresAt = now + LoginCodes.Lifetime;
         await loginCodes.DeleteByUserAsync(id, userId, ct);
         await loginCodes.AddAsync(id, userId, LoginCodes.Hash(code), now, expiresAt, ct);
-        return new LoginCodeDto(code, expiresAt);
+        var port = orchestrator.GetCoordinatorSnapshots().FirstOrDefault(coordinator => coordinator.Id == id)?.Port;
+        return new LoginCodeDto(code, expiresAt, port,
+            certificate.Certificate.GetCertHashString(System.Security.Cryptography.HashAlgorithmName.SHA256));
     }
 
     private async Task<bool> IsUserAsync(string coordinatorId, int userId, CancellationToken ct) =>
