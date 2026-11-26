@@ -192,6 +192,7 @@ public class UserManagerTests
         bob.Id = 1;
         _users.Setup(r => r.GetByIdAsync(1, It.IsAny<CancellationToken>())).ReturnsAsync(bob);
         var connection = new Mock<IClientConnection>();
+        connection.SetupGet(c => c.ConnectionId).Returns("connection");
         connection.SetupGet(c => c.IpEndpoint).Returns("127.0.0.1");
 
         var attachment = await _manager.AttachUser(1, connection.Object);
@@ -207,6 +208,7 @@ public class UserManagerTests
         alice.Ban();
         _users.Setup(r => r.GetByIdAsync(1, It.IsAny<CancellationToken>())).ReturnsAsync(alice);
         var connection = new Mock<IClientConnection>();
+        connection.SetupGet(c => c.ConnectionId).Returns("connection");
         connection.SetupGet(c => c.IpEndpoint).Returns("127.0.0.1");
 
         var attachment = await _manager.AttachUser(1, connection.Object);
@@ -268,6 +270,7 @@ public class UserManagerTests
         alice.SetStatus(UserStatus.Away);
         _users.Setup(r => r.GetByIdAsync(1, It.IsAny<CancellationToken>())).ReturnsAsync(alice);
         var connection = new Mock<IClientConnection>();
+        connection.SetupGet(c => c.ConnectionId).Returns("connection");
         UserModel? disconnected = null;
         _manager.UserDisconnected += (user, _) => disconnected = user;
 
@@ -354,6 +357,34 @@ public class UserManagerTests
 
         Assert.False(_manager.DetachConnection(stranger.Object, "Connection is closed"));
         Assert.True(_manager.TryGetConnectedUser(1, out _));
+    }
+
+    [Fact]
+    public async Task SetIdleLevel_AnnouncesOnlyWhatOthersSeeChanging()
+    {
+        var alice = Stored(1, "alice", CoordinatorId);
+        _users.Setup(r => r.GetByIdAsync(1, It.IsAny<CancellationToken>())).ReturnsAsync(alice);
+        var phone = Connection("phone");
+        await _manager.AttachUser(1, phone.Object);
+        await _manager.AttachUser(1, Connection("desktop").Object);
+        var updates = 0;
+        _manager.UserUpdated += _ => updates++;
+
+        Assert.Null(_manager.SetIdleLevel(1, "desktop", IdleLevel.Idle));
+        Assert.Equal(0, updates);
+
+        Assert.Null(_manager.SetIdleLevel(1, "phone", IdleLevel.Idle));
+        Assert.Equal(1, updates);
+        Assert.Equal(UserStatus.Idle, alice.Presence);
+
+        Assert.False(_manager.DetachConnection(phone.Object, "Connection is closed"));
+        Assert.Equal(UserStatus.Idle, alice.Presence);
+    }
+
+    [Fact]
+    public void SetIdleLevel_OfAUserNotConnected_IsRefused()
+    {
+        Assert.Equal(ErrorCode.UserNotFound, _manager.SetIdleLevel(1, "desktop", IdleLevel.Idle));
     }
 
     private static Mock<IClientConnection> Connection(string id)

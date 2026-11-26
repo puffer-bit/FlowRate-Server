@@ -39,6 +39,12 @@ public interface IUserManager
     Task<ErrorCode?> SetStatus(int userId, UserStatus status);
 
     /// <summary>
+    /// Sets how long the device on the connection has gone without input; announced as an update of the user when
+    /// what others see changes. Not saved.
+    /// </summary>
+    ErrorCode? SetIdleLevel(int userId, string connectionId, IdleLevel level);
+
+    /// <summary>
     /// Bans, freezes or reinstates a user, connected or not; announced as an update of the user. Neither
     /// disconnects them.
     /// </summary>
