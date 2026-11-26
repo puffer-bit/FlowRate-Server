@@ -1,5 +1,6 @@
 using Server.Core.Models.Push;
 using Shared.Enums;
+using Shared.Enums.User;
 using Server.Application.Coordinator.Roles;
 using System.Text;
 using System.Threading.Channels;
@@ -97,9 +98,16 @@ public sealed class PushNotifier : IEventHandler<ChatSessionMessageAddedEvent>, 
 
         var devices = await _devices.GetAllAsync(_coordinatorInstanceId, cancellationToken);
         var recipients = new List<PushDeviceModel>();
+        var doNotDisturb = new Dictionary<int, bool>();
         foreach (var device in devices.Where(device => device.UserId != message.SenderUserId
                                                        && !userManager.TryGetConnectedUser(device.UserId, out _)))
         {
+            // Do not disturb silences everything, mentions too
+            if (!doNotDisturb.TryGetValue(device.UserId, out var isSilenced))
+                doNotDisturb[device.UserId] = isSilenced = await IsDoNotDisturbAsync(userManager, device.UserId);
+            if (isSilenced)
+                continue;
+
             // Nothing of a chat reaches a user who may not see it
             if ((await permissions.PermissionsInAsync(device.UserId, chat)).HasFlag(Permission.ViewSessions))
                 recipients.Add(device);
@@ -175,6 +183,10 @@ public sealed class PushNotifier : IEventHandler<ChatSessionMessageAddedEvent>, 
         var devices = await _devices.GetAllAsync(_coordinatorInstanceId, _stopping.Token);
         foreach (var recipient in push.Recipients)
         {
+            // Do not disturb does not ring; a ring that stops is still taken away
+            if (recipient.IsRinging && await IsDoNotDisturbAsync(_userManager, recipient.UserId))
+                continue;
+
             var payload = PushPayload.CreateCall(_coordinatorInstanceId, push.GroupName ?? callerName, callerName,
                 caller?.AvatarUrl, push.Call, recipient);
             foreach (var device in devices.Where(d => d.UserId == recipient.UserId))
@@ -188,6 +200,9 @@ public sealed class PushNotifier : IEventHandler<ChatSessionMessageAddedEvent>, 
             }
         }
     }
+
+    private static async Task<bool> IsDoNotDisturbAsync(IUserManager userManager, int userId) =>
+        (await userManager.GetUserAsync(userId))?.Status == UserStatus.DoNotDisturb;
 
     public Task DrainAsync()
     {
