@@ -1261,6 +1261,9 @@ export interface components {
             code: string;
             /** Format: date-time */
             expiresAtUtc: string;
+            /** Format: int32 */
+            port: number | null;
+            certificateFingerprint: string;
         };
         UserDeviceDto: {
             /** Format: uuid */

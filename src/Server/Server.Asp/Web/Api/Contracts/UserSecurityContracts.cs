@@ -57,4 +57,9 @@ public sealed record UserDeviceDto(
     bool IsOnline);
 
 /// <param name="Code">Shown once; the user types it into "Log in to an existing account" on the new device.</param>
-public sealed record LoginCodeDto(string Code, DateTimeOffset ExpiresAtUtc);
+/// <param name="Port">The port of the coordinator, for the link that opens the client on the code.</param>
+/// <param name="CertificateFingerprint">
+/// SHA-256 of the certificate of the server in hex, for the link: the client trusts it without asking when the system
+/// cannot verify it.
+/// </param>
+public sealed record LoginCodeDto(string Code, DateTimeOffset ExpiresAtUtc, int? Port, string CertificateFingerprint);
