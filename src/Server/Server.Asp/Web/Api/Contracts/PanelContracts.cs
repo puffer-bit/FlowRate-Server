@@ -52,7 +52,8 @@ public sealed record ConnectedUserDto(
     string Username,
     string? DisplayName,
     UserStatus Status,
-    DateTimeOffset ConnectedAtUtc);
+    DateTimeOffset ConnectedAtUtc,
+    UserKind Kind);
 
 /// <summary>Creates and starts a coordinator using standard heartbeat, media and rate limit settings.</summary>
 public sealed class CreateCoordinatorDto

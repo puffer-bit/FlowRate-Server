@@ -42,6 +42,9 @@ public static class CoordinatorSettingsValidator
             errors.Add(CoordinatorSettingsFields.MaxOnlineUsers,
                 "More users cannot be online than may be registered.");
 
+        if (change.MaxBots < 0)
+            errors.Add(CoordinatorSettingsFields.MaxBots, "The bot limit cannot be negative.");
+
         if (change.MotdText?.Length > Limits.MOTDTextMaxLength)
             errors.Add(CoordinatorSettingsFields.MotdText,
                 $"The message cannot be longer than {Limits.MOTDTextMaxLength} characters.");
@@ -159,6 +162,7 @@ public static class CoordinatorSettingsFields
     public const string NewPassword = "NewPassword";
     public const string MaxOnlineUsers = "MaxOnlineUsers";
     public const string MaxUsers = "MaxUsers";
+    public const string MaxBots = "MaxBots";
     public const string MotdText = "Motd.Text";
     public const string AllowedIps = "AccessList.AllowedIps";
     public const string HeartbeatInterval = "Heartbeat.IntervalSeconds";

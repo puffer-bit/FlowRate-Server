@@ -51,12 +51,17 @@ public class DeleteUserHandler : IMessageHandler<CoordinatorDeleteUserRequest>
             return HandleMessageResult.NoError;
         }
 
+        CloseDeleted(connections, userId);
+        return HandleMessageResult.NoError;
+    }
+
+    /// <summary>Tells the connections of a deleted user so and closes them.</summary>
+    internal static void CloseDeleted(IEnumerable<IClientConnection> connections, int userId)
+    {
         foreach (var connection in connections)
         {
             connection.Send(new CoordinatorUserDeletedNotification(userId));
             connection.Close();
         }
-
-        return HandleMessageResult.NoError;
     }
 }

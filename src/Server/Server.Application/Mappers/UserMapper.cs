@@ -18,6 +18,8 @@ public static class UserMapperExtensions
         {
             Id = entity.Id,
             Username = entity.Username,
+            Kind = entity.Kind,
+            OwnerUserId = entity.OwnerUserId,
             Ip = showIp || entity.Id == viewerId ? entity.Ip : null,
             CoordinatorInstanceId = entity.CoordinatorInstanceId,
             RegionName = entity.RegionName,

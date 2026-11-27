@@ -28,6 +28,12 @@ namespace Server.Database.Entities
         
         [MaxLength(32)]
         public required string Username { get; set; }
+
+        /// <summary>A person or a bot; set when the account is made.</summary>
+        public UserKind Kind { get; set; }
+
+        /// <summary>The user who made the bot; null for people, and once that user is deleted.</summary>
+        public int? OwnerUserId { get; set; }
         
         [MaxLength(45)]
         public string? Ip { get; set; }

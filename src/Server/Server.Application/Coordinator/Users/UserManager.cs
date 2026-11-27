@@ -112,7 +112,8 @@ public class UserManager : IUserManager
                 return UserAttachment.Rejected(AttachUserResult.ConnectionClosed);
 
             // A user connecting again, or from another device, takes their own place
-            if (!user.IsSystem && IsOnlineLimitReached(exceptUserId: user.Id))
+            // Bots take no place among the online users
+            if (!user.IsSystem && !user.IsBot && IsOnlineLimitReached(exceptUserId: user.Id))
                 return UserAttachment.Rejected(AttachUserResult.OnlineLimitReached);
 
             // The system user has no connection of its own
@@ -243,6 +244,10 @@ public class UserManager : IUserManager
         if (!_context.AttachedUsers.TryGetValue(userId, out var user) || user.IsSystem)
             return ErrorCode.UserNotFound;
 
+        // A bot is never idle
+        if (user.IsBot)
+            return null;
+
         if (!user.SetIdleLevel(connectionId, level))
             return null;
 
@@ -286,10 +291,71 @@ public class UserManager : IUserManager
 
         await _userRepository.RemoveAsync(userId);
         DetachUser(userId, "User is deleted");
+        await ClearBotOwnerAsync(userId);
 
         _logger.LogInformation("User {Id} ({Name}) deleted.", userId, user.Username);
         UserDeleted?.Invoke(userId);
         return null;
+    }
+
+    public async Task<(ErrorCode? Error, UserModel? Bot)> CreateBot(int ownerUserId, string username, bool isDebug)
+    {
+        username = username.Trim();
+        if (username.Length == 0)
+            return (ErrorCode.InvalidValue, null);
+
+        // The limit under the lock of new users, the name under the lock of renames, as for people
+        await _createUserLock.WaitAsync();
+        try
+        {
+            var maxBots = _coordinatorContext?.Model.MaxBots ?? CoordinatorInstanceModel.DefaultMaxBots;
+            if (!isDebug && await _userRepository.CountBotsAsync(_coordinatorInstanceId) >= maxBots)
+                return (ErrorCode.BotLimitReached, null);
+
+            await _renameLock.WaitAsync();
+            try
+            {
+                var takenByConnected = _context.AttachedUsers.Values
+                    .Any(other => string.Equals(other.Username, username, StringComparison.OrdinalIgnoreCase));
+                if (takenByConnected || await _userRepository.IsUsernameTakenAsync(username, 0))
+                    return (ErrorCode.NameTaken, null);
+
+                var bot = UserModel.CreateBot(_coordinatorInstanceId, username, ownerUserId, isDebug,
+                    DateTimeOffset.UtcNow);
+                bot.Id = await _userRepository.AddAsync(bot, recoveryKeys: null);
+                _logger.LogInformation("User {OwnerId} made the {Kind} {Id} ({Name}).", ownerUserId, bot.Kind, bot.Id,
+                    bot.Username);
+                return (null, bot);
+            }
+            finally
+            {
+                _renameLock.Release();
+            }
+        }
+        finally
+        {
+            _createUserLock.Release();
+        }
+    }
+
+    public async Task<IReadOnlyList<UserModel>> GetBotsAsync()
+    {
+        var bots = await _userRepository.GetBotsAsync(_coordinatorInstanceId);
+        // The connected ones as they are attached, with their status and device
+        return bots.Select(bot => _context.AttachedUsers.GetValueOrDefault(bot.Id) ?? bot).ToList();
+    }
+
+    // The bots of a deleted user stay, without an owner
+    private async Task ClearBotOwnerAsync(int ownerUserId)
+    {
+        foreach (var botId in await _userRepository.ClearBotOwnerAsync(ownerUserId))
+        {
+            if (_context.AttachedUsers.TryGetValue(botId, out var bot))
+            {
+                bot.ClearOwner();
+                UserUpdated?.Invoke(bot);
+            }
+        }
     }
 
     private static void ApplyState(UserModel user, UserState state)
@@ -491,7 +557,7 @@ public class UserManager : IUserManager
         if (maxOnlineUsers == CoordinatorInstanceModel.NoUserLimit)
             return false;
 
-        var online = _context.AttachedUsers.Values.Count(user => !user.IsSystem && user.Id != exceptUserId);
+        var online = _context.AttachedUsers.Values.Count(user => !user.IsSystem && !user.IsBot && user.Id != exceptUserId);
         return online >= maxOnlineUsers;
     }
 }

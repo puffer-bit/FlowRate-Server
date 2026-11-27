@@ -22,7 +22,8 @@ public sealed record CoordinatorSettingsDto(
     MediaSettingsDto Media,
     UploadSettingsDto Uploads,
     RateLimitSettingsDto RateLimits,
-    IReadOnlyList<int> SfuNodeIds);
+    IReadOnlyList<int> SfuNodeIds,
+    int MaxBots = 0);
 
 /// <summary>Basic credentials; leave both empty to connect without authentication.</summary>
 public class SfuCredentialsDto : IValidatableObject
@@ -104,6 +105,9 @@ public sealed class UpdateCoordinatorSettingsDto
     public int MaxOnlineUsers { get; init; }
 
     public int MaxUsers { get; init; }
+
+    /// <summary>How many bots may be made, 0 for none; null keeps the current limit.</summary>
+    public int? MaxBots { get; init; }
 
     [Required]
     public MotdSettingsDto Motd { get; init; } = new();

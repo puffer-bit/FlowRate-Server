@@ -39,7 +39,8 @@ public static class CoordinatorSettingsContractsMapper
             TokenLifetimeMinutes = model.Uploads.TokenLifetimeMinutes
         },
         model.RateLimits.ToDto(),
-        model.SfuNodeIds);
+        model.SfuNodeIds,
+        model.MaxBots);
 
     public static RateLimitSettingsDto ToDto(this CoordinatorRateLimitSettings limits) => new()
     {
@@ -86,6 +87,7 @@ public static class CoordinatorSettingsContractsMapper
         RemovePassword = settings.RemovePassword,
         MaxOnlineUsers = settings.MaxOnlineUsers,
         MaxUsers = settings.MaxUsers,
+        MaxBots = settings.MaxBots,
         IsMotdEnabled = settings.Motd.IsEnabled,
         MotdText = settings.Motd.Text,
         AllowedIps = settings.AccessList.AllowedIps,

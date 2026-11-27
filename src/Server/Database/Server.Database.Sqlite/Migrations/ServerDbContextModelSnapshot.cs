@@ -132,6 +132,9 @@ namespace Server.Database.Sqlite.Migrations
                     b.Property<bool>("IsMOTDEnabled")
                         .HasColumnType("INTEGER");
 
+                    b.Property<int>("MaxBots")
+                        .HasColumnType("INTEGER");
+
                     b.Property<int>("MaxOnlineUsers")
                         .HasColumnType("INTEGER");
 
@@ -963,10 +966,16 @@ namespace Server.Database.Sqlite.Migrations
                         .HasMaxLength(45)
                         .HasColumnType("TEXT");
 
+                    b.Property<int>("Kind")
+                        .HasColumnType("INTEGER");
+
                     b.Property<DateTime>("LastConnectionTime")
                         .HasColumnType("TEXT");
 
                     b.Property<int>("LastStatus")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int?>("OwnerUserId")
                         .HasColumnType("INTEGER");
 
                     b.Property<string>("Prefix")

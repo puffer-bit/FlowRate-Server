@@ -220,6 +220,28 @@ public sealed class UserSessionRepositoryTests : IDisposable
         Assert.Equal(alive.Id, Assert.Single(await repository.GetByUserAsync(Coordinator, userId, _now.AddDays(-30))).Id);
     }
 
+    [Fact]
+    public async Task Extend_MovesTheExpiryOfTheGivenDevices_ButNotOfExpiredOnes()
+    {
+        var userId = await MigrateWithUser();
+        var repository = new UserSessionRepository(_factory);
+        var lasting = Session(userId, "lasting", _now.AddDays(5));
+        var temporary = Session(userId, "temporary", _now.AddHours(2)) with { IsTemporary = true };
+        var other = Session(userId, "other", _now.AddDays(5));
+        var expired = Session(userId, "expired", _now.AddDays(-1));
+        foreach (var session in new[] { lasting, temporary, other, expired })
+            await repository.AddAsync(session);
+
+        await repository.ExtendAsync(Coordinator, [lasting.Id, temporary.Id, expired.Id], _now, _now.AddDays(90),
+            _now.AddDays(1));
+
+        Assert.Equal(_now.AddDays(90), (await repository.GetAsync(Coordinator, lasting.Id, _now))?.ExpiresAt);
+        Assert.Equal(_now.AddDays(1), (await repository.GetAsync(Coordinator, temporary.Id, _now))?.ExpiresAt);
+        Assert.Equal(_now.AddDays(5), (await repository.GetAsync(Coordinator, other.Id, _now))?.ExpiresAt);
+        Assert.Null(await repository.GetAsync(Coordinator, expired.Id, _now));
+        Assert.Equal(_now, (await repository.GetAsync(Coordinator, lasting.Id, _now))?.LastUsedAt);
+    }
+
     private sealed class TestContextFactory(DbContextOptions<ServerDbContext> options) : IDbContextFactory<ServerDbContext>
     {
         public ServerDbContext CreateDbContext() => new(options);

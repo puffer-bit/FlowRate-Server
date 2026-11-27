@@ -125,7 +125,14 @@ function UsersTable({ users }: { users: ConnectedUser[] }) {
           {users.map(user => (
             <Table.Tr key={user.id}>
               <Table.Td>{user.id}</Table.Td>
-              <Table.Td>{user.username}</Table.Td>
+              <Table.Td>
+                {user.username}
+                {user.kind !== 'User' && (
+                  <Badge ml={6} size="xs" variant="light" color={user.kind === 'DebugBot' ? 'orange' : 'blue'}>
+                    {user.kind === 'DebugBot' ? 'Debug bot' : 'Bot'}
+                  </Badge>
+                )}
+              </Table.Td>
               <Table.Td>{user.displayName ?? '—'}</Table.Td>
               <Table.Td>{user.status}</Table.Td>
               <Table.Td>{formatDateTime(user.connectedAtUtc)}</Table.Td>

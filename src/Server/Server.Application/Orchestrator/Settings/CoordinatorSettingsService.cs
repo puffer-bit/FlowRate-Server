@@ -109,6 +109,8 @@ public class CoordinatorSettingsService : ICoordinatorSettingsService
         model.Rename(change.Name.Trim());
         model.Listen(change.Ip.Trim(), change.Port);
         model.SetUserLimits(change.MaxOnlineUsers, change.MaxUsers);
+        if (change.MaxBots is { } maxBots)
+            model.SetBotLimit(maxBots);
         model.SetMotd(new MotdSettings(change.IsMotdEnabled,
             string.IsNullOrWhiteSpace(change.MotdText) ? null : change.MotdText.Trim()));
         model.SetAccessList(new AccessListSettings(change.AllowedIps.Distinct()));

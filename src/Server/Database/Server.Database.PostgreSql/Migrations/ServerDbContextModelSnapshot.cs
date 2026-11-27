@@ -138,6 +138,9 @@ namespace Server.Database.PostgreSql.Migrations
                     b.Property<bool>("IsMOTDEnabled")
                         .HasColumnType("boolean");
 
+                    b.Property<int>("MaxBots")
+                        .HasColumnType("integer");
+
                     b.Property<int>("MaxOnlineUsers")
                         .HasColumnType("integer");
 
@@ -993,10 +996,16 @@ namespace Server.Database.PostgreSql.Migrations
                         .HasMaxLength(45)
                         .HasColumnType("character varying(45)");
 
+                    b.Property<int>("Kind")
+                        .HasColumnType("integer");
+
                     b.Property<DateTime>("LastConnectionTime")
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<int>("LastStatus")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("OwnerUserId")
                         .HasColumnType("integer");
 
                     b.Property<string>("Prefix")

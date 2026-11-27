@@ -116,6 +116,7 @@ public sealed class RequestRateLimits
             or CoordinatorCreateRoleRequest or CoordinatorUpdateRoleRequest or CoordinatorDeleteRoleRequest
             or CoordinatorReorderRolesRequest or CoordinatorAssignRoleRequest or CoordinatorUnassignRoleRequest
             or CoordinatorSetUserStateRequest or CoordinatorBanRequest or CoordinatorDeleteUserRequest or CoordinatorRevokeBanRequest
+            or CoordinatorCreateBotRequest or CoordinatorBotLoginCodeRequest or CoordinatorDeleteBotRequest
             => RequestRateGroup.Moderation,
         SetMessagePinnedRequest or SendMessageRequest or SetMessageReactionRequest or EditMessageRequest or DeleteMessageRequest or ChatTypingRequest
             or HybridSessionPokeRequest => RequestRateGroup.ChatWrite,

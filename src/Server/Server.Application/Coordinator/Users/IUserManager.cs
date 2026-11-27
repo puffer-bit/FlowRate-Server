@@ -50,8 +50,21 @@ public interface IUserManager
     /// </summary>
     Task<ErrorCode?> SetState(int userId, UserState state);
 
-    /// <summary>Deletes a user, detaching them when connected; their connection stays open.</summary>
+    /// <summary>
+    /// Deletes a user, detaching them when connected; their connection stays open. Bots the user made lose their
+    /// owner.
+    /// </summary>
     Task<ErrorCode?> DeleteUser(int userId);
+
+    /// <summary>
+    /// Makes a bot owned by <paramref name="ownerUserId"/>, a debug bot with <paramref name="isDebug"/>: refused
+    /// with <see cref="ErrorCode.NameTaken"/> or, past the limit of the coordinator (debug bots do not count),
+    /// <see cref="ErrorCode.BotLimitReached"/>.
+    /// </summary>
+    Task<(ErrorCode? Error, UserModel? Bot)> CreateBot(int ownerUserId, string username, bool isDebug);
+
+    /// <summary>The bots of the coordinator, the connected ones as they are attached.</summary>
+    Task<IReadOnlyList<UserModel>> GetBotsAsync();
 
     /// <summary>
     /// Takes the roles of a user saved elsewhere; announced as an update of the user. A connected user takes them

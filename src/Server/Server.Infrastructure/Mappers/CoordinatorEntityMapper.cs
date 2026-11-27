@@ -23,7 +23,8 @@ public static class CoordinatorEntityMapper
             new CoordinatorUploadSettings(entity.MaxUnattachedUploadsPerUser, entity.UnattachedUploadLifetimeHours,
                 entity.MediaTokenLifetimeMinutes),
             entity.RateLimits,
-            entity.SfuNodes.Select(node => node.Id), entity.PasswordHash, entity.Revision);
+            entity.SfuNodes.Select(node => node.Id), entity.PasswordHash, entity.Revision,
+            entity.MaxBots);
     }
 
     /// <summary>Maps scalar values only; the SFU node links are handled by the repository.</summary>
@@ -44,6 +45,7 @@ public static class CoordinatorEntityMapper
             CurrentLaunchTime = model.CurrentLaunchTime,
             MaxOnlineUsers = model.MaxOnlineUsers,
             MaxUsers = model.MaxUsers,
+            MaxBots = model.MaxBots,
             Revision = model.Revision,
 
             IsMOTDEnabled = model.Motd.IsEnabled,

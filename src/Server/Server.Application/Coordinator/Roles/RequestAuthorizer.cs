@@ -12,13 +12,16 @@ public sealed class RequestAuthorizer
     private readonly ICoordinatorPermissions _permissions;
     private readonly IHybridSessionManager _hybridSessions;
     private readonly ISessionManager _sessions;
+    private readonly Func<int, bool>? _isBot;
 
+    /// <param name="isBot">Whether a connected user is a bot; without it no request is refused for being a bot's.</param>
     public RequestAuthorizer(ICoordinatorPermissions permissions, IHybridSessionManager hybridSessions,
-        ISessionManager sessions)
+        ISessionManager sessions, Func<int, bool>? isBot = null)
     {
         _permissions = permissions;
         _hybridSessions = hybridSessions;
         _sessions = sessions;
+        _isBot = isBot;
     }
 
     /// <summary>Whether the sender is frozen and the request does more than read.</summary>
@@ -29,6 +32,9 @@ public sealed class RequestAuthorizer
 
     public async Task<bool> IsAllowedAsync(BaseMessage message)
     {
+        if (_isBot != null && RequestPolicies.IsRefusedForBots(message) && _isBot(message.SenderId))
+            return false;
+
         if (message is Shared.Models.Requests.SessionActions.HybridSession.HybridSessionRequest
             && RequestPolicies.Of(message)?.SessionId is { } mediaSessionId
             && _hybridSessions.TryGetSession(mediaSessionId, out var callSession)

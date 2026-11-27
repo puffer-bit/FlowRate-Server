@@ -108,6 +108,22 @@ public class UserSessionRepository(IDbContextFactory<ServerDbContext> contextFac
         await context.UserSessions.Where(x => x.ExpiresAt <= now).ExecuteDeleteAsync(cancellationToken);
     }
 
+    public async Task ExtendAsync(string coordinatorInstanceId, IReadOnlyCollection<Guid> deviceIds,
+        DateTimeOffset now, DateTimeOffset expiresAt, DateTimeOffset temporaryExpiresAt,
+        CancellationToken cancellationToken = default)
+    {
+        if (deviceIds.Count == 0)
+            return;
+
+        await using var context = await contextFactory.CreateDbContextAsync(cancellationToken);
+
+        var ids = deviceIds.ToList();
+        await context.UserSessions
+            .Where(x => ids.Contains(x.Id) && x.CoordinatorInstanceId == coordinatorInstanceId && x.ExpiresAt > now)
+            .ExecuteUpdateAsync(s => s.SetProperty(x => x.ExpiresAt, x => x.IsTemporary ? temporaryExpiresAt : expiresAt),
+                cancellationToken);
+    }
+
     private static UserSessionEntity ToEntity(UserSession model) => new()
     {
         Id = model.Id,

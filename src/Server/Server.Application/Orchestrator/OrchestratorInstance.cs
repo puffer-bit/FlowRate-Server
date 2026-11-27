@@ -232,6 +232,8 @@ namespace Server.Application.Orchestrator
 
                 var model = CoordinatorInstanceModel.Create(change.Name, change.Ip, change.Port, DateTimeOffset.UtcNow);
                 model.SetUserLimits(change.MaxOnlineUsers, change.MaxUsers);
+                if (change.MaxBots is { } maxBots)
+                    model.SetBotLimit(maxBots);
                 model.SetHeartbeat(new CoordinatorHeartbeatSettings(change.HeartbeatIntervalSeconds,
                     change.HeartbeatTimeoutSeconds));
                 model.AssignSfuNodes(change.SfuNodeIds);

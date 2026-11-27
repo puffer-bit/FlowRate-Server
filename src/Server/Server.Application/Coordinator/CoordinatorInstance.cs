@@ -100,6 +100,7 @@ public partial class CoordinatorInstance : ICoordinatorInstance
             if (_roles != null)
                 await _roles.LoadAsync();
             if (Moderation != null) { await Moderation.ListAsync(); Moderation.Start(); }
+            Devices?.Start();
             await _sessionManager.LoadSessionsAsync();
             await _gatewayService.StartAsync(_messageRouter);
             _mediaService?.Start();
@@ -182,7 +183,7 @@ public partial class CoordinatorInstance : ICoordinatorInstance
 
         var users = _userManager.GetAllConnectedUsers().Values
             .Select(user => new ConnectedUserSnapshot(
-                user.Id, user.Username, user.DisplayName, user.Status, user.LastConnectionTime))
+                user.Id, user.Username, user.DisplayName, user.Status, user.LastConnectionTime, user.Kind))
             .OrderBy(user => user.Id)
             .ToList();
 
@@ -205,6 +206,7 @@ public partial class CoordinatorInstance : ICoordinatorInstance
     public void Dispose()
     {
         Moderation?.Dispose();
+        Devices?.Dispose();
         _chatViewers?.Dispose();
         UnsubscribeFromEvents();
 
