@@ -15,19 +15,21 @@ public class KickFromSessionHandler : HybridSessionRequestHandler<KickFromSessio
     public KickFromSessionHandler(IHybridSessionManager sessionManager, IMessageSender messageSender)
         : base(sessionManager, messageSender)
     {
+        _calls = sessionManager;
     }
+
+    private readonly IHybridSessionManager _calls;
+
+    // In a chat call the group owner kicks; the member leaves the call and may join it again
+    protected override async Task<BaseMessage> HandleAsync(KickFromSessionRequest request, IHybridSession session,
+        string connectionId) =>
+        session.Model.CallDevices != null
+            ? request.Answer(await _calls.KickFromCallAsync(request.SessionId, request.SenderId, connectionId,
+                request.TargetUserId, request.Reason), request.ToResponse)
+            : await HandleAsync(request, session);
 
     protected override int GetSessionId(KickFromSessionRequest request) => request.SessionId;
 
     protected override async Task<BaseMessage> HandleAsync(KickFromSessionRequest request, IHybridSession session) =>
-        request.ToResponse(await session.PeerManager.KickPeerAsync(request.SenderId, request.UserTargetId, request.Reason));
-
-    // Only hybrid sessions support this request, so an id of another session type is never found
-    protected override BaseMessage SessionNotFound(KickFromSessionRequest request) =>
-        request.ToResponse(request.SessionType == SessionType.Hybrid
-            ? LeaveSessionResult.SessionNotExists
-            : LeaveSessionResult.UnknownSessionType);
-
-    public override BaseMessage CreateFailureResponse(KickFromSessionRequest request) =>
-        request.ToResponse(LeaveSessionResult.InternalError);
+        request.Answer(await session.PeerManager.KickPeerAsync(request.SenderId, request.TargetUserId, request.Reason), request.ToResponse);
 }

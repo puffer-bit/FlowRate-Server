@@ -30,15 +30,15 @@ public class CoordinatorSfuPool : ISFUNodeSelector
     public CoordinatorSfuPool(ISfuNodeRegistry registry, IReadOnlyCollection<int> nodeIds)
     {
         _registry = registry;
-        _nodeIds = nodeIds.ToArray();
+        _nodeIds = nodeIds.Distinct().Order().ToArray();
     }
 
-    public IReadOnlyCollection<int> NodeIds => _nodeIds;
+    public IReadOnlyCollection<int> NodeIds => _nodeIds.ToArray();
 
     public void SetNodes(IEnumerable<int> nodeIds)
     {
-        var newNodeIds = nodeIds.ToArray();
-        var isChanged = !newNodeIds.Order().SequenceEqual(_nodeIds.Order());
+        var newNodeIds = nodeIds.Distinct().Order().ToArray();
+        var isChanged = !newNodeIds.SequenceEqual(_nodeIds);
         _nodeIds = newNodeIds;
 
         // Handlers log their own failures, so nothing is lost by not awaiting here
@@ -53,8 +53,11 @@ public class CoordinatorSfuPool : ISFUNodeSelector
             .OfType<ISFUNode>()
             .ToList();
 
-        // Prefer a node that is already connected; otherwise the session reconnects together with the node
-        return (nodes.FirstOrDefault(node => node.Gateway.IsConnected) ?? nodes.FirstOrDefault())?.Gateway;
+        // Spread sessions over reachable nodes independently of the configured order.
+        // An assigned, healthy session keeps its node when the pool grows.
+        var connected = nodes.Where(node => node.Gateway.IsConnected).ToList();
+        var candidates = connected.Count > 0 ? connected : nodes;
+        return candidates.Count == 0 ? null : candidates[(int)((uint)(sessionId - 1) % (uint)candidates.Count)].Gateway;
     }
 
     public ISFUGateway? GetSFUNodeById(int sessionId, int nodeId) =>

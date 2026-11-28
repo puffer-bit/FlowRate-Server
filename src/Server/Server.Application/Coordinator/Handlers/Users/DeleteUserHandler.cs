@@ -33,33 +33,35 @@ public class DeleteUserHandler : IMessageHandler<CoordinatorDeleteUserRequest>
         if (request == null)
             return HandleMessageResult.ForbiddenRequest;
 
-        var userId = request.UserTargetId;
+        var userId = request.TargetUserId;
         if (userId == request.SenderId || userId == UserModel.SystemUserId)
         {
-            _messageSender.SendMessageById(connectionId, request.ToResponse(ModerateUserResult.CannotTargetSelf));
+            _messageSender.SendMessageById(connectionId, request.ToError(ErrorCode.CannotTargetSelf));
             return HandleMessageResult.NoError;
         }
 
         var connections = _connectionManager.GetUserConnections(userId);
 
         var result = await _userManager.DeleteUser(userId);
-        _messageSender.SendMessageById(connectionId, request.ToResponse(result));
+        _messageSender.SendMessageById(connectionId, request.Answer(result, request.ToResponse));
 
-        if (result != ModerateUserResult.NoError)
+        if (result != null)
         {
             _logger.LogTrace("User {SenderId} failed to delete user {Id}: {Result}", request.SenderId, userId, result);
             return HandleMessageResult.NoError;
         }
 
+        CloseDeleted(connections, userId);
+        return HandleMessageResult.NoError;
+    }
+
+    /// <summary>Tells the connections of a deleted user so and closes them.</summary>
+    internal static void CloseDeleted(IEnumerable<IClientConnection> connections, int userId)
+    {
         foreach (var connection in connections)
         {
             connection.Send(new CoordinatorUserDeletedNotification(userId));
             connection.Close();
         }
-
-        return HandleMessageResult.NoError;
     }
-
-    public BaseMessage? CreateFailureResponse(CoordinatorDeleteUserRequest request) =>
-        request.ToResponse(ModerateUserResult.InternalError);
 }

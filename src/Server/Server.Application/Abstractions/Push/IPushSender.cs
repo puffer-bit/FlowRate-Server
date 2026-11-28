@@ -2,7 +2,7 @@ using Shared.Enums;
 
 namespace Server.Application.Abstractions.Push;
 
-public sealed record PushMessage(string Token, PushPlatform Platform, string KeyId, string Payload);
+public sealed record PushMessage(string Token, PushPlatform Platform, string KeyId, string Payload, int? TimeToLiveSeconds = null);
 
 public enum PushSendStatus
 {

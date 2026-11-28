@@ -1,0 +1,8 @@
+# Add after docker-compose.bridge.yml and docker-compose.postgresql.yml.
+# PostgreSQL stays inside the Compose network without a published port.
+services:
+  postgres:
+    ports: !reset []
+  server:
+    environment:
+      Database__ConnectionString: Host=postgres;Port=5432;Database=flowrate;Username=flowrate

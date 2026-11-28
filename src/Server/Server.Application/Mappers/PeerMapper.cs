@@ -13,7 +13,6 @@ public static class PeerMapperExtensions
         {
             UserId = peer.UserId,
             State = peer.State,
-            IsNegotiated = peer.IsTransportConnected,
             IsConnected = peer.IsTransportConnected,
             IsApproved = peer.IsApproved,
             IsRejected = peer.IsRejected,
@@ -22,7 +21,8 @@ public static class PeerMapperExtensions
             IsScreenShareActive = peer.IsScreenShareActive,
             IsScreenAudioActive = peer.IsScreenAudioActive,
             IsAfk = peer.IsAfk,
-            AfkMessage = peer.AfkReason
+            AfkMessage = peer.AfkReason,
+            WatchedScreenShares = peer.WatchedScreenShares?.ToList() ?? []
         };
     }
 }

@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Server.Database;
 using Server.Infrastructure.Mappers;
 using Server.Core.Models.HybridSession;
 using Server.Application.Abstractions.Persistence;
@@ -59,7 +60,7 @@ public class VideoSessionRepository : IVideoSessionRepository
 
         entity.Name = instance.Name;
         entity.Capacity = instance.Capacity;
-        entity.IsHostMustApprove = instance.IsHostMustApprove;
+        entity.IsHostMustApprove = instance.IsApprovalRequired;
         entity.SetMedia(instance.Media);
         await context.SaveChangesAsync(cancellationToken);
     }

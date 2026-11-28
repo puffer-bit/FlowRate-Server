@@ -18,13 +18,16 @@ public class CoordinatorInfoActionHandler : IMessageHandler<CoordinatorInfoReque
     private readonly ICoordinatorInstanceContext _coordinatorInstanceContext;
     private readonly IMessageSender _messageSender;
     private readonly IUserManager _userManager;
+    private readonly Orchestrator.Restart.IServerRestartNotice? _restartNotice;
     
     public CoordinatorInfoActionHandler(
         ILogger logger, 
         ICoordinatorInstanceContext coordinatorInstanceContext, 
         IMessageSender messageSender, 
-        IUserManager userManager)
+        IUserManager userManager,
+        Orchestrator.Restart.IServerRestartNotice? restartNotice = null)
     {
+        _restartNotice = restartNotice;
         _logger = logger;
         _coordinatorInstanceContext = coordinatorInstanceContext;
         _messageSender = messageSender;
@@ -41,6 +44,9 @@ public class CoordinatorInfoActionHandler : IMessageHandler<CoordinatorInfoReque
         var coordinatorInfoDto = _coordinatorInstanceContext.ToDto(_userManager.ConnectedUsersCount);
 
         SendResponse(request.ToResponse(coordinatorInfoDto), connectionId);
+        // Every client asks for the coordinator after it logs in: a standing warning reaches it this way
+        if (_restartNotice?.Warning is { } warning)
+            _messageSender.SendMessageById(connectionId, warning);
         
         return HandleMessageResult.NoError;
     }

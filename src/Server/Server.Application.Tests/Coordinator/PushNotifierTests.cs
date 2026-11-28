@@ -36,7 +36,7 @@ public class PushNotifierTests
 
     public PushNotifierTests()
     {
-        ChatSessionModel? chat = new(ChatId, CoordinatorId, "general", 10, AuthorId, AuthorId, ChatSessionOptions.Default);
+        ChatSessionModel? chat = new(ChatId, CoordinatorId, "general", AuthorId, AuthorId, ChatSessionOptions.Default);
         _chats.Setup(c => c.TryGetSession(ChatId, out chat)).Returns(true);
 
         UserModel? online = User(OnlineUserId, "carol");
@@ -54,14 +54,14 @@ public class PushNotifierTests
     }
 
     private static UserModel User(int id, string name) =>
-        new(id, CoordinatorId, name, UserState.Normal, UserStatus.Online, DateTime.UtcNow, DateTime.UtcNow);
+        new(id, CoordinatorId, name, UserState.Normal, UserStatus.Online, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow);
 
     private static PushDeviceModel Device(int userId, string token) =>
         new(CoordinatorId, userId, token, PushPlatform.Android, "0123456789abcdef0123456789abcdef", Key);
 
     private static ChatMessageModel Message(string text, bool system = false)
     {
-        var message = ChatMessageModel.Create(ChatId, AuthorId, new DateTime(2026, 10, 13, 9, 0, 0, DateTimeKind.Utc),
+        var message = ChatMessageModel.Create(ChatId, AuthorId, new DateTimeOffset(2026, 10, 13, 9, 0, 0, TimeSpan.Zero),
             new ChatTextContentModel { Text = text });
         message.Id = 42;
         return system ? Clone(message) : message;
@@ -86,6 +86,35 @@ public class PushNotifierTests
         notifier.Watch(_users.Object, _chats.Object, permissions.Object);
 
         await notifier.HandleAsync(new ChatSessionMessageAddedEvent(ChatId, message));
+        await notifier.DrainAsync();
+    }
+
+    [Theory]
+    [InlineData(OfflineUserId)]
+    [InlineData(OnlineUserId)]
+    public async Task CallPush_GoesToRecipientIncludingConnectedPhones_WithExpiryAndShortTtl(int recipient)
+    {
+        using var notifier = new PushNotifier(NullLogger.Instance, CoordinatorId, _sender, _devices.Object);
+        notifier.Watch(_users.Object, _chats.Object, Mock.Of<ICoordinatorPermissions>());
+        var now = DateTimeOffset.UtcNow;
+        var id = Guid.NewGuid();
+        var call = new Shared.Models.DataTransferObjects.ChatCallDTO(id, ChatId, AuthorId,
+            Shared.Models.DataTransferObjects.ChatCallState.Active, null, now, null,
+            [new(recipient, Shared.Models.DataTransferObjects.ChatCallParticipantState.Ringing)], false, null);
+        await notifier.NotifyCallAsync(new CallPush(call, null, [new CallPushRecipient(recipient, true, now.AddSeconds(45))]));
+        var sent = Assert.Single(_sender.Sent);
+        Assert.Equal(recipient == OfflineUserId ? "offline-token" : "online-token", sent.Token);
+        Assert.Equal(45, sent.TimeToLiveSeconds);
+        using var json = JsonDocument.Parse(PushCipher.Decrypt(Key, sent.Payload));
+        Assert.Equal(id, json.RootElement.GetProperty("callId").GetGuid());
+        Assert.Equal(recipient, json.RootElement.GetProperty("recipientId").GetInt32());
+        Assert.Equal(now.AddSeconds(45).ToUnixTimeMilliseconds(), json.RootElement.GetProperty("expiresAt").GetInt64());
+        Assert.Equal(0, json.RootElement.GetProperty("callState").GetInt32());
+        await notifier.NotifyCallAsync(new CallPush(call, "Friends", [new CallPushRecipient(recipient, false, now)]));
+        Assert.Equal(2, _sender.Sent.Count);
+        using var stopped = JsonDocument.Parse(PushCipher.Decrypt(Key, _sender.Sent[1].Payload));
+        Assert.Equal(2, stopped.RootElement.GetProperty("callState").GetInt32());
+        Assert.Equal("Friends", stopped.RootElement.GetProperty("chatName").GetString());
         await notifier.DrainAsync();
     }
 

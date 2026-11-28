@@ -18,19 +18,24 @@ public static class CoordinatorSettingsMapper
         IsPasswordProtected = !string.IsNullOrEmpty(model.PasswordHash),
         MaxOnlineUsers = model.MaxOnlineUsers,
         MaxUsers = model.MaxUsers,
-        IsMotdEnabled = model.Motd.IsEnabled,
-        MotdText = model.Motd.Text,
+        MaxBots = model.MaxBots,
+        IsMOTDEnabled = model.Motd.IsEnabled,
+        MOTDText = model.Motd.Text,
         AllowedIps = model.AccessList.AllowedIps.ToList(),
-        BannedIps = model.AccessList.BannedIps.ToList(),
         HeartbeatIntervalSeconds = model.Heartbeat.IntervalSeconds,
         HeartbeatTimeoutSeconds = model.Heartbeat.TimeoutSeconds,
         MaxFileSizeBytes = model.Media.MaxFileSizeBytes,
         StorageQuotaBytes = model.Media.StorageQuotaBytes,
+        ImageMaxSide = model.Media.ImageMaxSide,
+        ImageQuality = model.Media.ImageQuality,
+        AllowOriginalImages = model.Media.AllowOriginalImages,
+        VideoMaxSide = model.Media.VideoMaxSide,
+        AllowOriginalVideos = model.Media.AllowOriginalVideos,
         MaxUnattachedUploadsPerUser = model.Uploads.MaxUnattachedUploadsPerUser,
         UnattachedUploadLifetimeHours = model.Uploads.UnattachedLifetimeHours,
         MediaTokenLifetimeMinutes = model.Uploads.TokenLifetimeMinutes,
         RateLimits = model.RateLimits.ToDto(),
-        SfuNodeIds = model.SfuNodeIds.ToList()
+        SFUNodeIds = model.SfuNodeIds.ToList()
     };
 
     public static CoordinatorRateLimitsDTO ToDto(this CoordinatorRateLimitSettings limits) => new()
@@ -57,12 +62,12 @@ public static class CoordinatorSettingsMapper
     private static RequestRateDTO ToDto(this RequestRateSetting rate) =>
         new() { Count = rate.Count, PeriodSeconds = rate.PeriodSeconds };
 
-    public static SfuNodeDTO ToDto(this SfuNodeSettingsModel node, SfuNodeStatus? status) => new()
+    public static SFUNodeDTO ToDto(this SfuNodeSettingsModel node, SfuNodeStatus? status) => new()
     {
         Id = node.Id, Name = node.Name, Host = node.Host, Port = node.Port, IsEnabled = node.IsEnabled,
         ConnectionState = status?.State,
         PingMs = status?.RoundTripTime is { } roundTrip ? Math.Round(roundTrip.TotalMilliseconds, 1) : null,
-        LastPingAtUtc = status?.LastPingAtUtc,
+        LastPingAt = status?.LastPingAtUtc,
         ConnectionError = status?.Error
     };
 
@@ -75,19 +80,24 @@ public static class CoordinatorSettingsMapper
         RemovePassword = dto.RemovePassword,
         MaxOnlineUsers = dto.MaxOnlineUsers,
         MaxUsers = dto.MaxUsers,
-        IsMotdEnabled = dto.IsMotdEnabled,
-        MotdText = dto.MotdText,
+        MaxBots = dto.MaxBots,
+        IsMotdEnabled = dto.IsMOTDEnabled,
+        MotdText = dto.MOTDText,
         AllowedIps = dto.AllowedIps,
-        BannedIps = dto.BannedIps,
         HeartbeatIntervalSeconds = dto.HeartbeatIntervalSeconds,
         HeartbeatTimeoutSeconds = dto.HeartbeatTimeoutSeconds,
         MaxFileSizeBytes = dto.MaxFileSizeBytes,
         StorageQuotaBytes = dto.StorageQuotaBytes,
+        ImageMaxSide = dto.ImageMaxSide,
+        ImageQuality = dto.ImageQuality,
+        AllowOriginalImages = dto.AllowOriginalImages,
+        VideoMaxSide = dto.VideoMaxSide,
+        AllowOriginalVideos = dto.AllowOriginalVideos,
         MaxUnattachedUploadsPerUser = dto.MaxUnattachedUploadsPerUser,
         UnattachedUploadLifetimeHours = dto.UnattachedUploadLifetimeHours,
         MediaTokenLifetimeMinutes = dto.MediaTokenLifetimeMinutes,
         RateLimits = dto.RateLimits.ToChange(),
-        SfuNodeIds = dto.SfuNodeIds
+        SfuNodeIds = dto.SFUNodeIds
     };
 
     public static RateLimitsChange ToChange(this CoordinatorRateLimitsDTO dto) => new()

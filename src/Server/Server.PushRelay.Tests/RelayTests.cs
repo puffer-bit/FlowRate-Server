@@ -70,6 +70,26 @@ public sealed class RelayTests : IAsyncLifetime
         Assert.Equal(new FcmMessage("device-token", FcmPlatform.Android, KeyId, Payload), sent);
     }
 
+    [Fact]
+    public async Task CallLifetime_IsForwardedToFcm()
+    {
+        var response = await _http.PostAsJsonAsync(RelayContract.PushPath,
+            new RelayPushRequest("device-token", FcmPlatform.Android, KeyId, Payload, TimeToLiveSeconds: 45));
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal(45, Assert.Single(_fcm.Sent).TimeToLiveSeconds);
+    }
+
+    [Theory]
+    [InlineData(-1)]
+    [InlineData(86401)]
+    public async Task InvalidLifetime_IsRefused(int ttl)
+    {
+        var response = await _http.PostAsJsonAsync(RelayContract.PushPath,
+            new RelayPushRequest("device-token", FcmPlatform.Android, KeyId, Payload, ttl));
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Empty(_fcm.Sent);
+    }
+
     [Theory]
     [InlineData(FcmSendStatus.TokenInvalid, HttpStatusCode.NotFound)]
     [InlineData(FcmSendStatus.Failed, HttpStatusCode.BadGateway)]

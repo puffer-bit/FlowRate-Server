@@ -1,3 +1,4 @@
+using Server.Core.Models.Media;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Sockets;
@@ -18,11 +19,12 @@ using Server.Core.Models.TextChat;
 using Server.Core.Models.TextChat.Messages;
 using Server.Core.Models.TextChat.Messages.Content;
 using Server.Core.Models.User;
+using Server.Database.Sqlite;
+using Server.Database;
 using Server.Infrastructure.Coordinator.Connection.Gateway;
 using Server.Infrastructure.Coordinator.Media;
 using Server.Infrastructure.Coordinator.Services;
-using Server.Infrastructure.Database;
-using Server.Infrastructure.Database.Entities.TextChat;
+using Server.Database.Entities.TextChat;
 using Server.Infrastructure.Database.Repositories;
 using Server.Infrastructure.Options;
 using Server.Infrastructure.Security;
@@ -67,7 +69,7 @@ public sealed class MediaEndpointsTests : IDisposable
         }
 
         var factory = new TestContextFactory(new DbContextOptionsBuilder<ServerDbContext>()
-            .UseSqlite($"Data Source={Path.Combine(_root, "server.db")}")
+            .UseServerSqlite($"Data Source={Path.Combine(_root, "server.db")}")
             .Options);
         using (var context = factory.CreateDbContext())
         {
@@ -86,7 +88,7 @@ public sealed class MediaEndpointsTests : IDisposable
             .Returns((int id, out ChatSessionModel? chat) =>
             {
                 chat = id == _chatId
-                    ? new ChatSessionModel(id, Coordinator, "general", SessionModel.NoCapacityLimit, UserId, UserId,
+                    ? new ChatSessionModel(id, Coordinator, "general", UserId, UserId,
                         new ChatSessionOptions(IsAttachmentsAllowed: _attachmentsAllowed))
                     : null;
                 return chat != null;
@@ -96,7 +98,7 @@ public sealed class MediaEndpointsTests : IDisposable
         users.Setup(u => u.GetUserAsync(It.IsAny<int>()))
             .ReturnsAsync((int id) => _users.TryGetValue(id, out var user)
                 ? user
-                : UserModel.Create(Coordinator, $"user{id}", null, DateTime.UtcNow));
+                : UserModel.Create(Coordinator, $"user{id}", null, DateTimeOffset.UtcNow));
 
         var storage = new TusDiskMediaStorage(Path.Combine(_root, "files"));
         _media = new MediaService(NullLogger.Instance, _uploads, storage, chats.Object,
@@ -197,7 +199,7 @@ public sealed class MediaEndpointsTests : IDisposable
 
     private async Task<int> SendImageMessageAsync(string uploadId, string previewId)
     {
-        var message = ChatMessageModel.Create(_chatId, UserId, DateTime.UtcNow, null,
+        var message = ChatMessageModel.Create(_chatId, UserId, DateTimeOffset.UtcNow, null,
         [
             new ChatImageContentModel
             {
@@ -210,7 +212,7 @@ public sealed class MediaEndpointsTests : IDisposable
 
     private async Task<int> SendFileMessageAsync(string uploadId, string fileName, long size)
     {
-        var message = ChatMessageModel.Create(_chatId, UserId, DateTime.UtcNow, null, files:
+        var message = ChatMessageModel.Create(_chatId, UserId, DateTimeOffset.UtcNow, null, files:
         [
             new ChatFileContentModel
             {
@@ -240,6 +242,48 @@ public sealed class MediaEndpointsTests : IDisposable
         // An image path does not lead to a file, nor a file path to an image
         Assert.Equal(HttpStatusCode.NotFound,
             (await _http.GetAsync($"{MediaEndpoints.Images}/{fileId}?variant=original")).StatusCode);
+    }
+
+    [Fact]
+    public async Task FrameOfAVideo_IsAttachedWithItAndServedAsItsPreview()
+    {
+        var videoId = await UploadAsync(Png, MediaUploadMetadata.KindFile, "video/mp4");
+        var frameId = await UploadAsync(Jpeg, MediaUploadMetadata.KindImagePreview, "image/jpeg");
+        var message = ChatMessageModel.Create(_chatId, UserId, DateTimeOffset.UtcNow, null, files:
+        [
+            new ChatFileContentModel
+            {
+                Id = 0, FileName = "clip.mp4", Size = Png.Length, MimeType = "video/mp4", UploadId = videoId,
+                Video = new ChatFileVideoModel(1280, 720, TimeSpan.FromSeconds(4)), PreviewUploadId = frameId
+            }
+        ]);
+        var file = (await _messages.AddAsync(message)).Files.Single();
+        Assert.Equal(new ChatFileVideoModel(1280, 720, TimeSpan.FromSeconds(4)), file.Video);
+        Assert.Equal(MediaUploadState.Attached, (await _uploads.GetAsync(frameId))!.State);
+
+        var response = await _http.GetAsync($"{MediaEndpoints.Files}/{file.Id}?variant=preview");
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal("image/jpeg", response.Content.Headers.ContentType!.MediaType);
+        Assert.Equal(Jpeg, await response.Content.ReadAsByteArrayAsync());
+
+        Assert.Equal(Png, await _http.GetByteArrayAsync($"{MediaEndpoints.Files}/{file.Id}"));
+        Assert.Equal(HttpStatusCode.BadRequest,
+            (await _http.GetAsync($"{MediaEndpoints.Files}/{file.Id}?variant=poster")).StatusCode);
+
+        // Deleting the message takes the frame too
+        await _messages.DeleteAsync((await _messages.GetBeforeAsync(_chatId, null, 1)).Single().Id);
+        Assert.Equal(HttpStatusCode.NotFound,
+            (await _http.GetAsync($"{MediaEndpoints.Files}/{file.Id}?variant=preview")).StatusCode);
+    }
+
+    [Fact]
+    public async Task FileWithoutAFrame_HasNoPreview()
+    {
+        var uploadId = await UploadAsync(Png, MediaUploadMetadata.KindFile, "video/mp4");
+        var fileId = await SendFileMessageAsync(uploadId, "clip.mp4", Png.Length);
+
+        Assert.Equal(HttpStatusCode.NotFound,
+            (await _http.GetAsync($"{MediaEndpoints.Files}/{fileId}?variant=preview")).StatusCode);
     }
 
     [Fact]
@@ -327,7 +371,7 @@ public sealed class MediaEndpointsTests : IDisposable
         Assert.True(await _media.AttachAvatarAsync(uploadId, UserId));
         var avatar = $"{MediaEndpoints.Avatars}/{uploadId}";
 
-        var frozen = UserModel.Create(Coordinator, "frozen", null, DateTime.UtcNow);
+        var frozen = UserModel.Create(Coordinator, "frozen", null, DateTimeOffset.UtcNow);
         frozen.Suspend();
         _users[UserId] = frozen;
         using (var read = await _http.GetAsync(avatar))
@@ -335,7 +379,7 @@ public sealed class MediaEndpointsTests : IDisposable
         using (var upload = await CreateAsync(Png.Length))
             Assert.Equal(HttpStatusCode.Forbidden, upload.StatusCode);
 
-        var banned = UserModel.Create(Coordinator, "banned", null, DateTime.UtcNow);
+        var banned = UserModel.Create(Coordinator, "banned", null, DateTimeOffset.UtcNow);
         banned.Ban();
         _users[UserId] = banned;
         using (var read = await _http.GetAsync(avatar))
@@ -384,6 +428,23 @@ public sealed class MediaEndpointsTests : IDisposable
         await Assert.ThrowsAsync<Server.Application.Abstractions.Persistence.MediaUploadUnavailableException>(
             () => SendImageMessageAsync(uploadId, previewId));
         Assert.Equal(1, await _messages.CountChangesAsync(_chatId, 0));
+    }
+
+    [Fact]
+    public async Task BrowserFromAnotherOrigin_PassesThePreflight_AndReadsTheUploadLocation()
+    {
+        var preflight = new HttpRequestMessage(HttpMethod.Options, MediaEndpoints.Uploads);
+        preflight.Headers.Add("Origin", "http://localhost:5235");
+        preflight.Headers.Add("Access-Control-Request-Method", "POST");
+        preflight.Headers.Add("Access-Control-Request-Headers", "authorization,tus-resumable,upload-length,upload-metadata");
+        using var allowed = await _http.SendAsync(preflight);
+        Assert.Equal(HttpStatusCode.NoContent, allowed.StatusCode);
+        Assert.Equal("*", allowed.Headers.GetValues("Access-Control-Allow-Origin").Single());
+
+        _http.DefaultRequestHeaders.Add("Origin", "http://localhost:5235");
+        using var created = await CreateAsync(Png.Length);
+        Assert.Equal(HttpStatusCode.Created, created.StatusCode);
+        Assert.Contains("Location", created.Headers.GetValues("Access-Control-Expose-Headers").Single().Split(','));
     }
 
     [Fact]
@@ -455,9 +516,10 @@ public sealed class MediaEndpointsTests : IDisposable
             Assert.Equal(HttpStatusCode.TooManyRequests, fifth.StatusCode);
 
         await using (var context = new TestContextFactory(new DbContextOptionsBuilder<ServerDbContext>()
-                         .UseSqlite($"Data Source={Path.Combine(_root, "server.db")}").Options).CreateDbContext())
+                         .UseServerSqlite($"Data Source={Path.Combine(_root, "server.db")}").Options).CreateDbContext())
         {
-            await context.MediaUploads.ExecuteUpdateAsync(s => s.SetProperty(x => x.CreatedAt, DateTime.UtcNow.AddDays(-2)));
+            var old = DateTimeOffset.UtcNow.AddDays(-2);
+            await context.MediaUploads.ExecuteUpdateAsync(s => s.SetProperty(x => x.CreatedAt, old));
         }
 
         await _media.CleanUpAsync();

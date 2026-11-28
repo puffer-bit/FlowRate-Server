@@ -20,14 +20,5 @@ public class RejectInSessionHandler : HybridSessionRequestHandler<RejectUserRequ
     protected override int GetSessionId(RejectUserRequest request) => request.SessionId;
 
     protected override async Task<BaseMessage> HandleAsync(RejectUserRequest request, IHybridSession session) =>
-        request.ToResponse(await session.PeerManager.RejectPeerAsync(request.SenderId, request.UserTargetId, request.Reason));
-
-    // Only hybrid sessions support this request, so an id of another session type is never found
-    protected override BaseMessage SessionNotFound(RejectUserRequest request) =>
-        request.ToResponse(request.SessionType == SessionType.Hybrid
-            ? RejectUserSessionResult.SessionNotExists
-            : RejectUserSessionResult.UnknownSessionType);
-
-    public override BaseMessage CreateFailureResponse(RejectUserRequest request) =>
-        request.ToResponse(RejectUserSessionResult.InternalError);
+        request.Answer(await session.PeerManager.RejectPeerAsync(request.SenderId, request.TargetUserId, request.Reason), request.ToResponse);
 }

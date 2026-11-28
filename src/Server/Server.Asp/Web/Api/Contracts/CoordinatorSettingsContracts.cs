@@ -1,3 +1,4 @@
+using Server.Core.Models.Coordinator.Settings;
 using Shared.Enums;
 using System.ComponentModel.DataAnnotations;
 
@@ -21,7 +22,42 @@ public sealed record CoordinatorSettingsDto(
     MediaSettingsDto Media,
     UploadSettingsDto Uploads,
     RateLimitSettingsDto RateLimits,
-    IReadOnlyList<int> SfuNodeIds);
+    IReadOnlyList<int> SfuNodeIds,
+    int MaxBots = 0);
+
+/// <summary>Basic credentials; leave both empty to connect without authentication.</summary>
+public class SfuCredentialsDto : IValidatableObject
+{
+    [StringLength(256)] public string? Username { get; init; }
+    [StringLength(4096)] public string? Password { get; init; }
+
+    public virtual IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
+    {
+        var username = Username?.Trim() ?? string.Empty;
+        if (username.Contains(':'))
+            yield return new ValidationResult("The username cannot contain a colon.", [nameof(Username)]);
+        if ((username.Length == 0) != string.IsNullOrEmpty(Password))
+            yield return new ValidationResult("Provide both username and password, or leave both empty.", [nameof(Username), nameof(Password)]);
+    }
+}
+
+/// <summary>Connection settings for a new node in the global SFU pool.</summary>
+public sealed class CreateSfuNodeDto : SfuCredentialsDto
+{
+    [Required, StringLength(100)] public string Name { get; init; } = string.Empty;
+    [Required, StringLength(253)] public string Host { get; init; } = string.Empty;
+    [Range(1, 65535)] public int Port { get; init; }
+    public bool IsSecured { get; init; }
+
+    public override IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
+    {
+        foreach (var error in base.Validate(validationContext))
+            yield return error;
+        var hostType = Uri.CheckHostName(Host.Trim());
+        if (hostType is not (UriHostNameType.Dns or UriHostNameType.IPv4))
+            yield return new ValidationResult("Enter a hostname or IPv4 address without a scheme or port.", [nameof(Host)]);
+    }
+}
 
 /// <summary>A node of the global SFU pool a coordinator can be given. Credentials are left out.</summary>
 /// <param name="Status">How the orchestrator's connection to the node is doing; null for a disabled node.</param>
@@ -31,7 +67,7 @@ public sealed record SfuNodeDto(int Id, string Name, string Host, int Port, bool
 /// <param name="PingMs">Round trip of the last answered ping; null while the node does not answer.</param>
 /// <param name="Error">Why the node is not connected, if known.</param>
 public sealed record SfuNodeStatusDto(
-    SfuNodeConnectionState State,
+    SFUNodeConnectionState State,
     double? PingMs,
     DateTimeOffset? LastPingAtUtc,
     DateTimeOffset StateChangedAtUtc,
@@ -70,6 +106,9 @@ public sealed class UpdateCoordinatorSettingsDto
 
     public int MaxUsers { get; init; }
 
+    /// <summary>How many bots may be made, 0 for none; null keeps the current limit.</summary>
+    public int? MaxBots { get; init; }
+
     [Required]
     public MotdSettingsDto Motd { get; init; } = new();
 
@@ -102,7 +141,6 @@ public sealed class AccessListSettingsDto
 {
     /// <summary>When not empty, only these IPs may connect.</summary>
     public IReadOnlyList<string> AllowedIps { get; init; } = [];
-    public IReadOnlyList<string> BannedIps { get; init; } = [];
 }
 
 public sealed class HeartbeatSettingsDto
@@ -117,6 +155,21 @@ public sealed class MediaSettingsDto
 
     /// <summary>0 leaves the storage unlimited.</summary>
     public long StorageQuotaBytes { get; init; }
+
+    /// <summary>The longest side clients reduce images to when they compress them.</summary>
+    public int ImageMaxSide { get; init; } = CoordinatorMediaSettings.DefaultImageMaxSide;
+
+    /// <summary>The JPEG or WebP quality of compressed images.</summary>
+    public int ImageQuality { get; init; } = CoordinatorMediaSettings.DefaultImageQuality;
+
+    /// <summary>Images may go uncompressed; otherwise none larger than <see cref="ImageMaxSide"/> is taken.</summary>
+    public bool AllowOriginalImages { get; init; } = true;
+
+    /// <summary>The shorter side clients reduce videos to when they compress them, like 720 for 720p.</summary>
+    public int VideoMaxSide { get; init; } = CoordinatorMediaSettings.DefaultVideoMaxSide;
+
+    /// <summary>Videos may go uncompressed; otherwise only an MP4 within <see cref="VideoMaxSide"/> and its bitrate is taken.</summary>
+    public bool AllowOriginalVideos { get; init; } = true;
 }
 
 /// <summary>Uploads not attached to a message yet, and the tokens media requests carry.</summary>

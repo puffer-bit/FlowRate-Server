@@ -1,6 +1,6 @@
 import { MediaSourceType } from '../../core/enums/media-source-type.js';
 import { MediaType } from '../../core/enums/media-type.js';
-import { getClientRtpCapabilities, getMediaProfile, getRtxPayloadType, PRODUCER_HEADER_EXTENSIONS, type OutboundSettings } from './media-profiles.js';
+import { getClientRtpCapabilities, getMediaProfile, getRtxPayloadType, getProducerHeaderExtensions, type OutboundSettings } from './media-profiles.js';
 import type {
     Consumer,
     DtlsParameters,
@@ -36,7 +36,7 @@ export interface OutboundResult {
     codec: RtpCodecParameters | undefined;
     /** The stream the client retransmits lost packets on, when the track has one. */
     rtx: { payloadType: number; ssrc: number } | undefined;
-    /** The id the producer reads the transport-wide sequence number under, see PRODUCER_HEADER_EXTENSIONS. */
+    /** The id the producer reads the transport-wide sequence number under, see getProducerHeaderExtensions. */
     transportCcExtensionId: number | undefined;
 }
 
@@ -182,7 +182,7 @@ export class Session {
                     ? [codec, { mimeType: `${kind}/rtx`, payloadType: rtx.payloadType, clockRate: codec.clockRate, parameters: { apt: codec.payloadType } }]
                     : [codec],
                 encodings: [rtx ? { ssrc, rtx: { ssrc: rtx.ssrc } } : { ssrc }],
-                headerExtensions: PRODUCER_HEADER_EXTENSIONS
+                headerExtensions: getProducerHeaderExtensions(codec)
             },
             keyFrameRequestDelay: profile.keyFrameRequestDelay
         });

@@ -4,6 +4,7 @@ import type { MediaKind, RtcpFeedback, RtpCapabilities, RtpCodecCapability, RtpC
 
 const OPUS = { mimeType: 'audio/opus', clockRate: 48000, channels: 2, payloadType: 100 };
 const VP8 = { mimeType: 'video/VP8', clockRate: 90000, payloadType: 96 };
+const AV1 = { mimeType: 'video/AV1', clockRate: 90000, payloadType: 104 };
 const H264 = {
     mimeType: 'video/H264',
     clockRate: 90000,
@@ -13,6 +14,12 @@ const H264 = {
         'profile-level-id': '42e01f',
         'level-asymmetry-allowed': 1
     }
+};
+
+const VIDEO_CODECS: Record<string, RtpCodecParameters> = {
+    'video/vp8': VP8,
+    'video/h264': H264,
+    'video/av1': AV1
 };
 
 const PLI_FIR_FEEDBACK: RtcpFeedback[] = [
@@ -34,11 +41,24 @@ export const PRODUCER_HEADER_EXTENSIONS: RtpHeaderExtensionParameters[] = [
     { uri: 'http://www.ietf.org/id/draft-holmer-rmcat-transport-wide-cc-extensions-01', id: 5 }
 ];
 
+
+/** AV1 keyframe detection in mediasoup requires this extension, including for a single layer. */
+export const AV1_DEPENDENCY_DESCRIPTOR: RtpHeaderExtensionParameters = {
+    uri: 'https://aomediacodec.github.io/av1-rtp-spec/#dependency-descriptor-rtp-header-extension', id: 6
+};
+
+export function getProducerHeaderExtensions(codec: RtpCodecParameters): RtpHeaderExtensionParameters[] {
+    return codec.mimeType.toLowerCase() === 'video/av1'
+        ? [...PRODUCER_HEADER_EXTENSIONS, AV1_DEPENDENCY_DESCRIPTOR]
+        : PRODUCER_HEADER_EXTENSIONS;
+}
+
 /** Codecs of every session router; each profile below must match one of them. */
 export const ROUTER_CODECS: RtpCodecCapability[] = [
     { kind: 'audio', mimeType: OPUS.mimeType, clockRate: OPUS.clockRate, channels: OPUS.channels, preferredPayloadType: OPUS.payloadType },
-    { kind: 'video', mimeType: VP8.mimeType, clockRate: VP8.clockRate, preferredPayloadType: VP8.payloadType },
-    { kind: 'video', mimeType: H264.mimeType, clockRate: H264.clockRate, preferredPayloadType: H264.payloadType, parameters: H264.parameters }
+    ...Object.values(VIDEO_CODECS).map<RtpCodecCapability>(({ payloadType, ...codec }) => ({
+        kind: 'video', preferredPayloadType: payloadType, ...codec
+    }))
 ];
 
 /**
@@ -66,7 +86,7 @@ export function getClientRtpCapabilities(routerCapabilities: RtpCapabilities, na
  * every track; a field it leaves out keeps the value used before there were settings.
  */
 export interface OutboundSettings {
-    /** The video codec, video/VP8 or video/H264; empty for the usual one of the source. */
+    /** The video codec, video/VP8, video/H264 or video/AV1; empty for the usual one of the source. */
     mimeType?: string;
     /** The SFU asks the client for lost video packets again. Needs {@link rtx}: the client resends only on RTX. */
     nack?: boolean;
@@ -99,11 +119,6 @@ export interface MediaProfile {
     /** Key frame requests within this many ms of the previous one are merged; 0 for audio. */
     keyFrameRequestDelay: number;
 }
-
-const VIDEO_CODECS: Record<string, RtpCodecParameters> = {
-    'video/vp8': VP8,
-    'video/h264': H264
-};
 
 const DEFAULT_VIDEO_CODECS: Partial<Record<MediaSourceType, RtpCodecParameters>> = {
     [MediaSourceType.Camera]: VP8,

@@ -1,6 +1,6 @@
 using Server.Core.Models.Coordinator;
 using Server.Core.Models.Coordinator.Settings;
-using Server.Infrastructure.Database.Entities;
+using Server.Database.Entities;
 
 namespace Server.Infrastructure.Mappers;
 
@@ -15,13 +15,16 @@ public static class CoordinatorEntityMapper
             entity.CreateTime, entity.FirstLaunchTime, entity.CurrentLaunchTime,
             entity.MaxOnlineUsers, entity.MaxUsers,
             new MotdSettings(entity.IsMOTDEnabled, entity.MotdText),
-            new AccessListSettings(entity.AllowedIPs, entity.BannedIPs),
+            new AccessListSettings(entity.AllowedIPs),
             new CoordinatorHeartbeatSettings(entity.HeartbeatIntervalSeconds, entity.HeartbeatTimeoutSeconds),
-            new CoordinatorMediaSettings(entity.MediaMaxFileSizeBytes, entity.MediaStorageQuotaBytes),
+            new CoordinatorMediaSettings(entity.MediaMaxFileSizeBytes, entity.MediaStorageQuotaBytes,
+                entity.MediaImageMaxSide, entity.MediaImageQuality, entity.MediaAllowOriginalImages,
+                entity.MediaVideoMaxSide, entity.MediaAllowOriginalVideos),
             new CoordinatorUploadSettings(entity.MaxUnattachedUploadsPerUser, entity.UnattachedUploadLifetimeHours,
                 entity.MediaTokenLifetimeMinutes),
             entity.RateLimits,
-            entity.SfuNodes.Select(node => node.Id), entity.PasswordHash, entity.Revision);
+            entity.SfuNodes.Select(node => node.Id), entity.PasswordHash, entity.Revision,
+            entity.MaxBots);
     }
 
     /// <summary>Maps scalar values only; the SFU node links are handled by the repository.</summary>
@@ -42,18 +45,23 @@ public static class CoordinatorEntityMapper
             CurrentLaunchTime = model.CurrentLaunchTime,
             MaxOnlineUsers = model.MaxOnlineUsers,
             MaxUsers = model.MaxUsers,
+            MaxBots = model.MaxBots,
             Revision = model.Revision,
 
             IsMOTDEnabled = model.Motd.IsEnabled,
             MotdText = model.Motd.Text,
             AllowedIPs = model.AccessList.AllowedIps.ToList(),
-            BannedIPs = model.AccessList.BannedIps.ToList(),
 
             HeartbeatIntervalSeconds = model.Heartbeat.IntervalSeconds,
             HeartbeatTimeoutSeconds = model.Heartbeat.TimeoutSeconds,
 
             MediaMaxFileSizeBytes = model.Media.MaxFileSizeBytes,
             MediaStorageQuotaBytes = model.Media.StorageQuotaBytes,
+            MediaImageMaxSide = model.Media.ImageMaxSide,
+            MediaImageQuality = model.Media.ImageQuality,
+            MediaAllowOriginalImages = model.Media.AllowOriginalImages,
+            MediaVideoMaxSide = model.Media.VideoMaxSide,
+            MediaAllowOriginalVideos = model.Media.AllowOriginalVideos,
 
             MaxUnattachedUploadsPerUser = model.Uploads.MaxUnattachedUploadsPerUser,
             UnattachedUploadLifetimeHours = model.Uploads.UnattachedLifetimeHours,

@@ -24,13 +24,7 @@ public class HybridSessionSetScreenShareWatchHandler : HybridSessionRequestHandl
     protected override async Task<BaseMessage> HandleAsync(HybridSessionSetScreenShareWatchRequest request, IHybridSession session)
     {
         var (result, inbound, audioInbound) = await session.PeerManager.SetScreenShareWatchAsync(request.SenderId,
-            request.UserId, request.IsWatching);
-        return request.ToResponse(result, inbound, audioInbound);
+            request.SharerUserId, request.IsWatching);
+        return request.Answer(result, () => request.ToResponse(inbound, audioInbound));
     }
-
-    protected override BaseMessage SessionNotFound(HybridSessionSetScreenShareWatchRequest request) =>
-        request.ToResponse(SetScreenShareWatchResult.SessionNotExists);
-
-    public override BaseMessage CreateFailureResponse(HybridSessionSetScreenShareWatchRequest request) =>
-        request.ToResponse(SetScreenShareWatchResult.InternalError);
 }

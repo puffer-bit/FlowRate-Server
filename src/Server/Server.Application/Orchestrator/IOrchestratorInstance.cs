@@ -18,7 +18,7 @@ namespace Server.Application.Orchestrator {
         bool IsGatewayReady { get; set; }
         bool IsReady { get; set; }
         bool IsStarted { get; set; }
-        TimeSpan UpTime => DateTime.UtcNow - Context.CurrentLaunchTime;
+        TimeSpan UpTime => DateTimeOffset.UtcNow - Context.CurrentLaunchTime;
         bool IsHardwareAccelerated { get; set; }
 
         // Live totals over the coordinators in the pool
@@ -29,7 +29,9 @@ namespace Server.Application.Orchestrator {
         
         // Lifecycle actions
         Task StartAsync(CancellationToken ct = default);
-        Task StopAsync(CancellationToken ct = default);
+        /// <param name="notice">What the users of every coordinator are told; a restart when not given.</param>
+        Task StopAsync(CancellationToken ct = default,
+            Shared.Models.Notifications.Heartbeat.ServerRestartNotification? notice = null);
         Task RestartAsync(CancellationToken ct = default);
         Task EnterMaintenanceModeAsync();
 
@@ -46,7 +48,7 @@ namespace Server.Application.Orchestrator {
         // Server init
         Task CollectRegionDataAsync();
         Task CollectHostSystemDataAsync();
-        void SetLaunchTime(DateTime utcTime);
+        void SetLaunchTime(DateTimeOffset utcTime);
 
         // Health and statistics
         //Task<ServerHealthStatus> GetHealthStatusAsync();
@@ -55,9 +57,10 @@ namespace Server.Application.Orchestrator {
         // CoordinatorInstances actions
         ICoordinatorInstance? GetCoordinator(string coordinatorId);
         IReadOnlyList<CoordinatorSnapshot> GetCoordinatorSnapshots();
-        Task<CoordinatorInstanceModel> CreateCoordinatorInstanceAsync(string name, string ip, int port);
+        Task<CoordinatorCreationResult> CreateCoordinatorInstanceAsync(CreateCoordinator request, CancellationToken ct = default);
         Task AttachCoordinatorInstance(CoordinatorInstanceModel coordinatorInstanceEntity);
-        Task DetachCoordinatorInstanceAsync(string coordinatorInstanceId);
+        Task DetachCoordinatorInstanceAsync(string coordinatorInstanceId,
+            Shared.Models.Notifications.Heartbeat.ServerRestartNotification? notice = null);
         Task DisableCoordinatorInstanceAsync(string coordinatorInstanceId);
         Task EnableCoordinatorInstanceAsync(string coordinatorInstanceId);
         Task CommitCoordinatorDataAsync();
@@ -86,13 +89,13 @@ namespace Server.Application.Orchestrator {
     {
         public ServerState PreviousState { get; }
         public ServerState CurrentState { get; }
-        public DateTime ChangedAtUtc { get; }
+        public DateTimeOffset ChangedAtUtc { get; }
         public string? TriggeredBy { get; }
 
         public ServerStateChangedEventArgs(
             ServerState previousState,
             ServerState currentState,
-            DateTime changedAtUtc,
+            DateTimeOffset changedAtUtc,
             string? triggeredBy = null)
         {
             PreviousState = previousState;

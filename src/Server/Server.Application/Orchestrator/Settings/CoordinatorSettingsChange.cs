@@ -21,12 +21,14 @@ public sealed record CoordinatorSettingsChange
     public int MaxOnlineUsers { get; init; }
     public int MaxUsers { get; init; }
 
+    /// <summary>How many bots may be made, 0 for none; null keeps the current limit.</summary>
+    public int? MaxBots { get; init; }
+
     public bool IsMotdEnabled { get; init; }
     public string? MotdText { get; init; }
 
     /// <summary>When not empty, only these IPs may connect.</summary>
     public IReadOnlyList<string> AllowedIps { get; init; } = [];
-    public IReadOnlyList<string> BannedIps { get; init; } = [];
 
     public int HeartbeatIntervalSeconds { get; init; }
     public int HeartbeatTimeoutSeconds { get; init; }
@@ -35,6 +37,12 @@ public sealed record CoordinatorSettingsChange
 
     /// <summary>0 leaves the storage unlimited.</summary>
     public long StorageQuotaBytes { get; init; }
+
+    public int ImageMaxSide { get; init; } = CoordinatorMediaSettings.DefaultImageMaxSide;
+    public int ImageQuality { get; init; } = CoordinatorMediaSettings.DefaultImageQuality;
+    public bool AllowOriginalImages { get; init; } = true;
+    public int VideoMaxSide { get; init; } = CoordinatorMediaSettings.DefaultVideoMaxSide;
+    public bool AllowOriginalVideos { get; init; } = true;
 
     public int MaxUnattachedUploadsPerUser { get; init; }
     public int UnattachedUploadLifetimeHours { get; init; }

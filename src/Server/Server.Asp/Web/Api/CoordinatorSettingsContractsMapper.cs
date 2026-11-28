@@ -20,14 +20,17 @@ public static class CoordinatorSettingsContractsMapper
         model.MaxOnlineUsers,
         model.MaxUsers,
         new MotdSettingsDto { IsEnabled = model.Motd.IsEnabled, Text = model.Motd.Text },
-        new AccessListSettingsDto { AllowedIps = model.AccessList.AllowedIps, BannedIps = model.AccessList.BannedIps },
+        new AccessListSettingsDto { AllowedIps = model.AccessList.AllowedIps },
         new HeartbeatSettingsDto
         {
             IntervalSeconds = model.Heartbeat.IntervalSeconds, TimeoutSeconds = model.Heartbeat.TimeoutSeconds
         },
         new MediaSettingsDto
         {
-            MaxFileSizeBytes = model.Media.MaxFileSizeBytes, StorageQuotaBytes = model.Media.StorageQuotaBytes
+            MaxFileSizeBytes = model.Media.MaxFileSizeBytes, StorageQuotaBytes = model.Media.StorageQuotaBytes,
+            ImageMaxSide = model.Media.ImageMaxSide, ImageQuality = model.Media.ImageQuality,
+            AllowOriginalImages = model.Media.AllowOriginalImages, VideoMaxSide = model.Media.VideoMaxSide,
+            AllowOriginalVideos = model.Media.AllowOriginalVideos
         },
         new UploadSettingsDto
         {
@@ -36,7 +39,8 @@ public static class CoordinatorSettingsContractsMapper
             TokenLifetimeMinutes = model.Uploads.TokenLifetimeMinutes
         },
         model.RateLimits.ToDto(),
-        model.SfuNodeIds);
+        model.SfuNodeIds,
+        model.MaxBots);
 
     public static RateLimitSettingsDto ToDto(this CoordinatorRateLimitSettings limits) => new()
     {
@@ -83,14 +87,19 @@ public static class CoordinatorSettingsContractsMapper
         RemovePassword = settings.RemovePassword,
         MaxOnlineUsers = settings.MaxOnlineUsers,
         MaxUsers = settings.MaxUsers,
+        MaxBots = settings.MaxBots,
         IsMotdEnabled = settings.Motd.IsEnabled,
         MotdText = settings.Motd.Text,
         AllowedIps = settings.AccessList.AllowedIps,
-        BannedIps = settings.AccessList.BannedIps,
         HeartbeatIntervalSeconds = settings.Heartbeat.IntervalSeconds,
         HeartbeatTimeoutSeconds = settings.Heartbeat.TimeoutSeconds,
         MaxFileSizeBytes = settings.Media.MaxFileSizeBytes,
         StorageQuotaBytes = settings.Media.StorageQuotaBytes,
+        ImageMaxSide = settings.Media.ImageMaxSide,
+        ImageQuality = settings.Media.ImageQuality,
+        AllowOriginalImages = settings.Media.AllowOriginalImages,
+        VideoMaxSide = settings.Media.VideoMaxSide,
+        AllowOriginalVideos = settings.Media.AllowOriginalVideos,
         MaxUnattachedUploadsPerUser = settings.Uploads.MaxUnattachedPerUser,
         UnattachedUploadLifetimeHours = settings.Uploads.UnattachedLifetimeHours,
         MediaTokenLifetimeMinutes = settings.Uploads.TokenLifetimeMinutes,

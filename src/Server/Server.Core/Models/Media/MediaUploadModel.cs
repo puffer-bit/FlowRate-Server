@@ -24,7 +24,7 @@ public sealed record MediaUploadModel(
     string MimeType,
     long Size,
     MediaUploadState State,
-    DateTime CreatedAt,
+    DateTimeOffset CreatedAt,
     int? MessageId = null)
 {
     public bool IsOwnedBy(int userId) => OwnerUserId == userId;
@@ -43,4 +43,5 @@ public sealed record ChatFileDownloadModel(
     int ChatId,
     bool IsMessageDeleted,
     string FileName,
-    string UploadId);
+    string UploadId,
+    string? PreviewUploadId = null);

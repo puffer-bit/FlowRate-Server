@@ -1,9 +1,12 @@
 using System.Collections.Concurrent;
+using Server.Core.Models.User;
+using Shared.Enums.Auth;
+using Shared.Models.DataTransferObjects;
 
 namespace Server.Application.Coordinator.Authentication;
 
 /// <summary>
-/// Connections that gave a known identity and still have to prove it (the second stage). Kept by connection,
+/// Connections that named an account and still have to prove a factor of it (the second stage). Kept by connection,
 /// for a short time and a few tries; a connection that does not finish is closed by the authentication timeout.
 /// </summary>
 public sealed class PendingLogins(TimeProvider timeProvider)
@@ -17,16 +20,17 @@ public sealed class PendingLogins(TimeProvider timeProvider)
     {
     }
 
-    public void Start(string connectionId, string userIdentity, LoginChallenge challenge)
+    public void Start(string connectionId, PendingLogin login)
     {
         var now = timeProvider.GetUtcNow();
-        foreach (var (id, login) in _logins)
+        foreach (var (id, pending) in _logins)
         {
-            if (now - login.StartedAt > Lifetime)
+            if (now - pending.StartedAt > Lifetime)
                 _logins.TryRemove(id, out _);
         }
 
-        _logins[connectionId] = new PendingLogin(userIdentity, challenge, now);
+        login.StartedAt = now;
+        _logins[connectionId] = login;
     }
 
     /// <summary>The login the connection started, unless it is too old.</summary>
@@ -58,10 +62,18 @@ public sealed class PendingLogins(TimeProvider timeProvider)
     public int Count => _logins.Count;
 }
 
-public sealed class PendingLogin(string userIdentity, LoginChallenge challenge, DateTimeOffset startedAt)
+/// <param name="Method">
+/// <see cref="DeviceLoginMethod.Factors"/> for a login by username, <see cref="DeviceLoginMethod.Legacy"/> for an
+/// identity of the earlier protocol 3, whose account gets <paramref name="LegacyKeys"/>.
+/// </param>
+public sealed class PendingLogin(LoginChallenge challenge, NewDevice device, DeviceInfoDTO? info,
+    DeviceLoginMethod method, UserRecoveryKeys? legacyKeys = null)
 {
-    public string UserIdentity { get; } = userIdentity;
     public LoginChallenge Challenge { get; } = challenge;
-    public DateTimeOffset StartedAt { get; } = startedAt;
+    public NewDevice Device { get; } = device;
+    public DeviceInfoDTO? Info { get; } = info;
+    public DeviceLoginMethod Method { get; } = method;
+    public UserRecoveryKeys? LegacyKeys { get; } = legacyKeys;
+    public DateTimeOffset StartedAt { get; internal set; }
     internal int Failures;
 }

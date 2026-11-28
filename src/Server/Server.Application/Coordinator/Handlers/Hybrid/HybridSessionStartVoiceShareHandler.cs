@@ -24,12 +24,6 @@ public class HybridSessionStartVoiceShareHandler : HybridSessionRequestHandler<H
     protected override async Task<BaseMessage> HandleAsync(HybridSessionStartVoiceRequest request, IHybridSession session)
     {
         var (result, outbound) = await session.PeerManager.StartVoiceShareAsync(request.SenderId);
-        return request.ToResponse(result, outbound);
+        return request.Answer(result, () => request.ToResponse(outbound!));
     }
-
-    protected override BaseMessage SessionNotFound(HybridSessionStartVoiceRequest request) =>
-        request.ToResponse(StartVoiceShareResult.SessionNotExists);
-
-    public override BaseMessage CreateFailureResponse(HybridSessionStartVoiceRequest request) =>
-        request.ToResponse(StartVoiceShareResult.InternalError);
 }

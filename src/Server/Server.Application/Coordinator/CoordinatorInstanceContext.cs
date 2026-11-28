@@ -14,7 +14,7 @@ public sealed class CoordinatorInstanceContext : ICoordinatorInstanceContext
         _model = coordinatorInstanceModel;
         ServerVersion = serverVersion;
 
-        _model.MarkLaunched(DateTime.UtcNow);
+        _model.MarkLaunched(DateTimeOffset.UtcNow);
     }
 
     public void ApplySettings(CoordinatorInstanceModel model)

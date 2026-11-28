@@ -18,7 +18,7 @@ public interface IMediaUploadRepository
 
     Task<IReadOnlyList<string>> RemoveByChatAsync(int chatId, CancellationToken cancellationToken = default);
 
-    Task<IReadOnlyList<string>> RemoveUnattachedAsync(string coordinatorInstanceId, DateTime createdBefore,
+    Task<IReadOnlyList<string>> RemoveUnattachedAsync(string coordinatorInstanceId, DateTimeOffset createdBefore,
         CancellationToken cancellationToken = default);
 
     Task<long> GetTotalSizeAsync(string coordinatorInstanceId, CancellationToken cancellationToken = default);

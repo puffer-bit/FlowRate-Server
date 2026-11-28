@@ -77,6 +77,14 @@ public sealed class FcmClientTests : IDisposable
     }
 
     [Fact]
+    public async Task CallPush_UsesShortLifetime()
+    {
+        await _client.SendAsync(Message with { TimeToLiveSeconds = 45 });
+        using var body = JsonDocument.Parse(_handler.Requests[1].Body);
+        Assert.Equal("45s", body.RootElement.GetProperty("message").GetProperty("android").GetProperty("ttl").GetString());
+    }
+
+    [Fact]
     public async Task AccessToken_IsReusedUntilItIsAboutToExpire()
     {
         await _client.SendAsync(Message);

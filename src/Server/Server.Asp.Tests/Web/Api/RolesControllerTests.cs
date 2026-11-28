@@ -19,7 +19,7 @@ public class RolesControllerTests
     private readonly Mock<ICoordinatorSettingsService> _settings = new();
     private readonly Mock<IUserRepository> _users = new();
     private readonly CoordinatorInstanceModel _model =
-        CoordinatorInstanceModel.Create("coordinator", "127.0.0.1", 5000, DateTime.UtcNow);
+        CoordinatorInstanceModel.Create("coordinator", "127.0.0.1", 5000, DateTimeOffset.UtcNow);
     private readonly RolesController _controller;
 
     public RolesControllerTests()

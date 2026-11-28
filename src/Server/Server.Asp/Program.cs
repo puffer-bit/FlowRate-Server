@@ -5,6 +5,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.EntityFrameworkCore;
 using Serilog;
+using Server.Database;
 using Shared.Serialization;
 using Server.Infrastructure.Database;
 using Server.Infrastructure.Coordinator.Connection.Gateway;
@@ -39,6 +40,9 @@ namespace Server.Asp
     {
         public static async Task<int> Main(string[] args)
         {
+            if (args.FirstOrDefault() == "import-sqlite")
+                return await Commands.ImportSqliteCommand.RunAsync(args[1..]);
+
             try
             {
                 Console.WriteLine("Configuring services...");
@@ -107,6 +111,7 @@ namespace Server.Asp
 
             // Only what is needed before the database is read; everything else lives in the database
             services.AddValidatedOptions<StorageOptions>(StorageOptions.SectionName);
+            services.AddValidatedOptions<DatabaseOptions>(DatabaseOptions.SectionName);
             services.AddValidatedOptions<CertificateOptions>(CertificateOptions.SectionName);
             services.AddValidatedOptions<OrchestratorOptions>(OrchestratorOptions.SectionName);
             services.AddValidatedOptions<PushOptions>(PushOptions.SectionName);
@@ -137,10 +142,11 @@ namespace Server.Asp
             services.AddHostedService<OrchestratorService>();
 
             services.AddPooledDbContextFactory<ServerDbContext>((provider, options) =>
-                options.UseSqlite(provider.GetRequiredService<IOptions<StorageOptions>>().Value.DatabaseConnectionString)
-                    .AddInterceptors(new SqliteSynchronousInterceptor()));
+                options.UseServerDatabase(provider.GetRequiredService<IOptions<DatabaseOptions>>().Value,
+                    provider.GetRequiredService<IOptions<StorageOptions>>().Value));
             
             services.AddSingleton<ServerCertificate>();
+            services.AddSingleton<IDatabaseInfo, DatabaseInfo>();
             services.AddSingleton(ProtocolJsonContext.Default.Options);
             services.AddSingleton<IMessageSerializer, MessageSerializer>();
             
@@ -151,6 +157,7 @@ namespace Server.Asp
             services.AddSingleton<ISfuNodeRegistry, SfuNodeRegistry>();
             services.AddSingleton<IOrchestratorInstanceContext, OrchestratorInstanceContext>();
             services.AddSingleton<IOrchestratorInstance, OrchestratorInstance>();
+            services.AddSingleton<Server.Application.Orchestrator.Restart.IServerRestartNotice, Server.Application.Orchestrator.Restart.ServerRestartNotice>();
             services.AddSingleton<ConfigurationSeeder>();
             services.AddSingleton<ICoordinatorSettingsStore, CoordinatorSettingsStore>();
             services.AddSingleton<ISfuNodeStore, SfuNodeStore>();
@@ -162,9 +169,11 @@ namespace Server.Asp
             
             services.AddSingleton<IOrchestratorInstanceRepository, OrchestratorInstanceRepository>();
             services.AddSingleton<IUserRepository, UserRepository>();
+            services.AddSingleton<IBanRepository, BanRepository>();
             services.AddSingleton<ICoordinatorInstanceRepository, CoordinatorInstanceRepository>();
             services.AddSingleton<IVideoSessionRepository, VideoSessionRepository>();
             services.AddSingleton<IMessagesRepository, MessagesRepository>();
+            services.AddSingleton<ILinkPreviewRepository, LinkPreviewRepository>();
             services.AddSingleton<IChatReadStateRepository, ChatReadStateRepository>();
             services.AddSingleton<IChatSessionRepository, ChatSessionRepository>();
             services.AddSingleton<ISessionsRepository, SessionsRepository>();
@@ -183,6 +192,8 @@ namespace Server.Asp
             services.AddSingleton<IPasskeyService, PasskeyService>();
             services.AddSingleton<IUserSecurityDataRepository, UserSecurityDataRepository>();
             services.AddSingleton<IUserPasskeyRepository, UserPasskeyRepository>();
+            services.AddSingleton<IUserSessionRepository, UserSessionRepository>();
+            services.AddSingleton<IUserLoginCodeRepository, UserLoginCodeRepository>();
         }
 
         private static void ConfigureMiddleware(WebApplication app)
@@ -204,10 +215,17 @@ namespace Server.Asp
         public class OrchestratorService(
             IOrchestratorInstance orchestratorInstance,
             IHostApplicationLifetime lifetime,
+            Server.Application.Orchestrator.Restart.IServerRestartNotice restartNotice,
             ILogger logger) : BackgroundService
         {
             protected override async Task ExecuteAsync(CancellationToken stoppingToken)
             {
+                // An announced restart that restarts by itself stops the process; its supervisor starts it again
+                restartNotice.Due += () =>
+                {
+                    logger.Information("The announced restart is due. Stopping the server.");
+                    lifetime.StopApplication();
+                };
                 try
                 {
                     await orchestratorInstance.Configure();
@@ -228,7 +246,7 @@ namespace Server.Asp
             {
                 try
                 {
-                    await orchestratorInstance.StopAsync(cancellationToken);
+                    await orchestratorInstance.StopAsync(cancellationToken, restartNotice.GoingDown());
                 }
                 catch (Exception e)
                 {

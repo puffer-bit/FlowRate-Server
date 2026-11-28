@@ -1,4 +1,5 @@
 using Server.Core.Models.User;
+using Shared.Enums.User;
 using Shared.Models.DataTransferObjects;
 
 namespace Server.Application.Mappers;
@@ -6,8 +7,8 @@ namespace Server.Application.Mappers;
 public static class UserMapperExtensions
 {
     /// <param name="viewerId">
-    /// The user the DTO is for: they get the status they picked, everyone else what <see cref="UserModel.Presence"/>
-    /// shows. Null when it goes to several users.
+    /// The user the DTO is for: they get <see cref="UserModel.OwnPresence"/>, which keeps invisible, everyone else
+    /// what <see cref="UserModel.Presence"/> shows. Null when it goes to several users.
     /// </param>
     /// <param name="showIp">The address goes to the user themselves only, unless the viewer may see the user list.</param>
     public static UserDTO ToDto(this UserModel? entity, int? viewerId = null, bool showIp = false)
@@ -17,6 +18,8 @@ public static class UserMapperExtensions
         {
             Id = entity.Id,
             Username = entity.Username,
+            Kind = entity.Kind,
+            OwnerUserId = entity.OwnerUserId,
             Ip = showIp || entity.Id == viewerId ? entity.Ip : null,
             CoordinatorInstanceId = entity.CoordinatorInstanceId,
             RegionName = entity.RegionName,
@@ -25,10 +28,15 @@ public static class UserMapperExtensions
             Prefix = entity.Prefix,
             AvatarUrl = entity.AvatarUrl,
             State = entity.State,
-            Status = entity.Id == viewerId ? entity.Status : entity.Presence,
-            FirstConnectionTime = entity.FirstConnectionTime,
-            LastConnectionTime = entity.LastConnectionTime,
+            Status = entity.Id == viewerId ? entity.OwnPresence : entity.Presence,
+            // Like the status: an invisible user must not show where they are connected from
+            Device = entity.Id == viewerId || entity.Presence != UserStatus.Offline ? entity.Device?.ToDto() : null,
+            FirstConnectedAt = entity.FirstConnectionTime,
+            LastConnectedAt = entity.LastConnectionTime,
             RoleIds = entity.RoleIds.Order().ToList()
         };
     }
+
+    public static UserDeviceDTO ToDto(this UserDevice device) =>
+        new(device.Platform, device.OsVersion, device.Architecture, device.AppVersion);
 }

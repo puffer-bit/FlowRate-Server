@@ -56,7 +56,7 @@ chmod 644 "$staging/images.tar"
 awk '/^    build:/ { skip = 1; next } skip && /^      / { next } { skip = 0; print }' docker-compose.yml \
     | sed "${rename[@]}" > "$staging/docker-compose.yml"
 
-cp docker-compose.bridge.yml "$PACKAGE/README.txt" "$staging/"
+cp docker-compose.bridge.yml docker-compose.postgresql.yml docker-compose.postgresql.bridge.yml "$PACKAGE/README.txt" "$staging/"
 sed "s|^release=\$|release=$release|" "$PACKAGE/install.sh" > "$staging/install.sh"
 chmod 755 "$staging/install.sh"
 # Not .env: unpacking a newer archive over an installed one must not replace the settings there
@@ -64,9 +64,9 @@ cp "$PACKAGE/env" "$staging/.env.example"
 
 rm -rf dist/install
 mkdir -p dist/install
-tar -czf "$archive" -C "$staging" --transform "s,^,$name/," images.tar docker-compose.yml docker-compose.bridge.yml .env.example install.sh README.txt
+tar -czf "$archive" -C "$staging" --transform "s,^,$name/," images.tar docker-compose.yml docker-compose.bridge.yml docker-compose.postgresql.yml docker-compose.postgresql.bridge.yml .env.example install.sh README.txt
 # GitHub drops the leading dot of asset names
-cp "$staging/docker-compose.yml" "$staging/docker-compose.bridge.yml" "$staging/install.sh" "$staging/README.txt" dist/install/
+cp "$staging/docker-compose.yml" "$staging/docker-compose.bridge.yml" "$staging/docker-compose.postgresql.yml" "$staging/docker-compose.postgresql.bridge.yml" "$staging/install.sh" "$staging/README.txt" dist/install/
 cp "$staging/.env.example" dist/install/env.example
 echo "Images:  ${images[*]}"
 echo "Archive: $archive ($(du -h "$archive" | cut -f1))"

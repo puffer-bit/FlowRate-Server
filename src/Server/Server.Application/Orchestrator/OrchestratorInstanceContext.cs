@@ -22,8 +22,8 @@ namespace Server.Application.Orchestrator
 
         // Time properties
         public required string TimeZoneId { get; set; }
-        public DateTime FirstLaunchTime { get; set; }
-        public DateTime CurrentLaunchTime { get; set; }
+        public DateTimeOffset FirstLaunchTime { get; set; }
+        public DateTimeOffset CurrentLaunchTime { get; set; }
 
         // Hardware and Software parameters
         public required string OperatingSystem { get; set; }
@@ -41,7 +41,6 @@ namespace Server.Application.Orchestrator
 
         // Security parameters
         public ConcurrentBag<string> AllowedIPs { get; init; } = new();
-        public ConcurrentBag<string> BannedIPs { get; init; } = new();
 
         public OrchestratorInstanceContext(IOptions<OrchestratorOptions> options)
         {
@@ -54,7 +53,7 @@ namespace Server.Application.Orchestrator
         {
             ServerVersion = ReadServerVersion();
             
-            FirstLaunchTime = DateTime.UtcNow;
+            FirstLaunchTime = DateTimeOffset.UtcNow;
             CurrentLaunchTime = FirstLaunchTime;
         }
         
@@ -62,7 +61,7 @@ namespace Server.Application.Orchestrator
         {
             ServerVersion = ReadServerVersion();
             
-            CurrentLaunchTime = DateTime.UtcNow;
+            CurrentLaunchTime = DateTimeOffset.UtcNow;
         }
 
         // The version is set in the host project, so it is read from the entry assembly, without the commit hash

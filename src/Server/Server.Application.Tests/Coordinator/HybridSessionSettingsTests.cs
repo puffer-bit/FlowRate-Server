@@ -10,6 +10,10 @@ using Server.Application.Tests.Fakes;
 using Server.Core.Models.HybridSession;
 using Shared.Enums;
 using Shared.Enums.WebRTC;
+using Server.Application.Coordinator.Roles;
+using Server.Application.Coordinator.Sessions;
+using Server.Application.Coordinator.Messaging;
+using Server.Core.Models.User;
 
 namespace Server.Application.Tests.Coordinator;
 
@@ -18,8 +22,9 @@ public class HybridSessionSettingsTests
     private readonly RecordingEventBus _events = new();
     private readonly Mock<IVideoSessionRepository> _repository = new();
     private readonly Dictionary<int, Dictionary<int, PeerSnapshot>> _peers = new();
-    private readonly HybridSessionModel _room = new(7, "coordinator", "room", 10, 1, WebRTCEngine.Mediasoup);
-    private readonly HybridSessionModel _hall = new(8, "coordinator", "hall", 10, 1, WebRTCEngine.Mediasoup);
+    private readonly Dictionary<int, Mock<IHybridSessionPeerManager>> _peerManagers = new();
+    private readonly HybridSessionModel _room = new(7, "coordinator", "room", 10, WebRTCEngine.Mediasoup);
+    private readonly HybridSessionModel _hall = new(8, "coordinator", "hall", 10, WebRTCEngine.Mediasoup);
 
     private static readonly HybridMediaSettings LossyMedia = new(CameraCodec: WebRTCVideoCodecs.H264,
         IsAudioNackEnabled: true, OpusPacketLossPercent: 25, VoiceJitterBufferMs: 160);
@@ -36,6 +41,7 @@ public class HybridSessionSettingsTests
             {
                 var peers = _peers[model.Id] = new Dictionary<int, PeerSnapshot>();
                 var peerManager = new Mock<IHybridSessionPeerManager>();
+                _peerManagers[model.Id] = peerManager;
                 peerManager.Setup(p => p.GetAllPeerSnapshots()).Returns(() => peers);
 
                 var session = new Mock<IHybridSession>();
@@ -57,14 +63,85 @@ public class HybridSessionSettingsTests
     }
 
     [Fact]
+    public async Task RoleChanges_MuteAffectedPeersWithoutSpeakPermission()
+    {
+        using var manager = await CreateManager();
+        AddPeers(7, 3);
+        var permissions = new Mock<ICoordinatorPermissions>();
+        permissions.Setup(p => p.HasIn(It.IsAny<int>(), _room, Permission.ViewSessions)).Returns(true);
+        permissions.Setup(p => p.HasIn(2, _room, Permission.ViewSessions | Permission.Speak)).Returns(true);
+        using var visibility = new SessionVisibility(Mock.Of<IMessageSender>());
+        manager.WatchPermissions(permissions.Object, visibility);
+
+        permissions.Raise(p => p.PermissionsChanged += null, new[] { 1, 2 });
+
+        _peerManagers[7].Verify(p => p.SetMicrophoneMutedAsync(UserModel.SystemUserId, 1, true), Times.Once);
+        _peerManagers[7].Verify(p => p.SetMicrophoneMutedAsync(It.IsAny<int>(), 2, It.IsAny<bool>()), Times.Never);
+        _peerManagers[7].Verify(p => p.SetMicrophoneMutedAsync(It.IsAny<int>(), 3, It.IsAny<bool>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task SessionPermissionChanges_MuteExistingPeers_AndNeverUnmuteOnRestore()
+    {
+        using var manager = await CreateManager();
+        AddPeers(7, 1);
+        var permissions = new Mock<ICoordinatorPermissions>();
+        permissions.Setup(p => p.HasIn(1, _room, Permission.ViewSessions)).Returns(true);
+        using var visibility = new SessionVisibility(Mock.Of<IMessageSender>());
+        manager.WatchPermissions(permissions.Object, visibility);
+
+        visibility.Reconfigured(_room);
+
+        _peerManagers[7].Verify(p => p.SetMicrophoneMutedAsync(UserModel.SystemUserId, 1, true), Times.Once);
+        permissions.Setup(p => p.HasIn(1, _room, Permission.ViewSessions | Permission.Speak)).Returns(true);
+        visibility.Reconfigured(_room);
+        _peerManagers[7].Verify(p => p.SetMicrophoneMutedAsync(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>()), Times.Once);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task LosingChannelView_RemovesAffectedPeersIncludingMutedListeners(bool microphoneMuted)
+    {
+        using var manager = await CreateManager();
+        _peers[7][1] = new PeerSnapshot(1, HybridSessionPeerState.Connected, microphoneMuted, true, false, false);
+        _peers[7][2] = new PeerSnapshot(2, HybridSessionPeerState.Connected, true, true, false, false);
+        var permissions = new Mock<ICoordinatorPermissions>();
+        using var visibility = new SessionVisibility(Mock.Of<IMessageSender>());
+        manager.WatchPermissions(permissions.Object, visibility);
+
+        permissions.Raise(p => p.PermissionsChanged += null, new[] { 1 });
+
+        _peerManagers[7].Verify(p => p.RemovePeerAsync(1), Times.Once);
+        _peerManagers[7].Verify(p => p.RemovePeerAsync(2), Times.Never);
+        _peerManagers[7].Verify(p => p.SetMicrophoneMutedAsync(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task Dispose_StopsWatchingVoicePermissions()
+    {
+        var manager = await CreateManager();
+        AddPeers(7, 1);
+        var permissions = new Mock<ICoordinatorPermissions>();
+        using var visibility = new SessionVisibility(Mock.Of<IMessageSender>());
+        manager.WatchPermissions(permissions.Object, visibility);
+
+        manager.Dispose();
+        permissions.Raise(p => p.PermissionsChanged += null, new[] { 1 });
+        visibility.Reconfigured(_room);
+
+        _peerManagers[7].Verify(p => p.SetMicrophoneMutedAsync(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>()), Times.Never);
+    }
+
+    [Fact]
     public async Task ChangeSettings_SavesAndAnnouncesTheNewSettings()
     {
         using var manager = await CreateManager();
 
         var result = await manager.ChangeSettingsAsync(7, "lounge", 5, true, LossyMedia, 3);
 
-        Assert.Equal(ChangeSessionSettingsResult.NoError, result);
-        Assert.Equal(("lounge", 5, true), (_room.Name, _room.Capacity, _room.IsHostMustApprove));
+        Assert.Equal(null, result);
+        Assert.Equal(("lounge", 5, true), (_room.Name, _room.Capacity, _room.IsApprovalRequired));
         Assert.Equal(LossyMedia, _room.Media);
         _repository.Verify(r => r.UpdateAsync(_room, It.IsAny<CancellationToken>()), Times.Once);
         var evt = Assert.Single(_events.Of<HybridSessionReconfiguredEvent>());
@@ -79,7 +156,7 @@ public class HybridSessionSettingsTests
 
         var result = await manager.ChangeSettingsAsync(7, "room", 4, false, HybridMediaSettings.Default, 1);
 
-        Assert.Equal(ChangeSessionSettingsResult.NoError, result);
+        Assert.Equal(null, result);
         Assert.Equal(4, _room.Capacity);
     }
 
@@ -90,7 +167,7 @@ public class HybridSessionSettingsTests
 
         var result = await manager.ChangeSettingsAsync(7, "hall", 10, false, HybridMediaSettings.Default, 1);
 
-        Assert.Equal(ChangeSessionSettingsResult.NameAlreadyUsed, result);
+        Assert.Equal(ErrorCode.NameTaken, result);
         Assert.Equal("room", _room.Name);
         Assert.Empty(_events.Events);
     }
@@ -103,7 +180,7 @@ public class HybridSessionSettingsTests
 
         var result = await manager.ChangeSettingsAsync(7, "room", 2, false, HybridMediaSettings.Default, 1);
 
-        Assert.Equal(ChangeSessionSettingsResult.WrongCapacity, result);
+        Assert.Equal(ErrorCode.InvalidValue, result);
         Assert.Equal(10, _room.Capacity);
         _repository.Verify(r => r.UpdateAsync(It.IsAny<HybridSessionModel>(), It.IsAny<CancellationToken>()), Times.Never);
     }
@@ -115,7 +192,7 @@ public class HybridSessionSettingsTests
 
         var result = await manager.ChangeSettingsAsync(99, "room", 10, false, HybridMediaSettings.Default, 1);
 
-        Assert.Equal(ChangeSessionSettingsResult.SessionNotExists, result);
+        Assert.Equal(ErrorCode.SessionNotFound, result);
     }
 
     [Fact]
@@ -127,8 +204,8 @@ public class HybridSessionSettingsTests
 
         var result = await manager.ChangeSettingsAsync(7, "lounge", 5, true, LossyMedia, 1);
 
-        Assert.Equal(ChangeSessionSettingsResult.InternalError, result);
-        Assert.Equal(("room", 10, false), (_room.Name, _room.Capacity, _room.IsHostMustApprove));
+        Assert.Equal(ErrorCode.Internal, result);
+        Assert.Equal(("room", 10, false), (_room.Name, _room.Capacity, _room.IsApprovalRequired));
         Assert.Equal(HybridMediaSettings.Default, _room.Media);
         Assert.Empty(_events.Events);
     }

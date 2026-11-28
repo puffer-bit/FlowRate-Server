@@ -9,7 +9,7 @@ namespace Server.Application.Orchestrator.SFUPool;
 /// </summary>
 public interface ISfuNodeRegistry
 {
-    /// <summary>Raised after nodes were added, removed (also disabled) or recreated with new settings.</summary>
+    /// <summary>Raised when nodes or their connection availability change.</summary>
     event Func<Task>? NodesChanged;
 
     /// <summary>Raised when a node connected, lost its connection or stopped answering pings.</summary>

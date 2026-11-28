@@ -73,7 +73,7 @@ public sealed class MediaService : IMediaService
 
     public void Start() => _cleanUpLoop ??= Task.Run(CleanUpLoopAsync);
 
-    public (string Token, DateTime ExpiresAt) IssueToken(int userId) => _tokens.Issue(userId);
+    public (string Token, DateTimeOffset ExpiresAt) IssueToken(int userId) => _tokens.Issue(userId);
 
     public bool TryAuthorize(string? token, out int userId) => _tokens.TryValidate(token, out userId);
 
@@ -145,7 +145,7 @@ public sealed class MediaService : IMediaService
     public Task RegisterUploadAsync(string id, int userId, NewMediaUpload upload,
         CancellationToken cancellationToken = default) =>
         _uploads.AddAsync(new MediaUploadModel(id, _coordinatorInstanceId, userId, upload.ChatId, upload.Kind,
-            upload.MimeType, upload.Size, MediaUploadState.Uploading, _timeProvider.GetUtcNow().UtcDateTime),
+            upload.MimeType, upload.Size, MediaUploadState.Uploading, _timeProvider.GetUtcNow()),
             cancellationToken);
 
     public async Task<bool> CompleteUploadAsync(string id, CancellationToken cancellationToken = default)
@@ -178,11 +178,15 @@ public sealed class MediaService : IMediaService
     public Task ForgetUploadAsync(string id, CancellationToken cancellationToken = default) =>
         _uploads.RemoveAsync(id, cancellationToken);
 
-    public async Task<MediaFile?> OpenImageAsync(int imageId, bool preview, CancellationToken cancellationToken = default)
+    public async Task<MediaFile?> OpenImageAsync(int imageId, bool preview, CancellationToken cancellationToken = default, int? requestingUserId = null)
     {
         var image = await _uploads.GetImageAsync(imageId, cancellationToken);
-        if (image == null || image.IsMessageDeleted || !_chats.TryGetSession(image.ChatId, out _))
+        if (image == null || image.IsMessageDeleted || !_chats.TryGetSession(image.ChatId, out var chat))
             return null;
+
+        if (chat.IsPrivate && (requestingUserId is not { } member || !chat.MemberIds.Contains(member))) return null;
+        if (requestingUserId is { } reader && _permissions != null
+            && (await _permissions.PermissionsInAsync(reader, chat) & Permission.ViewSessions) == 0) return null;
 
         var upload = await GetOwnAsync(preview ? image.PreviewUploadId : image.UploadId, cancellationToken);
         if (upload is not { State: MediaUploadState.Attached })
@@ -192,10 +196,10 @@ public sealed class MediaService : IMediaService
         return content == null ? null : new MediaFile(content, upload.MimeType);
     }
 
-    public async Task<MediaFile?> OpenFileAsync(int fileId, CancellationToken cancellationToken = default)
+    public async Task<MediaFile?> OpenFileAsync(int fileId, CancellationToken cancellationToken = default, int? requestingUserId = null)
     {
-        var file = await _uploads.GetFileAsync(fileId, cancellationToken);
-        if (file == null || file.IsMessageDeleted || !_chats.TryGetSession(file.ChatId, out _))
+        var file = await GetReadableFileAsync(fileId, requestingUserId, cancellationToken);
+        if (file == null)
             return null;
 
         var upload = await GetOwnAsync(file.UploadId, cancellationToken);
@@ -204,6 +208,34 @@ public sealed class MediaService : IMediaService
 
         var content = await _storage.OpenReadAsync(upload.Id, cancellationToken);
         return content == null ? null : new MediaFile(content, upload.MimeType, file.FileName);
+    }
+
+    public async Task<MediaFile?> OpenFilePreviewAsync(int fileId, CancellationToken cancellationToken = default,
+        int? requestingUserId = null)
+    {
+        if (await GetReadableFileAsync(fileId, requestingUserId, cancellationToken) is not { PreviewUploadId: { } previewId })
+            return null;
+
+        var upload = await GetOwnAsync(previewId, cancellationToken);
+        if (upload is not { Kind: MediaUploadKind.ImagePreview, State: MediaUploadState.Attached })
+            return null;
+
+        var content = await _storage.OpenReadAsync(upload.Id, cancellationToken);
+        return content == null ? null : new MediaFile(content, upload.MimeType);
+    }
+
+    /// <summary>A file of a message the reader may see.</summary>
+    private async Task<ChatFileDownloadModel?> GetReadableFileAsync(int fileId, int? requestingUserId,
+        CancellationToken cancellationToken)
+    {
+        var file = await _uploads.GetFileAsync(fileId, cancellationToken);
+        if (file == null || file.IsMessageDeleted || !_chats.TryGetSession(file.ChatId, out var chat))
+            return null;
+
+        if (chat.IsPrivate && (requestingUserId is not { } member || !chat.MemberIds.Contains(member))) return null;
+        if (requestingUserId is { } reader && _permissions != null
+            && (await _permissions.PermissionsInAsync(reader, chat) & Permission.ViewSessions) == 0) return null;
+        return file;
     }
 
     public async Task<bool> AttachAvatarAsync(string uploadId, int userId, CancellationToken cancellationToken = default) =>
@@ -229,7 +261,7 @@ public sealed class MediaService : IMediaService
 
     public async Task CleanUpAsync(CancellationToken cancellationToken = default)
     {
-        var createdBefore = _timeProvider.GetUtcNow().UtcDateTime - UnattachedLifetime;
+        var createdBefore = _timeProvider.GetUtcNow() - UnattachedLifetime;
         var removed = await _uploads.RemoveUnattachedAsync(_coordinatorInstanceId, createdBefore, cancellationToken);
         foreach (var id in removed)
             await DeleteFileAsync(id, cancellationToken);

@@ -47,7 +47,7 @@ public class UserStatusTests
     [Fact]
     public void ToDto_ShowsTheIpOnlyToTheUserThemselves_OrWhenAskedFor()
     {
-        var alice = UserModel.Create("coordinator", "alice", "203.0.113.7", DateTime.UtcNow);
+        var alice = UserModel.Create("coordinator", "alice", "203.0.113.7", DateTimeOffset.UtcNow);
         alice.Id = 1;
 
         Assert.Null(alice.ToDto().Ip);
@@ -56,9 +56,27 @@ public class UserStatusTests
         Assert.Equal("203.0.113.7", alice.ToDto(viewerId: 2, showIp: true).Ip);
     }
 
+    [Fact]
+    public void ToDto_Device_IsHiddenFromOthersWhileInvisible()
+    {
+        var alice = Connected(UserStatus.Online);
+        alice.AddDevice("phone", new UserDevice("Android", "Android 16", "arm64", "0.7.1"));
+
+        Assert.Equal(new("Android", "Android 16", "arm64", "0.7.1"), alice.ToDto(viewerId: 2).Device);
+        Assert.True(alice.ToDto().Device!.IsMobile);
+
+        alice.SetStatus(UserStatus.Invisible);
+        Assert.Null(alice.ToDto().Device);
+        Assert.Null(alice.ToDto(viewerId: 2).Device);
+        Assert.NotNull(alice.ToDto(viewerId: 1).Device);
+
+        alice.SetConnected(false);
+        Assert.Null(alice.ToDto(viewerId: 1).Device);
+    }
+
     private static UserModel Connected(UserStatus status)
     {
-        var user = UserModel.Create("coordinator", "alice", null, DateTime.UtcNow);
+        var user = UserModel.Create("coordinator", "alice", null, DateTimeOffset.UtcNow);
         user.Id = 1;
         user.SetStatus(status);
         user.SetConnected(true);

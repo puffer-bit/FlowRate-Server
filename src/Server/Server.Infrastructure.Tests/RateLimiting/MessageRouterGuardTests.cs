@@ -5,6 +5,7 @@ using Moq;
 using Shared.Enums;
 using Shared.Models;
 using Shared.Models.Requests.Auth;
+using Shared.Models.Requests.Coordinator;
 using Shared.Models.Requests.SessionActions.Generic;
 using Shared.Models.Requests.SessionActions.Generic.Models;
 using Shared.Models.Requests.SessionActions.Generic.Models.SessionData;
@@ -34,7 +35,7 @@ public class MessageRouterGuardTests
         connections.Setup(m => m.TryGetConnectionById("connection-1", out found)).Returns(true);
 
         _router = new MessageRouter(NullLogger.Instance,
-            [Handler<CreateSessionRequest>(), Handler<DeleteSessionRequest>(), Handler<UserAuthRequest>()],
+            [Handler<CreateSessionRequest>(), Handler<DeleteSessionRequest>(), Handler<LoginChallengeRequest>()],
             connections.Object);
     }
 
@@ -55,7 +56,7 @@ public class MessageRouterGuardTests
     }
 
     private static CreateSessionRequest CreateSession(string name = "room") =>
-        new(new CreateSessionModel(name, 10, new ChatSessionCreateData()));
+        new(new CreateSessionModel(name, new ChatSessionCreateData()));
 
     [Fact]
     public void RequestWithoutPermission_IsRejectedWithoutReachingTheHandler()
@@ -74,9 +75,9 @@ public class MessageRouterGuardTests
         router.RouteIncomingMessage(request, "connection-1");
 
         Assert.False(_handled.ContainsKey(typeof(CreateSessionRequest)));
-        var rejected = Assert.IsType<RequestRejectedResponse>(Assert.Single(_connection.Sent));
+        var rejected = Assert.IsType<ErrorResponse>(Assert.Single(_connection.Sent));
         Assert.Equal(request.RequestId, rejected.RequestId);
-        Assert.Equal(RequestRejectReason.InsufficientPermissions, rejected.Reason);
+        Assert.Equal(ErrorCode.InsufficientPermissions, rejected.Code);
     }
 
     [Fact]
@@ -95,9 +96,9 @@ public class MessageRouterGuardTests
         Route(request);
 
         Assert.False(_handled.ContainsKey(typeof(CreateSessionRequest)));
-        var rejected = Assert.IsType<RequestRejectedResponse>(Assert.Single(_connection.Sent));
+        var rejected = Assert.IsType<ErrorResponse>(Assert.Single(_connection.Sent));
         Assert.Equal(request.RequestId, rejected.RequestId);
-        Assert.Equal(RequestRejectReason.InvalidRequest, rejected.Reason);
+        Assert.Equal(ErrorCode.InvalidRequest, rejected.Code);
         Assert.Contains("Name", rejected.Details);
     }
 
@@ -111,9 +112,9 @@ public class MessageRouterGuardTests
 
         Assert.Equal(10, _handled[typeof(CreateSessionRequest)]);
         Assert.False(_handled.ContainsKey(typeof(DeleteSessionRequest)));
-        var rejected = Assert.IsType<RequestRejectedResponse>(Assert.Single(_connection.Sent));
+        var rejected = Assert.IsType<ErrorResponse>(Assert.Single(_connection.Sent));
         Assert.Equal(eleventh.RequestId, rejected.RequestId);
-        Assert.Equal(RequestRejectReason.RateLimited, rejected.Reason);
+        Assert.Equal(ErrorCode.RateLimited, rejected.Code);
         Assert.Null(_connection.CloseReason);
     }
 
@@ -133,11 +134,11 @@ public class MessageRouterGuardTests
     public void AuthenticationAttempts_AreLimitedPerIp()
     {
         for (var i = 0; i < 5; i++)
-            Route(new UserAuthRequest("p", "u"), senderId: 0);
-        Route(new UserAuthRequest("p", "u"), senderId: 0);
+            Route(new LoginChallengeRequest(), senderId: 0);
+        Route(new LoginChallengeRequest(), senderId: 0);
 
-        Assert.Equal(5, _handled[typeof(UserAuthRequest)]);
-        Assert.Equal(RequestRejectReason.RateLimited, Assert.IsType<RequestRejectedResponse>(Assert.Single(_connection.Sent)).Reason);
+        Assert.Equal(5, _handled[typeof(LoginChallengeRequest)]);
+        Assert.Equal(ErrorCode.RateLimited, Assert.IsType<ErrorResponse>(Assert.Single(_connection.Sent)).Code);
     }
 
     [Fact]
@@ -161,6 +162,28 @@ public class MessageRouterGuardTests
         Assert.Equal(ConnectionCloseReason.TooManyRejectedRequests, _connection.CloseReason);
     }
 
+    [Fact]
+    public void ARequestWithoutAHandler_IsAnsweredAsUnsupported()
+    {
+        var request = new CoordinatorInfoRequest();
+        Route(request);
+
+        var error = Assert.IsType<ErrorResponse>(Assert.Single(_connection.Sent));
+        Assert.Equal(ErrorCode.UnsupportedRequest, error.Code);
+        Assert.Equal(request.RequestId, error.RequestId);
+    }
+
+    [Fact]
+    public void AMalformedRequestThatCanBeNamed_GetsItsRejection()
+    {
+        var rejection = new ErrorResponse(Guid.NewGuid(), ErrorCode.UnsupportedRequest);
+
+        _router.RejectMalformedMessage("connection-1", rejection);
+
+        Assert.Same(rejection, Assert.Single(_connection.Sent));
+        Assert.Null(_connection.CloseReason);
+    }
+
     private sealed class FakeConnection(string connectionId, string ip) : IClientConnection
     {
         public event Action<string>? Disconnected;
@@ -169,6 +192,9 @@ public class MessageRouterGuardTests
 
         public string ConnectionId { get; } = connectionId;
         public int? UserId { get; set; }
+        public Guid? UserSessionId { get; set; }
+        public DateTimeOffset? WaitsForDeviceLinkUntil { get; set; }
+        public Server.Core.Models.User.UserDevice? Device { get; set; }
         public string IpEndpoint { get; } = ip;
         public bool IsAvailable => CloseReason == null;
         public bool IsClosed => CloseReason != null;

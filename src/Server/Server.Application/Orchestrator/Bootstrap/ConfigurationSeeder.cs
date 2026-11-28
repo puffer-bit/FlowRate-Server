@@ -59,9 +59,8 @@ public class ConfigurationSeeder
             Name = LocalSfuName,
             Host = _orchestratorOptions.LocalSfuHost,
             Port = LocalSfuPort,
-            // The SFU next to the server takes no credentials
-            Username = string.Empty,
-            Key = string.Empty
+            Username = _orchestratorOptions.LocalSfuUsername,
+            Key = _orchestratorOptions.LocalSfuPassword
         };
 
         await _sfuNodeStore.AddAsync(node, ct);
@@ -77,7 +76,7 @@ public class ConfigurationSeeder
             return;
 
         var model = CoordinatorInstanceModel.Create(DefaultCoordinatorName, DefaultCoordinatorIp,
-            DefaultCoordinatorPort, DateTime.UtcNow, isDefault: true);
+            DefaultCoordinatorPort, DateTimeOffset.UtcNow, isDefault: true);
         model.SetUserLimits(DefaultMaxOnlineUsers, DefaultMaxUsers);
         model.SetHeartbeat(new CoordinatorHeartbeatSettings(DefaultHeartbeatIntervalSeconds,
             DefaultHeartbeatTimeoutSeconds));

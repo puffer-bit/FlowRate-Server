@@ -17,7 +17,7 @@ public class UserSecurityServiceTests
     private const int UserId = 1;
 
     private readonly CoordinatorInstanceModel _coordinator =
-        CoordinatorInstanceModel.Create("Main", "127.0.0.1", 5000, DateTime.UtcNow);
+        CoordinatorInstanceModel.Create("Main", "127.0.0.1", 5000, DateTimeOffset.UtcNow);
     private readonly InMemoryUserSecurityDataRepository _security = new();
     private readonly InMemoryUserPasskeyRepository _passkeys = new();
     private readonly Mock<ITwoFactorService> _codes = new();
@@ -31,8 +31,8 @@ public class UserSecurityServiceTests
         coordinators.Setup(c => c.GetAsync(_coordinator.Id, It.IsAny<CancellationToken>())).ReturnsAsync(_coordinator);
         var users = new Mock<IUserRepository>();
         users.Setup(u => u.GetByIdAsync(UserId, It.IsAny<CancellationToken>())).ReturnsAsync(() =>
-            new UserModel(UserId, _coordinator.Id, "alice", UserState.Normal, UserStatus.Online, DateTime.UtcNow,
-                DateTime.UtcNow));
+            new UserModel(UserId, _coordinator.Id, "alice", UserState.Normal, UserStatus.Online, DateTimeOffset.UtcNow,
+                DateTimeOffset.UtcNow));
         var hasher = new Mock<IPasswordHasher>();
         hasher.Setup(h => h.HashPassword(It.IsAny<string?>())).Returns((string? raw) => "hash:" + raw);
         _codes.Setup(c => c.GenerateSecretKey()).Returns("SECRET");
@@ -164,7 +164,7 @@ public class UserSecurityServiceTests
     [Fact]
     public async Task RemovingTheLastPasskey_TurnsPasskeysOff()
     {
-        await _passkeys.AddAsync(UserPasskey.Create(UserId, [1], [2], 0, null, Guid.Empty, DateTime.UtcNow));
+        await _passkeys.AddAsync(UserPasskey.Create(UserId, [1], [2], 0, null, Guid.Empty, DateTimeOffset.UtcNow));
         var data = UserSecurityData.CreateEmpty(UserId);
         data.SetPasskeysEnabled(true);
         await _security.UpdateAsync(data);
@@ -179,7 +179,7 @@ public class UserSecurityServiceTests
     [Fact]
     public async Task PasskeyOfAnotherUser_IsNotRemoved()
     {
-        await _passkeys.AddAsync(UserPasskey.Create(UserId + 1, [1], [2], 0, null, Guid.Empty, DateTime.UtcNow));
+        await _passkeys.AddAsync(UserPasskey.Create(UserId + 1, [1], [2], 0, null, Guid.Empty, DateTimeOffset.UtcNow));
 
         Assert.Equal(UserSecurityStatus.PasskeyNotFound,
             await _service.DeletePasskeyAsync(_coordinator.Id, UserId, _passkeys.All[0].Id));

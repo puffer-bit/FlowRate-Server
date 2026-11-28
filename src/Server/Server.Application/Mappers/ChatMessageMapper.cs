@@ -3,6 +3,7 @@ using Server.Core.Models.TextChat.Messages.Content;
 using Server.Core.Models.TextChat.Messages.Reactions;
 using Server.Core.Models.User;
 using Shared.Models.DataTransferObjects.ChatSession.Messages;
+using Shared.Models.DataTransferObjects.ChatSession.Messages.Commands;
 using Shared.Models.DataTransferObjects.ChatSession.Messages.Content;
 using Shared.Models.DataTransferObjects.ChatSession.Messages.Mentions;
 using Shared.Models.DataTransferObjects.ChatSession.Messages.Reactions;
@@ -26,31 +27,73 @@ public static class ChatMessageMapperExtensions
             ChatId = model.ChatId,
             Revision = model.Revision,
             SenderUserId = model.SenderUserId,
-            SentTime = model.SentTime,
-            DelayedSentTime = model.DelayedSentTime,
-            DisposeTime = model.DisposeTime,
-            EditTime = model.EditTime,
-            IsDelayed = model.IsDelayed,
-            IsEdited = model.IsEdited,
-            IsReposted = model.IsReposted,
-            IsDelivered = model.IsDelivered,
+            SentAt = model.SentTime,
+            ScheduledAt = model.DelayedSentTime,
+            ExpiresAt = model.DisposeTime,
+            EditedAt = model.EditTime,
+            PinnedAt = model.PinnedAt,
+            PinnedByUserId = model.PinnedByUserId,
             IsDeleted = model.IsDeleted,
             IsReadOnly = model.IsReadOnly,
             IsSystem = model.IsSystem,
-            IsDisposable = model.IsDisposable,
+            SystemContent = model.SystemContent?.ToDto(),
 
             TextContent = model.TextContent?.ToDto()!,
             ReplyContent = model.ReplyContent?.ToDto()!,
-            Images = model.Images.Select(i => i.ToDto()).ToList(),
-            Video = model.Videos.Select(v => v.ToDto()).ToList(),
-            Files = model.Files.Select(f => f.ToDto()).ToList(),
+            // Images and other files are kept apart, so images come first
+            Files = model.Images.Select(i => i.ToDto()).Concat(model.Files.Select(f => f.ToDto())).ToList(),
+            LinkPreview = model.LinkPreview?.ToDto(),
+            IsLinkPreviewDisabled = model.IsLinkPreviewDisabled,
             Reactions = model.Reactions.Select(r => r.ToDto()).ToList(),
-            UsersIds = model.UsersIds.ToList(),
             MentionedUserIds = ChatMentions.UserIdsOf(mentions),
             MentionsEveryone = mentions.Any(m => m.Kind == ChatMentionKind.Everyone),
             MentionsHere = mentions.Any(m => m.Kind == ChatMentionKind.Here)
         };
     }
+
+    public static ChatLinkPreviewDTO ToDto(this ChatLinkPreviewModel model) => new()
+    {
+        Id = model.Id,
+        Url = model.Url,
+        SiteName = model.SiteName,
+        Title = model.Title,
+        Description = model.Description,
+        HasImage = model.HasImage,
+        ImageWidth = model.ImageWidth,
+        ImageHeight = model.ImageHeight,
+        IsLargeImage = model.IsLargeImage
+    };
+
+    public static ChatSystemContentModel ToModel(this ChatSystemContent dto) => new()
+    {
+        Kind = dto.Kind,
+        ActorUserId = dto.ActorUserId,
+        SubjectUserId = dto.SubjectUserId,
+        CallId = dto.CallId,
+        CallEndReason = dto.CallEndReason,
+        CallDurationSeconds = dto.CallDurationSeconds
+    };
+
+    public static ChatSystemContent ToDto(this ChatSystemContentModel model) => new()
+    {
+        Kind = model.Kind,
+        ActorUserId = model.ActorUserId,
+        SubjectUserId = model.SubjectUserId,
+        CallId = model.CallId,
+        CallEndReason = model.CallEndReason,
+        CallDurationSeconds = model.CallDurationSeconds
+    };
+
+    public static ChatCommandModel ToModel(this ChatCommandRequest dto) =>
+        new(dto.Kind, dto.Minimum, dto.Maximum);
+
+    public static ChatCommandResult ToDto(this ChatCommandResultModel model) => new()
+    {
+        Kind = model.Kind,
+        Minimum = model.Minimum,
+        Maximum = model.Maximum,
+        Value = model.Value
+    };
 
     public static List<ChatMessageDTO> ToDtoList(this IEnumerable<ChatMessageModel>? models)
     {
@@ -63,7 +106,7 @@ public static class ChatMessageMapperExtensions
     public static ChatTextContentDTO ToDto(this ChatTextContentModel? model)
     {
         if (model == null) return null!;
-        return new ChatTextContentDTO { Text = model.Text };
+        return new ChatTextContentDTO { Text = model.Text, CommandResult = model.CommandResult?.ToDto() };
     }
 
     public static ChatReplyContentDTO ToDto(this ChatReplyContentModel? model)
@@ -72,57 +115,39 @@ public static class ChatMessageMapperExtensions
         return new ChatReplyContentDTO
         {
             MessageId = model.MessageId,
+            HasAttachments = model.HasAttachments,
             TextContent = model.TextContent?.ToDto(),
             SenderUserId = model.SenderUserId,
-            SentTime = model.SentTime,
+            SentAt = model.SentTime,
             IsDeleted = model.IsDeleted
         };
     }
 
-    public static ChatImageContentDTO ToDto(this ChatImageContentModel? model)
+    public static ChatImageFileDTO ToDto(this ChatImageContentModel model) => new()
     {
-        if (model == null) return null!;
-        return new ChatImageContentDTO
+        Id = model.Id,
+        FileName = model.FileName,
+        Thumbnail = model.Thumbnail,
+        Description = model.Description,
+        Size = model.Size,
+        MimeType = model.MimeType,
+        Width = model.Width,
+        Height = model.Height
+    };
+
+    public static ChatFileDTO ToDto(this ChatFileContentModel model) => model.Video is { } video
+        ? new ChatVideoFileDTO
         {
             Id = model.Id,
             FileName = model.FileName,
-            Thumbnail = model.Thumbnail,
-            Description = model.Description,
             Size = model.Size,
             MimeType = model.MimeType,
-            Width = model.Width,
-            Height = model.Height
-        };
-    }
-
-    public static ChatVideoContentDTO ToDto(this ChatVideoContentModel? model)
-    {
-        if (model == null) return null!;
-        return new ChatVideoContentDTO
-        {
-            Id = model.Id,
-            FileName = model.FileName,
-            Thumbnail = model.Thumbnail,
-            Description = model.Description,
-            Size = model.Size,
-            MimeType = model.MimeType,
-            Width = model.Width,
-            Height = model.Height,
-            Duration = model.Duration
-        };
-    }
-
-    public static ChatFileContentDTO ToDto(this ChatFileContentModel? model)
-    {
-        if (model == null) return null!;
-        return new ChatFileContentDTO
-        {
-            Id = model.Id,
-            FileName = model.FileName,
-            Size = model.Size,
-            MimeType = model.MimeType
-        };
-    }
+            Width = video.Width,
+            Height = video.Height,
+            Duration = video.Duration,
+            HasPreview = model.PreviewUploadId != null
+        }
+        : new ChatFileDTO { Id = model.Id, FileName = model.FileName, Size = model.Size, MimeType = model.MimeType };
 
     public static ChatReactionDTO ToDto(this ChatReactionModel? model)
     {
@@ -130,7 +155,8 @@ public static class ChatMessageMapperExtensions
         return new ChatReactionDTO
         {
             UserId = model.UserId,
-            Emoji = model.Emoji
+            Emoji = model.Emoji,
+            ReactedAt = model.ReactedAt
         };
     }
 
@@ -138,7 +164,7 @@ public static class ChatMessageMapperExtensions
     // request -> model converters
     // -------------------------------------------------------------
 
-    public static ChatMessageModel ToModel(this NewChatMessageModel newChatMessageModel, int senderUserId, DateTime now,
+    public static ChatMessageModel ToModel(this NewChatMessageModel newChatMessageModel, int senderUserId, DateTimeOffset now,
         IReadOnlyList<ChatImageContentModel> images, IReadOnlyList<ChatFileContentModel> files)
     {
         return ChatMessageModel.Create(
@@ -147,24 +173,12 @@ public static class ChatMessageMapperExtensions
             now,
             newChatMessageModel.TextContent?.ToModel(),
             images,
-            newChatMessageModel.Video.Select(v => v.ToModel()),
+            null,
             files,
-            newChatMessageModel.DelayedSentTime,
-            newChatMessageModel.DisposeTime);
+            newChatMessageModel.ScheduledAt,
+            newChatMessageModel.ExpiresAt,
+            newChatMessageModel.IsLinkPreviewDisabled);
     }
 
     private static ChatTextContentModel ToModel(this ChatTextContentDTO dto) => new() { Text = dto.Text };
-
-    private static ChatVideoContentModel ToModel(this ChatVideoContentDTO dto) => new()
-    {
-        Id = dto.Id,
-        FileName = dto.FileName,
-        Thumbnail = dto.Thumbnail,
-        Description = dto.Description,
-        Size = dto.Size,
-        MimeType = dto.MimeType,
-        Width = dto.Width,
-        Height = dto.Height,
-        Duration = dto.Duration
-    };
 }

@@ -1,3 +1,5 @@
+using Shared.Models.Responses;
+using Shared.Enums;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Moq;
@@ -26,7 +28,7 @@ public class UserSecurityHandlersTests
     private const string Connection = "connection";
 
     private readonly CoordinatorInstanceModel _coordinator =
-        CoordinatorInstanceModel.Create("Main", "127.0.0.1", 5000, DateTime.UtcNow);
+        CoordinatorInstanceModel.Create("Main", "127.0.0.1", 5000, DateTimeOffset.UtcNow);
     private readonly InMemoryUserSecurityDataRepository _security = new();
     private readonly InMemoryUserPasskeyRepository _passkeys = new();
     private readonly Mock<IPasskeyService> _passkeyService = new();
@@ -40,8 +42,8 @@ public class UserSecurityHandlersTests
         coordinators.Setup(c => c.GetAsync(_coordinator.Id, It.IsAny<CancellationToken>())).ReturnsAsync(_coordinator);
         var users = new Mock<IUserRepository>();
         users.Setup(u => u.GetByIdAsync(UserId, It.IsAny<CancellationToken>())).ReturnsAsync(() =>
-            new UserModel(UserId, _coordinator.Id, "alice", UserState.Normal, UserStatus.Online, DateTime.UtcNow,
-                DateTime.UtcNow));
+            new UserModel(UserId, _coordinator.Id, "alice", UserState.Normal, UserStatus.Online, DateTimeOffset.UtcNow,
+                DateTimeOffset.UtcNow));
         var hasher = new Mock<IPasswordHasher>();
         hasher.Setup(h => h.HashPassword(It.IsAny<string?>())).Returns((string? raw) => "hash:" + raw);
         hasher.Setup(h => h.VerifyPassword(It.IsAny<string?>(), It.IsAny<string?>()))
@@ -66,12 +68,16 @@ public class UserSecurityHandlersTests
         where TRequest : Shared.Models.Requests.Request where T : BaseMessage
     {
         await handler.HandleMessage(request with { SenderId = UserId }, Connection);
-        return Assert.IsType<T>(_sent[^1]);
+        return Assert.IsAssignableFrom<T>(_sent[^1]);
     }
 
     private Task<UserSecurityResponse> SetPassword(UserSecurityProofDTO? proof, string? password) =>
         Send<UserSetPasswordRequest, UserSecurityResponse>(new UserSetPasswordHandler(_sender.Object, _replies),
             new UserSetPasswordRequest(proof, password));
+
+    private async Task<ErrorCode?> TrySetPassword(UserSecurityProofDTO? proof, string? password) =>
+        (await Send<UserSetPasswordRequest, Response>(new UserSetPasswordHandler(_sender.Object, _replies),
+            new UserSetPasswordRequest(proof, password))).Error();
 
     private async Task TurnCodesOn(UserSecurityProofDTO? proof = null)
     {
@@ -87,7 +93,6 @@ public class UserSecurityHandlersTests
         var response = await Send<UserSecurityInfoRequest, UserSecurityResponse>(
             new UserSecurityInfoHandler(_sender.Object, _replies), new UserSecurityInfoRequest());
 
-        Assert.Equal(UserSecurityResult.NoError, response.Result);
         Assert.False(response.Security!.HasPassword);
         Assert.True(response.Security.PasskeysAvailable);
     }
@@ -97,7 +102,6 @@ public class UserSecurityHandlersTests
     {
         var response = await SetPassword(null, "first secret");
 
-        Assert.Equal(UserSecurityResult.NoError, response.Result);
         Assert.True(response.Security!.HasPassword);
     }
 
@@ -106,11 +110,10 @@ public class UserSecurityHandlersTests
     {
         await SetPassword(null, "first secret");
 
-        Assert.Equal(UserSecurityResult.ProofRequired, (await SetPassword(null, "second secret")).Result);
-        Assert.Equal(UserSecurityResult.ProofRequired,
-            (await SetPassword(new UserSecurityProofDTO("wrong", null), "second secret")).Result);
-        Assert.Equal(UserSecurityResult.NoError,
-            (await SetPassword(new UserSecurityProofDTO("first secret", null), "second secret")).Result);
+        Assert.Equal(ErrorCode.ProofRequired, await TrySetPassword(null, "second secret"));
+        Assert.Equal(ErrorCode.ProofRequired,
+            await TrySetPassword(new UserSecurityProofDTO("wrong", null), "second secret"));
+        Assert.Null(await TrySetPassword(new UserSecurityProofDTO("first secret", null), "second secret"));
         Assert.Equal("hash:second secret", _security.Saved(UserId)!.PasswordHash);
     }
 
@@ -121,9 +124,9 @@ public class UserSecurityHandlersTests
             new UserTwoFactorSetupHandler(_sender.Object, _replies), new UserTwoFactorSetupRequest(null));
         Assert.Equal(("SECRET", "otpauth://x"), (offer.Secret, offer.Uri));
 
-        var wrong = await Send<UserTwoFactorEnableRequest, UserSecurityResponse>(
+        var wrong = await Send<UserTwoFactorEnableRequest, Response>(
             new UserTwoFactorEnableHandler(_sender.Object, _replies), new UserTwoFactorEnableRequest("000000"));
-        Assert.Equal(UserSecurityResult.Refused, wrong.Result);
+        Assert.Equal(ErrorCode.VerificationFailed, wrong.Error());
 
         var right = await Send<UserTwoFactorEnableRequest, UserSecurityResponse>(
             new UserTwoFactorEnableHandler(_sender.Object, _replies), new UserTwoFactorEnableRequest("123456"));
@@ -136,9 +139,9 @@ public class UserSecurityHandlersTests
         await TurnCodesOn();
         var disable = new UserTwoFactorDisableHandler(_sender.Object, _replies);
 
-        var refused = await Send<UserTwoFactorDisableRequest, UserSecurityResponse>(disable,
+        var refused = await Send<UserTwoFactorDisableRequest, Response>(disable,
             new UserTwoFactorDisableRequest(null));
-        Assert.Equal(UserSecurityResult.ProofRequired, refused.Result);
+        Assert.Equal(ErrorCode.ProofRequired, refused.Error());
         Assert.True(_security.Saved(UserId)!.IsTwoFactorEnabled);
 
         var done = await Send<UserTwoFactorDisableRequest, UserSecurityResponse>(disable,
@@ -152,10 +155,9 @@ public class UserSecurityHandlersTests
         await SetPassword(null, "first secret");
         var options = new UserPasskeyOptionsHandler(_sender.Object, _replies);
 
-        var refused = await Send<UserPasskeyOptionsRequest, UserPasskeyOptionsResponse>(options,
+        var refused = await Send<UserPasskeyOptionsRequest, Response>(options,
             new UserPasskeyOptionsRequest(null));
-        Assert.Equal(UserSecurityResult.ProofRequired, refused.Result);
-        Assert.Null(refused.OptionsJson);
+        Assert.Equal(ErrorCode.ProofRequired, refused.Error());
 
         var given = await Send<UserPasskeyOptionsRequest, UserPasskeyOptionsResponse>(options,
             new UserPasskeyOptionsRequest(new UserSecurityProofDTO("first secret", null)));
@@ -174,15 +176,15 @@ public class UserSecurityHandlersTests
     [Fact]
     public async Task Passkey_IsRemovedWithTheProof()
     {
-        await _passkeys.AddAsync(UserPasskey.Create(UserId, [1], [2], 0, "Key", Guid.Empty, DateTime.UtcNow));
+        await _passkeys.AddAsync(UserPasskey.Create(UserId, [1], [2], 0, "Key", Guid.Empty, DateTimeOffset.UtcNow));
         await SetPassword(null, "first secret");
         var delete = new UserPasskeyDeleteHandler(_sender.Object, _replies);
         var id = _passkeys.All[0].Id;
 
-        Assert.Equal(UserSecurityResult.ProofRequired, (await Send<UserPasskeyDeleteRequest, UserSecurityResponse>(
-            delete, new UserPasskeyDeleteRequest(null, id))).Result);
-        Assert.Equal(UserSecurityResult.PasskeyNotFound, (await Send<UserPasskeyDeleteRequest, UserSecurityResponse>(
-            delete, new UserPasskeyDeleteRequest(new UserSecurityProofDTO("first secret", null), id + 1))).Result);
+        Assert.Equal(ErrorCode.ProofRequired, (await Send<UserPasskeyDeleteRequest, Response>(
+            delete, new UserPasskeyDeleteRequest(null, id))).Error());
+        Assert.Equal(ErrorCode.PasskeyNotFound, (await Send<UserPasskeyDeleteRequest, Response>(
+            delete, new UserPasskeyDeleteRequest(new UserSecurityProofDTO("first secret", null), id + 1))).Error());
         var done = await Send<UserPasskeyDeleteRequest, UserSecurityResponse>(delete,
             new UserPasskeyDeleteRequest(new UserSecurityProofDTO("first secret", null), id));
 

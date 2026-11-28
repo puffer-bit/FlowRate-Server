@@ -31,7 +31,7 @@ public class CoordinatorInstanceTests
         _users.Setup(u => u.GetAllConnectedUsers()).Returns(new Dictionary<int, UserModel>());
         _hybridSessions.Setup(h => h.GetAllSessions()).Returns([]);
 
-        var model = CoordinatorInstanceModel.Create("coordinator", "127.0.0.1", 5000, DateTime.UtcNow);
+        var model = CoordinatorInstanceModel.Create("coordinator", "127.0.0.1", 5000, DateTimeOffset.UtcNow);
 
         _coordinator = new CoordinatorInstance(
             new CoordinatorInstanceContext(model, "1.0"),
@@ -92,7 +92,7 @@ public class CoordinatorInstanceTests
     [Fact]
     public void Snapshot_CopiesSessionsPeersAndConnectedUsers()
     {
-        var now = DateTime.UtcNow;
+        var now = DateTimeOffset.UtcNow;
         var user = UserModel.Create("coordinator", "alice", "10.0.0.1", now);
         user.Id = 7;
         _users.Setup(u => u.GetAllConnectedUsers()).Returns(new Dictionary<int, UserModel> { [7] = user });
@@ -134,7 +134,7 @@ public class CoordinatorInstanceTests
 
         var session = new Mock<IHybridSession>();
         session.Setup(s => s.Model).Returns(
-            new HybridSessionModel(id, "coordinator", name, SessionModel.NoCapacityLimit, 1, default));
+            new HybridSessionModel(id, "coordinator", name, HybridSessionModel.NoCapacityLimit, default));
         session.Setup(s => s.PeerManager).Returns(peerManager.Object);
         return session.Object;
     }

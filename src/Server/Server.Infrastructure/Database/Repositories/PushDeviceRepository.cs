@@ -1,7 +1,8 @@
 using Microsoft.EntityFrameworkCore;
 using Server.Application.Abstractions.Persistence;
 using Server.Core.Models.Push;
-using Server.Infrastructure.Database.Entities;
+using Server.Database.Entities;
+using Server.Database;
 
 namespace Server.Infrastructure.Database.Repositories;
 
@@ -41,7 +42,7 @@ public class PushDeviceRepository : IPushDeviceRepository
         entity.KeyId = device.KeyId;
         entity.Key = device.Key;
         entity.ReplyTokenHash = device.ReplyTokenHash;
-        entity.UpdatedTime = _timeProvider.GetUtcNow().UtcDateTime;
+        entity.UpdatedTime = _timeProvider.GetUtcNow();
 
         await context.SaveChangesAsync(cancellationToken);
     }

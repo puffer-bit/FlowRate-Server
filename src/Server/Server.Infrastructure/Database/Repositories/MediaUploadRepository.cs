@@ -1,7 +1,8 @@
 using Microsoft.EntityFrameworkCore;
 using Server.Application.Abstractions.Persistence;
 using Server.Core.Models.Media;
-using Server.Infrastructure.Database.Entities;
+using Server.Database.Entities;
+using Server.Database;
 
 namespace Server.Infrastructure.Database.Repositories;
 
@@ -78,7 +79,7 @@ public class MediaUploadRepository : IMediaUploadRepository
     public Task<IReadOnlyList<string>> RemoveByChatAsync(int chatId, CancellationToken cancellationToken = default) =>
         RemoveAsync(uploads => uploads.Where(x => x.ChatId == chatId), cancellationToken);
 
-    public Task<IReadOnlyList<string>> RemoveUnattachedAsync(string coordinatorInstanceId, DateTime createdBefore,
+    public Task<IReadOnlyList<string>> RemoveUnattachedAsync(string coordinatorInstanceId, DateTimeOffset createdBefore,
         CancellationToken cancellationToken = default) =>
         RemoveAsync(uploads => uploads.Where(x => x.CoordinatorInstanceId == coordinatorInstanceId
                                                   && x.State != MediaUploadState.Attached
@@ -123,7 +124,7 @@ public class MediaUploadRepository : IMediaUploadRepository
             .Where(file => file.Id == fileId)
             .Join(context.ChatMessagesEntities.IgnoreQueryFilters(), file => file.MessageId, message => message.Id,
                 (file, message) => new ChatFileDownloadModel(file.Id, message.ChatId, message.IsDeleted, file.FileName,
-                    file.UploadId))
+                    file.UploadId, file.PreviewUploadId))
             .FirstOrDefaultAsync(cancellationToken);
     }
 

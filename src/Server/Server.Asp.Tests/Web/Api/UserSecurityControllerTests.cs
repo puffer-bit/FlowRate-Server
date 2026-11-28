@@ -20,7 +20,7 @@ public class UserSecurityControllerTests
     {
         var data = UserSecurityData.CreateEmpty(UserId);
         data.SetPassword("hash");
-        var passkey = UserPasskey.Create(UserId, [1], [2], 0, "Key", Guid.Empty, DateTime.UtcNow);
+        var passkey = UserPasskey.Create(UserId, [1], [2], 0, "Key", Guid.Empty, DateTimeOffset.UtcNow);
         passkey.Id = 5;
         _security.Setup(s => s.GetAsync(CoordinatorId, UserId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(new UserSecurityOverview(data, [passkey], true));

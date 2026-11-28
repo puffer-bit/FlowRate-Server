@@ -7,37 +7,46 @@ using Server.Application.Coordinator.Sessions.Hybrid.Peers;
 using Server.Application.Coordinator.Users;
 using Server.Application.Coordinator.Authentication;
 using Server.Application.Coordinator.Messaging;
+using Server.Application.Coordinator.Roles;
 
 namespace Server.Application.Coordinator.Handlers.Hybrid;
 
 public class HybridSessionJoinHandler : HybridSessionRequestHandler<HybridSessionJoinRequest>
 {
-    public HybridSessionJoinHandler(IHybridSessionManager sessionManager, IMessageSender messageSender)
+    public HybridSessionJoinHandler(IHybridSessionManager sessionManager, IMessageSender messageSender,
+        ICoordinatorPermissions? permissions = null)
         : base(sessionManager, messageSender)
     {
+        _callSessions = sessionManager;
+        _permissions = permissions;
     }
+
+    private readonly IHybridSessionManager _callSessions;
+    private readonly ICoordinatorPermissions? _permissions;
+
+    // Who may move others in past the capacity may also come in so themselves; approval still holds
+    private bool MayJoinPastCapacity(int userId, IHybridSession session) =>
+        session.Model.CallDevices == null
+        && _permissions?.HasIn(userId, session.Model, Permission.MoveMembers) == true;
+
+    // Who may let others in needs nobody to let them in
+    private bool MayApprove(int userId, IHybridSession session) =>
+        _permissions?.HasIn(userId, session.Model, Permission.ApproveMembers) == true;
 
     protected override int GetSessionId(HybridSessionJoinRequest request) => request.SessionId;
 
-    // Joining from another device takes the peer over from the one the user was on
-    protected override async Task<BaseMessage> HandleAsync(HybridSessionJoinRequest request, IHybridSession session,
-        string connectionId)
+    protected override Task<BaseMessage> HandleAsync(HybridSessionJoinRequest request, IHybridSession session,
+        string connectionId) => JoinAsync(request, session, connectionId);
+
+    protected override Task<BaseMessage> HandleAsync(HybridSessionJoinRequest request, IHybridSession session) =>
+        JoinAsync(request, session, null);
+
+    private async Task<BaseMessage> JoinAsync(HybridSessionJoinRequest request, IHybridSession session,
+        string? connectionId)
     {
-        var (result, transportData) = await session.PeerManager.AddPeerAsync(request.SenderId,
-            request.ClientEpoch ?? string.Empty, connectionId);
-        return request.ToResponse(result, transportData);
+        var (result, transportData) = await _callSessions.JoinPeerAsync(session.Model.Id, request.SenderId,
+            request.ClientEpoch ?? string.Empty, connectionId, MayJoinPastCapacity(request.SenderId, session),
+            MayApprove(request.SenderId, session));
+        return request.Answer(result, () => request.ToResponse(transportData));
     }
-
-    protected override async Task<BaseMessage> HandleAsync(HybridSessionJoinRequest request, IHybridSession session)
-    {
-        var (result, transportData) = await session.PeerManager.AddPeerAsync(request.SenderId,
-            request.ClientEpoch ?? string.Empty);
-        return request.ToResponse(result, transportData);
-    }
-
-    protected override BaseMessage SessionNotFound(HybridSessionJoinRequest request) =>
-        request.ToResponse(HybridSessionJoinResult.SessionNotExists);
-
-    public override BaseMessage CreateFailureResponse(HybridSessionJoinRequest request) =>
-        request.ToResponse(HybridSessionJoinResult.InternalError);
 }

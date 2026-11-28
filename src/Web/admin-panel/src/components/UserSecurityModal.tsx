@@ -1,10 +1,13 @@
 import { Alert, Badge, Button, Code, Divider, Group, Image, Modal, PasswordInput, PinInput, Stack, Table, Text, TextInput, Title } from '@mantine/core'
 import QRCode from 'qrcode'
 import { useEffect, useState } from 'react'
-import type { CoordinatorUser, TwoFactorOffer, UserSecurity } from '../api/client'
+import type { CoordinatorUser, LoginCode, TwoFactorOffer, UserDevice, UserSecurity } from '../api/client'
 import {
   useAddPasskey,
   useConfirmTwoFactor,
+  useCreateLoginCode,
+  useRevokeUserDevice,
+  useUserDevices,
   useDeletePasskey,
   useDisableTwoFactor,
   useOfferTwoFactor,
@@ -17,8 +20,9 @@ import { QueryState } from './QueryState'
 const passwordMinLength = 8
 
 /**
- * What a user logs in with besides the identity. The panel sets it up and takes it away when a user lost a device;
- * a user with none of it logs in with the identity alone.
+ * How a user logs in: the devices of the account, and the password, one-time codes and passkeys a new device can be
+ * added with by username. The panel takes them away when a user lost a device, and gives out a one-time login code
+ * when the user has nothing else left.
  */
 export function UserSecurityModal({ coordinatorId, user, onClose }: {
   coordinatorId: string
@@ -32,10 +36,12 @@ export function UserSecurityModal({ coordinatorId, user, onClose }: {
       <QueryState query={security}>
         {data => (
           <Stack>
+            <DevicesSection coordinatorId={coordinatorId} user={user} />
+            <Divider />
             <Text size="sm" c="dimmed">
               {data.hasPassword || data.isTwoFactorEnabled || data.passkeys.length > 0
-                ? 'After the identity, the client asks for what is set below. A passkey alone is enough.'
-                : 'Nothing is set: the user logs in with the identity alone.'}
+                ? 'A new device can be added by username with what is set below. A passkey alone is enough.'
+                : 'Nothing is set: a new device is added only with the recovery phrase, another device or a login code.'}
             </Text>
             <PasswordSection coordinatorId={coordinatorId} userId={user.id} security={data} />
             <Divider />
@@ -46,6 +52,100 @@ export function UserSecurityModal({ coordinatorId, user, onClose }: {
         )}
       </QueryState>
     </Modal>
+  )
+}
+
+const addedByLabels: Record<UserDevice['addedBy'], string> = {
+  Registration: 'registered the account',
+  Recovery: 'recovery phrase',
+  Factors: 'username and password or code',
+  LoginCode: 'login code',
+  DeviceLink: 'approved by another device',
+  Legacy: 'moved over from the identity',
+}
+
+function DevicesSection({ coordinatorId, user }: { coordinatorId: string, user: CoordinatorUser }) {
+  const devices = useUserDevices(coordinatorId, user.id)
+  const revoke = useRevokeUserDevice(coordinatorId, user.id)
+  const createCode = useCreateLoginCode(coordinatorId, user.id)
+  const [code, setCode] = useState<LoginCode | null>(null)
+  const error = revoke.error ?? createCode.error
+
+  return (
+    <Stack gap="xs">
+      <Group gap="xs">
+        <Title order={5}>Devices</Title>
+        {devices.data && <StateBadge on={devices.data.length > 0} label={String(devices.data.length)} />}
+      </Group>
+      {error && <Alert color="red">{error.message}</Alert>}
+      <QueryState query={devices}>
+        {list => list.length === 0
+          ? <Text size="sm">No devices: the user logs in again with the recovery phrase, a factor or a login code.</Text>
+          : (
+            <Table>
+              <Table.Tbody>
+                {list.map(device => (
+                  <Table.Tr key={device.id}>
+                    <Table.Td>
+                      <Group gap={6}>
+                        <Text size="sm">{device.name}</Text>
+                        {device.isOnline && <Badge size="xs" color="green" variant="light">online</Badge>}
+                        {device.isTemporary && <Badge size="xs" color="gray" variant="light">temporary</Badge>}
+                      </Group>
+                      <Text size="xs" c="dimmed">{device.platform} · FlowRate {device.appVersion}</Text>
+                    </Table.Td>
+                    <Table.Td>
+                      <Text size="xs" c="dimmed">Added {formatDateTime(device.createdAtUtc)}: {addedByLabels[device.addedBy]}</Text>
+                      <Text size="xs" c="dimmed">
+                        Last login {formatDateTime(device.lastUsedAtUtc)}{device.lastAddress ? ` from ${device.lastAddress}` : ''}
+                      </Text>
+                    </Table.Td>
+                    <Table.Td ta="right">
+                      <Button size="xs" variant="subtle" color="red"
+                        loading={revoke.isPending && revoke.variables === device.id}
+                        onClick={() => {
+                          if (window.confirm(`Remove the device ${device.name}? It is logged out and has to be added again.`))
+                            revoke.mutate(device.id)
+                        }}>
+                        Remove
+                      </Button>
+                    </Table.Td>
+                  </Table.Tr>
+                ))}
+              </Table.Tbody>
+            </Table>
+          )}
+      </QueryState>
+      {code
+        ? (
+          <Alert color="blue" title="One-time login code">
+            <Stack gap={4}>
+              <Code fz="lg">{code.code}</Code>
+              <Text size="sm">
+                Give it to {user.username} yourself. On the new device: Log in to an existing account → Login code.
+                It adds one device and works until {formatDateTime(code.expiresAtUtc)}. It is not shown again.
+              </Text>
+              <Text size="sm">
+                Or let FlowRate fill it in: open the link on the new device, or scan the QR code with its camera.
+                The link points at {window.location.hostname}, the address this page is open on.
+              </Text>
+              <Group align="flex-end">
+                <QrCode value={loginLink(code)} alt="QR code of the login link" />
+                <Button component="a" href={loginLink(code)} variant="light">Open in FlowRate</Button>
+              </Group>
+            </Stack>
+          </Alert>
+        )
+        : (
+          <Group justify="space-between">
+            <Text size="sm">For a user who lost every device and the recovery phrase.</Text>
+            <Button variant="default" loading={createCode.isPending}
+              onClick={() => createCode.mutate(undefined, { onSuccess: setCode })}>
+              Give out a login code
+            </Button>
+          </Group>
+        )}
+    </Stack>
   )
 }
 
@@ -162,7 +262,23 @@ function TwoFactorSection({ coordinatorId, user, security }: {
   )
 }
 
-function QrCode({ value }: { value: string }) {
+// The default port of a coordinator, left out of the link
+const DefaultCoordinatorPort = 26666
+
+/**
+ * The flowrate:// link that opens the client on the server with the code filled in. The client asks before it logs
+ * in, and trusts the certificate of the link only for this server.
+ */
+function loginLink(code: LoginCode) {
+  const params = new URLSearchParams({ host: window.location.hostname })
+  if (code.port != null && code.port !== DefaultCoordinatorPort)
+    params.set('port', String(code.port))
+  params.set('cert', code.certificateFingerprint)
+  params.set('code', code.code)
+  return `flowrate://login?${params.toString()}`
+}
+
+function QrCode({ value, alt = 'QR code for the authenticator app' }: { value: string, alt?: string }) {
   const [src, setSrc] = useState<string>()
   useEffect(() => {
     let current = true
@@ -172,7 +288,7 @@ function QrCode({ value }: { value: string }) {
     }
   }, [value])
 
-  return <Image src={src} w={160} h={160} alt="QR code for the authenticator app" bg="white" radius="sm" />
+  return <Image src={src} w={160} h={160} alt={alt} bg="white" radius="sm" />
 }
 
 function PasskeysSection({ coordinatorId, userId, security }: {

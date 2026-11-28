@@ -34,16 +34,28 @@ be renamed, given a color, moved, deleted, assigned or unassigned. Only its perm
 | `ViewCoordinatorSettings`   | Reading the coordinator settings (`CoordinatorSettingsRequest`).                |
 | `ManageCoordinatorSettings` | Changing them (`CoordinatorUpdateSettingsRequest`).                             |
 | `ManageRoles`               | Creating, changing, reordering, deleting, assigning and unassigning roles below one's own highest role. |
-| `CreateSessions`            | Creating sessions. The creator of a hybrid session becomes its host.            |
+| `CreateSessions`            | Creating sessions. Creating a session gives no rights in it.                     |
 | `ManageSessions`            | Changing and deleting any session, and arranging sessions and categories.       |
 | `KickMembers`               | Kicking from any hybrid session.                                                |
-| `BanMembers`                | Banning from any hybrid session.                                                |
+| `BanMembers`                | Global account/IP bans, freezing and reinstatement.                    |
 | `ApproveMembers`            | Approving or rejecting users who wait to enter a hybrid session.                |
 | `ManageMessages`            | Deleting other users' chat messages.                                            |
 | `ManageUsers`               | Changing other users' names and avatars.                                        |
+| `ViewSessions`              | Access to server channels; channel overrides can further restrict visibility.   |
 
 A user's permissions are the bitwise OR of their roles and `@everyone`. If the result contains `Administrator`,
 it becomes `Permission.All`.
+
+Without coordinator-wide `ViewSessions`, a user cannot see or access any server channel, even if a channel
+override allows viewing. Direct messages, groups and their calls still use membership rather than server roles.
+To restrict channels to selected roles, remove `ViewSessions` from `@everyone` and grant it to the roles that
+need channels. Leaving it out of one role does not cancel a grant from `@everyone` or another role.
+Revoking channel visibility updates connected users' channel lists and removes them from affected voice channels.
+
+Clients can distinguish missing channel permission from an empty channel list using the existing
+`CoordinatorRolesResponse.Permissions` and `CoordinatorPermissionsChangedNotification.Permissions` fields.
+The channel switch should be hidden only when the coordinator-wide `ViewSessions` flag is absent, regardless
+of the number of visible channels. No new protocol fields are required.
 
 ### Role order
 
@@ -59,12 +71,13 @@ A role manages only what is below it:
 - **Reordering:** roles at or above the actor's highest role must keep their positions. A moved role must stay
   below the actor.
 
-### Session hosts
+### No session owners
 
-The host of a hybrid session (`HybridSessionModel.HostId`) has `RequestAuthorizer.HostPermissions` in that
-session, whatever their roles: `ManageSessions`, `KickMembers`, `BanMembers` and `ApproveMembers`. A host may
-act on users of the same rank, so a plain user can moderate their own session. Users ranked above the host are
-out of reach. A request goes through if either the role or the host route allows it.
+Sessions have no host or owner: the creator of a voice session has no rights in it beyond their roles. Managing,
+kicking and approving come only from `ManageSessions`, `KickMembers` and `ApproveMembers`. In a session that asks
+for approval (`IsApprovalRequired`), users with `ApproveMembers` there come in at once; the rest wait for one of them.
+Private chats are separate from roles: membership decides, and the owner of a group (`OwnerUserId`) alone changes its
+members and name.
 
 ### The system user and the panel
 
@@ -91,20 +104,20 @@ All role requests are `CoordinatorRequest`s.
 
 | Request                          | Needs         | Response                                                   |
 |----------------------------------|---------------|------------------------------------------------------------|
-| `CoordinatorRolesRequest()`      | —             | `CoordinatorRolesResponse(Result, Roles, Permissions)`: the roles, lowest first, and the sender's permissions |
-| `CoordinatorCreateRoleRequest(Role)` | `ManageRoles` | `CoordinatorRoleResponse(Result, Role)`                |
-| `CoordinatorUpdateRoleRequest(RoleId, Role, ExpectedRevision)` | `ManageRoles` | `CoordinatorRoleResponse`; on `Conflict`, `Role` is the current role |
-| `CoordinatorDeleteRoleRequest(RoleId)` | `ManageRoles` | `CoordinatorRoleResponse(Result, null)`                |
-| `CoordinatorReorderRolesRequest(RoleIds)` | `ManageRoles` | `CoordinatorRolesResponse(Result, Roles, None)`. `RoleIds` lists every role except `@everyone`, lowest first; a list that does not match the current set is a `Conflict`. |
-| `CoordinatorAssignRoleRequest(UserTargetId, RoleId)` | `ManageRoles` | `CoordinatorUserRolesResponse(Result, UserTargetId, RoleIds)` |
-| `CoordinatorUnassignRoleRequest(UserTargetId, RoleId)` | `ManageRoles` | `CoordinatorUserRolesResponse`                |
+| `CoordinatorRolesRequest()`      | —             | `CoordinatorRolesResponse(Roles, Permissions)`: the roles, lowest first, and the sender's permissions |
+| `CoordinatorCreateRoleRequest(Role)` | `ManageRoles` | `CoordinatorRoleResponse(Role)`              |
+| `CoordinatorUpdateRoleRequest(RoleId, Role, ExpectedRevision)` | `ManageRoles` | `CoordinatorRoleResponse`; on `Conflict` the client fetches the roles again |
+| `CoordinatorDeleteRoleRequest(RoleId)` | `ManageRoles` | `CoordinatorRoleResponse(null)`              |
+| `CoordinatorReorderRolesRequest(RoleIds)` | `ManageRoles` | `CoordinatorRolesResponse(Roles, None)`. `RoleIds` lists every role except `@everyone`, lowest first; a list that does not match the current set is a `Conflict`. |
+| `CoordinatorAssignRoleRequest(TargetUserId, RoleId)` | `ManageRoles` | `CoordinatorUserRolesResponse(TargetUserId, RoleIds)` |
+| `CoordinatorUnassignRoleRequest(TargetUserId, RoleId)` | `ManageRoles` | `CoordinatorUserRolesResponse`                |
 
 `RoleUpdateDTO` holds `Name`, `Color` and `Permissions`. `RoleDTO` adds `Id`, `Position`, `IsEveryone` and
 `Revision`. `UserDTO.RoleIds` lists a user's roles without `@everyone`.
 
-`CoordinatorRoleResult` values: `NoError`, `InsufficientPermissions`, `HierarchyViolation`, `Conflict`,
-`RoleNotFound`, `UserNotFound`, `InvalidRole`, `TooManyRoles`, `InternalError`. `TimedOut` and `Rejected` are
-for the client's own use.
+A request that fails is answered with `ErrorResponse(RequestId, Code)` instead. The codes of role requests:
+`InsufficientPermissions`, `HierarchyViolation`, `Conflict`, `RoleNotFound`, `UserNotFound`, `InvalidValue`,
+`TooManyRoles`, `Internal`.
 
 ### Push notifications
 
@@ -119,13 +132,13 @@ Changes reach clients no matter where they were made: the panel or another clien
 ### Refused requests
 
 Requests that the sender's roles do not allow are stopped in `MessageRouter` before any handler runs. The sender
-gets `RequestRejectedResponse(RequestId, RequestRejectReason.InsufficientPermissions)` instead of the normal
+gets `ErrorResponse(RequestId, ErrorCode.InsufficientPermissions)` instead of the normal
 response. Unlike invalid requests, these refusals do not count toward closing the connection.
 
 Two checks need data that only the handler has, so they are made later:
 
-- **Deleting another user's chat message:** `DeleteTextMessageResponse` with `InsufficientPermissions`.
-- **Role order inside role changes:** `CoordinatorRoleResult.HierarchyViolation`.
+- **Deleting another user's chat message:** `ErrorCode.InsufficientPermissions` to `DeleteMessageRequest`.
+- **Role order inside role changes:** `ErrorCode.HierarchyViolation`.
 
 ## Control panel API
 
@@ -157,7 +170,7 @@ panel then refetches the roles and the users. The page is at `/panel/coordinator
 | `Server.Application/Orchestrator/Roles/RoleService.cs` | The single entry point for reading and changing roles, used by both the panel and the coordinator handlers. It loads and caches the roles per coordinator, creates the defaults, checks permissions and role order, saves, and raises `RolesChanged`. Changes are serialized. |
 | `Server.Application/Coordinator/Roles/CoordinatorRoles.cs` | Per coordinator: loads the roles at start, answers `ICoordinatorPermissions`, and passes `RolesChanged` on to connected users. |
 | `Server.Application/Coordinator/Roles/RequestPolicies.cs` | What each request needs. |
-| `Server.Application/Coordinator/Roles/RequestAuthorizer.cs` | Applies a policy: the role route, the host route, and the role order against the target user. |
+| `Server.Application/Coordinator/Roles/RequestAuthorizer.cs` | Applies a policy: the roles of the sender, private chat membership, and the role order against the target user. |
 | `Server.Application/Coordinator/Handlers/Roles/` | Handlers for the role requests. |
 | `Server.Infrastructure/Database/Repositories/RoleRepository.cs` | The `Roles` and `UserRoles` tables. `Permission` is stored as a signed 64-bit integer. |
 | `Server.Asp/Web/Api/RolesController.cs`, `Web/Realtime/RolePanelEvents.cs` | Panel API and live updates. |
@@ -169,9 +182,8 @@ Every request type registered in `BaseMessage` must have an entry in `RequestPol
 fails. The policy can be:
 
 - `Require(permission)`: the sender needs the permission.
-- `InSession(sessionId, permission)`: the host of that hybrid session may make the request too.
-- `.Against(userId)`: additionally, the target user must rank below the sender (or, through the host route, at
-  most at the sender's rank).
+- `InSession(sessionId, permission)`: the permission is resolved in that session, with its overrides.
+- `.Against(userId)`: additionally, the target user must rank below the sender.
 
 ### Adding a permission
 
@@ -184,7 +196,7 @@ fails. The policy can be:
 
 - `ICoordinatorSession` loads the roles at every login (`CoordinatorRolesRequest`) and keeps
   `Permissions` (`Client.Core.Coordinator.CoordinatorPermissions`). This object mirrors the server's rules:
-  `Has`, `CanManage`, `CanAssign`, `CanGrant`, `CanInSession` and `CanInSessionOn` (the host rule).
+  `Has`, `CanManage`, `CanAssign`, `CanGrant`, `CanInSession` and `CanInSessionOn`.
   `PermissionsChanged` fires when a role changes or when the current user's roles change.
   `CoordinatorPermissionsChangedNotification` is ignored, because every client already has the roles and can
   compute its own permissions.
@@ -192,7 +204,7 @@ fails. The policy can be:
   allow are hidden:
   - creating sessions and categories;
   - arranging the list (drag and drop, moving, renaming and deleting categories);
-  - session settings and deletion (allowed to the host or to `ManageSessions`);
+  - session settings and deletion (`ManageSessions`);
   - kicking from the sidebar and from the participant list;
   - deleting other users' messages;
   - editing other users' profiles;
@@ -203,12 +215,12 @@ fails. The policy can be:
   up live.
 - The user profile lists the user's roles. Roles the viewer may assign appear as check boxes on both desktop
   and Android.
-- `RequestRejectReason.InsufficientPermissions` is shown as its own message.
+- `ErrorCode.InsufficientPermissions` is shown as its own message.
 
 ## Not done yet
 
 - Permission overrides per session, like Discord channel overwrites. A future `SessionPermissionOverwrite` (allow and
-  deny per role or user) would plug into `RequestAuthorizer` next to the host route.
+  deny per role or user) would plug into `RequestAuthorizer` next to the role route.
 - Hiding IP addresses from users who lack a permission. `UserDTO.Ip` still reaches every client.
 - Panel authentication. Anyone who can open the panel can make themselves an administrator. This must be solved
   before a release.

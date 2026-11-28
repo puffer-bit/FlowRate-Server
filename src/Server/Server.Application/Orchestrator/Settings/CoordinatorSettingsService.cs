@@ -109,13 +109,17 @@ public class CoordinatorSettingsService : ICoordinatorSettingsService
         model.Rename(change.Name.Trim());
         model.Listen(change.Ip.Trim(), change.Port);
         model.SetUserLimits(change.MaxOnlineUsers, change.MaxUsers);
+        if (change.MaxBots is { } maxBots)
+            model.SetBotLimit(maxBots);
         model.SetMotd(new MotdSettings(change.IsMotdEnabled,
             string.IsNullOrWhiteSpace(change.MotdText) ? null : change.MotdText.Trim()));
-        model.SetAccessList(new AccessListSettings(change.AllowedIps.Distinct(), change.BannedIps.Distinct()));
+        model.SetAccessList(new AccessListSettings(change.AllowedIps.Distinct()));
         model.SetHeartbeat(new CoordinatorHeartbeatSettings(change.HeartbeatIntervalSeconds,
             change.HeartbeatTimeoutSeconds));
 
-        model.SetMedia(new CoordinatorMediaSettings(change.MaxFileSizeBytes, change.StorageQuotaBytes));
+        model.SetMedia(new CoordinatorMediaSettings(change.MaxFileSizeBytes, change.StorageQuotaBytes,
+            change.ImageMaxSide, change.ImageQuality, change.AllowOriginalImages, change.VideoMaxSide,
+            change.AllowOriginalVideos));
         model.SetUploads(new CoordinatorUploadSettings(change.MaxUnattachedUploadsPerUser,
             change.UnattachedUploadLifetimeHours, change.MediaTokenLifetimeMinutes));
         model.SetRateLimits(change.RateLimits.ToSettings());

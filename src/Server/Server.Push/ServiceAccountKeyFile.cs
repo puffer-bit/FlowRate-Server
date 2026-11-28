@@ -11,7 +11,7 @@ public sealed class ServiceAccountKeyFile
     private readonly string _path;
     private readonly Lock _lock = new();
     private ServiceAccountKey? _key;
-    private DateTime _loadedWriteTime;
+    private DateTimeOffset _loadedWriteTime;
 
     public ServiceAccountKeyFile(string path)
     {

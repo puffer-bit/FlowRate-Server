@@ -1,7 +1,9 @@
+using Shared.Models.DataTransferObjects.ChatSession.Messages;
+using Shared.Models.DataTransferObjects.ChatSession.Messages.Commands;
 using Server.Core.Models.TextChat.Messages;
 using Server.Core.Models.TextChat.Messages.Content;
 using Server.Core.Models.TextChat.Messages.Reactions;
-using Server.Infrastructure.Database.Entities.TextChat;
+using Server.Database.Entities.TextChat;
 
 namespace Server.Infrastructure.Mappers;
 
@@ -25,6 +27,8 @@ public static class ChatMessageEntityMapper
             DelayedSentTime = model.DelayedSentTime,
             DisposeTime = model.DisposeTime,
             EditTime = model.EditTime,
+            PinnedAt = model.PinnedAt,
+            PinnedByUserId = model.PinnedByUserId,
             IsDelayed = model.IsDelayed,
             IsEdited = model.IsEdited,
             IsReposted = model.IsReposted,
@@ -32,7 +36,15 @@ public static class ChatMessageEntityMapper
             IsDeleted = model.IsDeleted,
             IsReadOnly = model.IsReadOnly,
             IsSystem = model.IsSystem,
+            SystemEventKind = (int?)model.SystemContent?.Kind,
+            SystemActorUserId = model.SystemContent?.ActorUserId,
+            SystemSubjectUserId = model.SystemContent?.SubjectUserId,
+            SystemCallId = model.SystemContent?.CallId,
+            SystemCallEndReason = (int?)model.SystemContent?.CallEndReason,
+            SystemCallDurationSeconds = model.SystemContent?.CallDurationSeconds,
             IsDisposable = model.IsDisposable,
+            LinkPreviewId = model.LinkPreview?.Id,
+            IsLinkPreviewDisabled = model.IsLinkPreviewDisabled,
 
             TextContent = model.TextContent?.ToEntity()!,
             ReplyToMessageId = model.ReplyContent?.MessageId,
@@ -51,7 +63,7 @@ public static class ChatMessageEntityMapper
         if (entity == null)
             return null!;
         
-        return new ChatMessageModel
+        var model = new ChatMessageModel
         {
             Id = entity.Id,
             ChatId = entity.ChatId,
@@ -61,32 +73,82 @@ public static class ChatMessageEntityMapper
             DelayedSentTime = entity.DelayedSentTime,
             DisposeTime = entity.DisposeTime,
             EditTime = entity.EditTime,
+            PinnedAt = entity.PinnedAt,
+            PinnedByUserId = entity.PinnedByUserId,
             IsReposted = entity.IsReposted,
             IsDelivered = entity.IsDelivered,
             IsDeleted = entity.IsDeleted,
             IsReadOnly = entity.IsReadOnly,
             IsSystem = entity.IsSystem,
+            SystemContent = entity.SystemEventKind is { } kind ? new ChatSystemContentModel
+            {
+                Kind = (ChatSystemEventKind)kind,
+                ActorUserId = entity.SystemActorUserId,
+                SubjectUserId = entity.SystemSubjectUserId,
+                CallId = entity.SystemCallId,
+                CallEndReason = (Shared.Models.DataTransferObjects.ChatCallEndReason?)entity.SystemCallEndReason,
+                CallDurationSeconds = entity.SystemCallDurationSeconds
+            } : null,
 
             TextContent = entity.TextContent?.ToModel(),
             ReplyContent = replyContent,
+            LinkPreview = entity.LinkPreview?.ToModel(),
+            IsLinkPreviewDisabled = entity.IsLinkPreviewDisabled,
             Images = entity.Images?.Select(i => i.ToModel()).ToList() ?? [],
             Videos = entity.Videos?.Select(v => v.ToModel()).ToList() ?? [],
             Files = entity.Files?.Select(f => f.ToModel()).ToList() ?? [],
             Reactions = entity.Reactions?.Select(r => r.ToModel()).ToList() ?? [],
             UsersIds = entity.UsersIds ?? []
         };
+        return model;
     }
     
     // -----------------------------------------------------------------
     // content conversions (model <-> entity)
     // -----------------------------------------------------------------
 
+    public static ChatLinkPreviewModel ToModel(this LinkPreviewEntity entity) => new()
+    {
+        Id = entity.Id,
+        CoordinatorInstanceId = entity.CoordinatorInstanceId,
+        Url = entity.Url,
+        SiteName = entity.SiteName,
+        Title = entity.Title,
+        Description = entity.Description,
+        ImageMimeType = entity.ImageMimeType,
+        ImageWidth = entity.ImageWidth,
+        ImageHeight = entity.ImageHeight,
+        ImageSize = entity.ImageSize,
+        IsLargeImage = entity.IsLargeImage,
+        FetchedAt = entity.FetchedAt
+    };
+
+    public static LinkPreviewEntity ToEntity(this ChatLinkPreviewModel model) => new()
+    {
+        Id = model.Id,
+        CoordinatorInstanceId = model.CoordinatorInstanceId,
+        Url = model.Url,
+        SiteName = model.SiteName,
+        Title = model.Title,
+        Description = model.Description,
+        ImageMimeType = model.ImageMimeType,
+        ImageWidth = model.ImageWidth,
+        ImageHeight = model.ImageHeight,
+        ImageSize = model.ImageSize,
+        IsLargeImage = model.IsLargeImage,
+        FetchedAt = model.FetchedAt
+    };
+
     public static ChatTextContentEntity ToEntity(this ChatTextContentModel? model)
     {
         if (model == null) return null!;
         return new ChatTextContentEntity 
         {
-            Text = model.Text
+            Text = model.Text,
+            CommandKind = (int?)model.CommandResult?.Kind,
+            CommandMinimum = model.CommandResult?.Minimum,
+            CommandMaximum = model.CommandResult?.Maximum,
+            CommandValue = model.CommandResult?.Value
         };
     }
 
@@ -95,7 +157,11 @@ public static class ChatMessageEntityMapper
         if (entity == null) return null!;
         return new ChatTextContentModel
         {
-            Text = entity.Text
+            Text = entity.Text,
+            CommandResult = entity.CommandKind is { } kind && entity.CommandMinimum is { } minimum
+                && entity.CommandMaximum is { } maximum && entity.CommandValue is { } value
+                ? new ChatCommandResultModel { Kind = (ChatCommandKind)kind, Minimum = minimum, Maximum = maximum, Value = value }
+                : null
         };
     }
 
@@ -107,6 +173,7 @@ public static class ChatMessageEntityMapper
         return new ChatReplyContentModel
         {
             MessageId = target.Id,
+            HasAttachments = !target.IsDeleted && (target.Images.Count > 0 || target.Videos.Count > 0 || target.Files.Count > 0),
             SenderUserId = target.SenderUserId,
             SentTime = target.SentTime,
             TextContent = target.IsDeleted ? null : target.TextContent?.ToModel(),
@@ -196,7 +263,12 @@ public static class ChatMessageEntityMapper
             FileName = model.FileName,
             Size = model.Size,
             MimeType = model.MimeType,
-            UploadId = model.UploadId
+            UploadId = model.UploadId,
+            IsVideo = model.Video != null,
+            VideoWidth = model.Video?.Width ?? 0,
+            VideoHeight = model.Video?.Height ?? 0,
+            VideoDuration = model.Video?.Duration,
+            PreviewUploadId = model.PreviewUploadId
         };
     }
 
@@ -209,7 +281,11 @@ public static class ChatMessageEntityMapper
             FileName = entity.FileName,
             Size = entity.Size,
             MimeType = entity.MimeType,
-            UploadId = entity.UploadId
+            UploadId = entity.UploadId,
+            Video = entity.IsVideo
+                ? new ChatFileVideoModel(entity.VideoWidth, entity.VideoHeight, entity.VideoDuration)
+                : null,
+            PreviewUploadId = entity.PreviewUploadId
         };
     }
 
@@ -219,7 +295,8 @@ public static class ChatMessageEntityMapper
         return new ChatReactionEntity
         {
             Emoji = model.Emoji,
-            UserId = model.UserId
+            UserId = model.UserId,
+            ReactedAt = model.ReactedAt
         };
     }
 
@@ -229,7 +306,8 @@ public static class ChatMessageEntityMapper
         return new ChatReactionModel
         {
             Emoji = entity.Emoji,
-            UserId = entity.UserId
+            UserId = entity.UserId,
+            ReactedAt = entity.ReactedAt is { } at ? at : null
         };
     }
 }

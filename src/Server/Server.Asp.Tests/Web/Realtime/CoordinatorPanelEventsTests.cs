@@ -55,7 +55,7 @@ public class CoordinatorPanelEventsTests
         var users = new Mock<IUserManager>();
         _events.Watch(users.Object);
 
-        var alice = UserModel.Create(CoordinatorId, "alice", null, DateTime.UtcNow);
+        var alice = UserModel.Create(CoordinatorId, "alice", null, DateTimeOffset.UtcNow);
         users.Raise(u => u.UserConnected += null, alice);
         users.Raise(u => u.UserUpdated += null, alice);
         users.Raise(u => u.UserDisconnected += null, alice, "bye");

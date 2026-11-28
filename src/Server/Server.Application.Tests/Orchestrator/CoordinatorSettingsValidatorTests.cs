@@ -43,11 +43,11 @@ public class CoordinatorSettingsValidatorTests
     [Fact]
     public void AccessList_TakesOnlyIpAddresses()
     {
-        var change = Valid() with { AllowedIps = ["10.0.0.1"], BannedIps = ["10.0.0.2", "somewhere"] };
+        var change = Valid() with { AllowedIps = ["10.0.0.1", "somewhere"] };
 
         var errors = CoordinatorSettingsValidator.Validate(change, Nodes);
 
-        Assert.Equal([CoordinatorSettingsFields.BannedIps], errors.Keys);
+        Assert.Equal([CoordinatorSettingsFields.AllowedIps], errors.Keys);
     }
 
     [Fact]

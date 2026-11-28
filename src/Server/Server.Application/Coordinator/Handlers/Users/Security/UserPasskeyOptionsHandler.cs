@@ -18,18 +18,15 @@ public class UserPasskeyOptionsHandler(IMessageSender messageSender, UserSecurit
 
         if (!await replies.IsProvenAsync(request.SenderId, request.Proof))
         {
-            messageSender.SendMessageById(connectionId, request.ToResponse(UserSecurityResult.ProofRequired));
+            messageSender.SendMessageById(connectionId, request.ToError(ErrorCode.ProofRequired));
             return HandleMessageResult.ForbiddenRequest;
         }
 
         var (status, options) = await replies.Security.BeginPasskeyRegistrationAsync(replies.CoordinatorId,
             request.SenderId);
         messageSender.SendMessageById(connectionId, options == null
-            ? request.ToResponse(status.ToResult())
-            : request.ToResponse(UserSecurityResult.NoError, options));
+            ? request.ToError(status.ToResult() ?? ErrorCode.Internal)
+            : request.ToResponse(options));
         return HandleMessageResult.NoError;
     }
-
-    public BaseMessage? CreateFailureResponse(UserPasskeyOptionsRequest request) =>
-        request.ToResponse(UserSecurityResult.InternalError);
 }

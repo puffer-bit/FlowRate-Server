@@ -49,7 +49,7 @@ public class SessionLayoutServiceTests
         await _service.LoadAsync([2, 3]);
         var before = _service.GetLayout().Revision;
 
-        Assert.Equal(SessionLayoutResult.NoError, await _service.MoveSessionAsync(2, 7, 0));
+        Assert.Equal(null, await _service.MoveSessionAsync(2, 7, 0));
 
         var notification = Assert.IsType<SessionLayoutChangedNotification>(Assert.Single(_broadcast));
         Assert.True(notification.Layout.Revision > before);
@@ -61,7 +61,7 @@ public class SessionLayoutServiceTests
     {
         await _service.LoadAsync([2, 3]);
 
-        Assert.Equal(SessionLayoutResult.NoError, await _service.MoveSessionAsync(2, null, 0));
+        Assert.Equal(null, await _service.MoveSessionAsync(2, null, 0));
 
         Assert.Empty(_broadcast);
     }
@@ -73,7 +73,7 @@ public class SessionLayoutServiceTests
         _repository.Setup(r => r.SaveAsync(It.IsAny<string>(), It.IsAny<SessionLayoutModel>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new InvalidOperationException());
 
-        Assert.Equal(SessionLayoutResult.InternalError, await _service.MoveSessionAsync(2, 7, 0));
+        Assert.Equal(ErrorCode.Internal, await _service.MoveSessionAsync(2, 7, 0));
 
         Assert.Equal([2], _service.GetLayout().RootSessionIds);
         Assert.Empty(_broadcast);
@@ -84,9 +84,9 @@ public class SessionLayoutServiceTests
     {
         await _service.LoadAsync([2, 3]);
 
-        Assert.Equal(SessionLayoutResult.SessionNotExists, await _service.MoveSessionAsync(9, null, 0));
-        Assert.Equal(SessionLayoutResult.CategoryNotExists, await _service.MoveSessionAsync(2, 9, 0));
-        Assert.Equal(SessionLayoutResult.CategoryNotExists, await _service.DeleteCategoryAsync(9));
+        Assert.Equal(ErrorCode.SessionNotFound, await _service.MoveSessionAsync(9, null, 0));
+        Assert.Equal(ErrorCode.CategoryNotFound, await _service.MoveSessionAsync(2, 9, 0));
+        Assert.Equal(ErrorCode.CategoryNotFound, await _service.DeleteCategoryAsync(9));
     }
 
     [Fact]
@@ -96,7 +96,7 @@ public class SessionLayoutServiceTests
 
         var (result, categoryId) = await _service.CreateCategoryAsync("Games");
 
-        Assert.Equal(SessionLayoutResult.NoError, result);
+        Assert.Equal(null, result);
         Assert.Equal([7, categoryId!.Value], _service.GetLayout().Categories.Select(c => c.Id));
     }
 
@@ -107,7 +107,7 @@ public class SessionLayoutServiceTests
         for (var i = 1; i < Limits.SessionCategoriesMaxCount; i++)
             await _service.CreateCategoryAsync("c" + i);
 
-        Assert.Equal(SessionLayoutResult.TooManyCategories, (await _service.CreateCategoryAsync("one more")).Result);
+        Assert.Equal(ErrorCode.TooManyCategories, (await _service.CreateCategoryAsync("one more")).Result);
     }
 
     [Fact]

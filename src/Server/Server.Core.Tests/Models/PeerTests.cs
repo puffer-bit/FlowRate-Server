@@ -6,26 +6,25 @@ namespace Server.Core.Tests.Models;
 
 public class PeerTests
 {
-    private const int HostId = 1;
+    private const int ModeratorId = 1;
     private const int GuestId = 2;
 
-    private static HybridSessionModel Session(bool isHostMustApprove) =>
-        HybridSessionModel.Create("coordinator", "room", 10, HostId, WebRTCEngine.Mediasoup, isHostMustApprove);
+    private static HybridSessionModel Session(bool isApprovalRequired) =>
+        HybridSessionModel.Create("coordinator", "room", 10, WebRTCEngine.Mediasoup, isApprovalRequired);
 
     [Fact]
-    public void Host_IsAdmittedWithoutApproval()
+    public void WhoMayApprove_IsAdmittedWithoutApproval()
     {
-        var host = Peer.Join(HostId, Session(isHostMustApprove: true));
+        var moderator = Peer.Join(ModeratorId, Session(isApprovalRequired: true), mayApprove: true);
 
-        Assert.True(host.IsHost);
-        Assert.True(host.IsAdmitted);
-        Assert.Equal(HybridSessionPeerState.Connecting, host.State);
+        Assert.True(moderator.IsAdmitted);
+        Assert.Equal(HybridSessionPeerState.Connecting, moderator.State);
     }
 
     [Fact]
     public void Guest_WaitsForApproval_WhenSessionRequiresIt()
     {
-        var guest = Peer.Join(GuestId, Session(isHostMustApprove: true));
+        var guest = Peer.Join(GuestId, Session(isApprovalRequired: true));
 
         Assert.False(guest.IsAdmitted);
         Assert.Equal(HybridSessionPeerState.WaitingForApprove, guest.State);
@@ -34,13 +33,13 @@ public class PeerTests
     [Fact]
     public void PendingGuest_DoesNotReceiveMedia_UntilApproved()
     {
-        var guest = Peer.Join(GuestId, Session(isHostMustApprove: true));
+        var guest = Peer.Join(GuestId, Session(isApprovalRequired: true));
 
-        Assert.Equal(HybridSessionConnectTransportResult.NoError, guest.MarkTransportConnected());
+        Assert.Equal(null, guest.MarkTransportConnected());
         Assert.False(guest.CanReceiveMedia);
         Assert.Equal(HybridSessionPeerState.WaitingForApprove, guest.State);
 
-        Assert.Equal(ApproveUserSessionResult.NoError, guest.Approve());
+        Assert.Equal(null, guest.Approve());
         Assert.True(guest.IsApproved);
         Assert.True(guest.CanReceiveMedia);
     }
@@ -48,7 +47,7 @@ public class PeerTests
     [Fact]
     public void Approve_BeforeTransport_LeavesPeerConnecting()
     {
-        var guest = Peer.Join(GuestId, Session(isHostMustApprove: true));
+        var guest = Peer.Join(GuestId, Session(isApprovalRequired: true));
 
         guest.Approve();
 
@@ -57,55 +56,46 @@ public class PeerTests
     }
 
     [Fact]
-    public void Host_CannotBeApprovedOrRejected()
-    {
-        var host = Peer.Join(HostId, Session(isHostMustApprove: true));
-
-        Assert.Equal(ApproveUserSessionResult.InternalError, host.Approve());
-        Assert.Equal(RejectUserSessionResult.InternalError, host.Reject());
-    }
-
-    [Fact]
     public void Rejected_Peer_CannotBeApproved_RejoinOrConnect()
     {
-        var guest = Peer.Join(GuestId, Session(isHostMustApprove: true));
+        var guest = Peer.Join(GuestId, Session(isApprovalRequired: true));
 
-        Assert.Equal(RejectUserSessionResult.NoError, guest.Reject());
+        Assert.Equal(null, guest.Reject());
 
         Assert.Equal(HybridSessionPeerState.Closed, guest.State);
-        Assert.Equal(ApproveUserSessionResult.AlreadyRejected, guest.Approve());
-        Assert.Equal(HybridSessionJoinResult.Rejected, guest.Rejoin());
-        Assert.Equal(HybridSessionConnectTransportResult.Rejected, guest.MarkTransportConnected());
+        Assert.Equal(ErrorCode.AlreadyRejected, guest.Approve());
+        Assert.Equal(ErrorCode.NotAdmitted, guest.Rejoin());
+        Assert.Equal(ErrorCode.NotAdmitted, guest.MarkTransportConnected());
     }
 
     [Fact]
     public void Approved_Peer_CannotBeRejected()
     {
-        var guest = Peer.Join(GuestId, Session(isHostMustApprove: true));
+        var guest = Peer.Join(GuestId, Session(isApprovalRequired: true));
         guest.Approve();
 
-        Assert.Equal(RejectUserSessionResult.AlreadyApproved, guest.Reject());
+        Assert.Equal(ErrorCode.AlreadyApproved, guest.Reject());
         Assert.False(guest.IsRejected);
     }
 
     [Fact]
     public void Rejoin_ResetsTransportAndMicrophone_AndKeepsAdmission()
     {
-        var guest = Peer.Join(GuestId, Session(isHostMustApprove: false));
+        var guest = Peer.Join(GuestId, Session(isApprovalRequired: false));
         guest.MarkTransportConnected();
         guest.SetMicrophoneMuted(true);
 
-        Assert.Equal(HybridSessionJoinResult.NoError, guest.Rejoin());
+        Assert.Equal(null, guest.Rejoin());
 
         Assert.False(guest.IsTransportConnected);
-        Assert.False(guest.IsMicrophoneMuted);
+        Assert.True(guest.IsMicrophoneMuted);
         Assert.Equal(HybridSessionPeerState.Connecting, guest.State);
     }
 
     [Fact]
     public void WaitForServer_DoesNotReopenClosedPeer()
     {
-        var guest = Peer.Join(GuestId, Session(isHostMustApprove: false));
+        var guest = Peer.Join(GuestId, Session(isApprovalRequired: false));
         guest.Close();
 
         guest.WaitForServer();
@@ -116,8 +106,11 @@ public class PeerTests
     [Fact]
     public void SetMicrophoneMuted_ReportsWhetherStateChanged()
     {
-        var guest = Peer.Join(GuestId, Session(isHostMustApprove: false));
+        var guest = Peer.Join(GuestId, Session(isApprovalRequired: false));
 
+        Assert.True(guest.IsMicrophoneMuted);
+        Assert.False(guest.SetMicrophoneMuted(true));
+        Assert.True(guest.SetMicrophoneMuted(false));
         Assert.True(guest.SetMicrophoneMuted(true));
         Assert.False(guest.SetMicrophoneMuted(true));
     }

@@ -9,7 +9,7 @@ namespace Server.Application.Orchestrator.SFUPool;
 
 public interface ISFUNodeSelector
 {
-    /// <summary>Raised when nodes entered or left the pool. Sessions on a node that left have to move.</summary>
+    /// <summary>Raised when nodes or their availability change. Sessions without a healthy node can move.</summary>
     event Func<Task>? NodesChanged;
 
     ISFUGateway? GetBestSFUNode(int sessionId);

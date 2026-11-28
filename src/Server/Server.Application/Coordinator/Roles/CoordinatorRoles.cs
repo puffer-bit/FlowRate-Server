@@ -64,6 +64,11 @@ public sealed class CoordinatorRoles : ICoordinatorPermissions, IDisposable
         if (userId == UserModel.SystemUserId)
             return Permission.All;
 
+        if (session is Server.Core.Models.HybridSession.HybridSessionModel { CallDevices: not null } call)
+            return CallPermissions(call, userId);
+        if (session is Server.Core.Models.TextChat.ChatSessionModel { IsPrivate: true } chat)
+            return PrivatePermissions(chat, userId);
+
         return Resolve(session, _userManager.TryGetConnectedUser(userId, out var user) ? user!.RoleIds : []);
     }
 
@@ -72,16 +77,44 @@ public sealed class CoordinatorRoles : ICoordinatorPermissions, IDisposable
         if (userId == UserModel.SystemUserId)
             return Permission.All;
 
+        if (session is Server.Core.Models.HybridSession.HybridSessionModel { CallDevices: not null } call)
+            return CallPermissions(call, userId);
+        if (session is Server.Core.Models.TextChat.ChatSessionModel { IsPrivate: true } chat)
+            return PrivatePermissions(chat, userId);
+
         var user = _userManager.TryGetConnectedUser(userId, out var connected)
             ? connected
             : await _userManager.GetUserAsync(userId);
         return Resolve(session, user?.RoleIds ?? []);
     }
 
+    // Members in a chat call speak, send video and share their screen; the group owner also kicks from it
+    private static Permission CallPermissions(Server.Core.Models.HybridSession.HybridSessionModel call, int userId)
+    {
+        if (!call.CallDevices!.ContainsKey(userId)) return Permission.None;
+        var granted = Permission.ViewSessions | Permission.JoinSessions | Permission.Speak | Permission.ShareVideo
+                      | Permission.PokeMembers;
+        return call.CallModeratorId == userId ? granted | Permission.KickMembers : granted;
+    }
+
+    private static Permission PrivatePermissions(Server.Core.Models.TextChat.ChatSessionModel chat, int userId)
+    {
+        if (!chat.MemberIds.Contains(userId)) return Permission.None;
+        var granted = Permission.ViewSessions | Permission.SendMessages | Permission.AttachFiles;
+        return chat.Kind == ChatKind.Group && chat.OwnerUserId == userId
+            ? granted | Permission.ManageSessions | Permission.ManageMessages : granted;
+    }
+
     private Permission Resolve(SessionModel session, IReadOnlyCollection<int> roleIds)
     {
         var roles = Roles;
-        return SessionPermissions.Resolve(roles.PermissionsOf(roleIds), session.PermissionOverrides,
+        var permissions = roles.PermissionsOf(roleIds);
+        // Viewing server channels requires the coordinator-wide right. Channel overrides
+        // can restrict the visible channels, but cannot give access to channels as a whole.
+        if (!permissions.HasFlag(Permission.ViewSessions))
+            return Permission.None;
+
+        return SessionPermissions.Resolve(permissions, session.PermissionOverrides,
             roles.Everyone.Id, roleIds);
     }
 
@@ -107,8 +140,9 @@ public sealed class CoordinatorRoles : ICoordinatorPermissions, IDisposable
 
         try
         {
+            // A connected user takes the roles before the permissions below are announced
             foreach (var (userId, roleIds) in change.UserRoles)
-                _userManager.SetRoles(userId, roleIds);
+                _ = SetRolesAsync(userId, roleIds);
 
             if (change.RolesModified)
                 _messageSender.BroadcastMessage(new CoordinatorRolesChangedNotification(change.Roles.ToDtos()));
@@ -126,6 +160,18 @@ public sealed class CoordinatorRoles : ICoordinatorPermissions, IDisposable
         catch (Exception ex)
         {
             _logger.LogError(ex, "Announcing a change of the roles failed.");
+        }
+    }
+
+    private async Task SetRolesAsync(int userId, IReadOnlyList<int> roleIds)
+    {
+        try
+        {
+            await _userManager.SetRolesAsync(userId, roleIds);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Announcing the roles of user {UserId} failed.", userId);
         }
     }
 

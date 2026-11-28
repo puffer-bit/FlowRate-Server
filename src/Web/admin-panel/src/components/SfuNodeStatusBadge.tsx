@@ -12,8 +12,10 @@ const colors: Record<SfuNodeConnectionState, string> = {
 /** Connection state of a node with its last ping; the tooltip tells why it is not connected. */
 export function SfuNodeStatusBadge({ node }: { node: SfuNode }) {
   const status = node.status
-  if (!node.isEnabled || !status)
-    return <Badge color="gray" variant="light">disabled</Badge>
+  if (!node.isEnabled)
+    return <Badge color="gray" variant="dot" className="node-state-badge">Disabled</Badge>
+  if (!status)
+    return <Badge color="yellow" variant="dot" className="node-state-badge">Connecting</Badge>
 
   const label = status.state === 'Connected' && status.pingMs != null
     ? `Connected · ${formatPing(status.pingMs)}`
@@ -25,7 +27,7 @@ export function SfuNodeStatusBadge({ node }: { node: SfuNode }) {
 
   return (
     <Tooltip label={details} disabled={!details} multiline maw={320} style={{ whiteSpace: 'pre-line' }}>
-      <Badge color={colors[status.state]} variant="light">{label}</Badge>
+      <Badge color={colors[status.state]} variant="dot" className="node-state-badge">{label}</Badge>
     </Tooltip>
   )
 }

@@ -11,7 +11,7 @@ public interface ICoordinatorInstanceContext
 
     string Id => Model.Id;
     string Name => Model.Name;
-    TimeSpan UpTime => DateTime.UtcNow - Model.CurrentLaunchTime;
+    TimeSpan UpTime => DateTimeOffset.UtcNow - Model.CurrentLaunchTime;
 
     /// <summary>Takes new settings of the same coordinator, keeping the launch time of the running one.</summary>
     void ApplySettings(CoordinatorInstanceModel model);

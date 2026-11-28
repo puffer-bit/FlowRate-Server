@@ -12,5 +12,5 @@ const colors: Record<CoordinatorState, string> = {
 }
 
 export function StateBadge({ state }: { state: CoordinatorState }) {
-  return <Badge color={colors[state]} variant="light">{state}</Badge>
+  return <Badge color={colors[state]} variant="dot" className="node-state-badge">{state}</Badge>
 }

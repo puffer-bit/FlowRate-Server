@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Server.Core.Models.Coordinator;
-using Server.Infrastructure.Database.Entities;
+using Server.Database.Entities;
+using Server.Database;
 using Server.Infrastructure.Mappers;
 using Server.Application.Abstractions.Persistence;
 
@@ -63,7 +64,6 @@ public class CoordinatorInstanceRepository : ICoordinatorInstanceRepository
         var updated = model.ToEntity();
         context.Entry(entity).CurrentValues.SetValues(updated);
         entity.AllowedIPs = updated.AllowedIPs;
-        entity.BannedIPs = updated.BannedIPs;
 
         entity.SfuNodes.Clear();
         entity.SfuNodes.AddRange(await LoadSfuNodesAsync(context, model.SfuNodeIds, cancellationToken));

@@ -55,21 +55,21 @@ public class Authenticator : IAuthenticator
         return _passwordHasher.VerifyPassword(serverPasswordHash, rawServerPassword);
     }
 
-    public async Task<LoginChallenge?> BeginUserLoginAsync(string userIdentity, CancellationToken ct = default)
+    public async Task<LoginChallenge?> BeginFactorLoginAsync(int userId, CancellationToken ct = default)
     {
-        var user = await _userRepository.GetByIdentityAsync(_coordinatorInstanceContext.Id, userIdentity, ct);
-        if (user == null || user.IsSystem || user.IsBanned)
+        var user = await _userRepository.GetByIdAsync(userId, ct);
+        if (user == null || user.IsSystem || user.CoordinatorInstanceId != _coordinatorInstanceContext.Id)
             return null;
 
         var security = await _userSecurityDataRepository.GetByUserIdAsync(user.Id, ct);
         if (security is not { RequiresSecondStage: true })
             return null;
 
-        var methods = new List<SecondStageAuthType>();
+        var methods = new List<LoginFactor>();
         if (security.IsPasswordEnabled)
-            methods.Add(SecondStageAuthType.Password);
+            methods.Add(LoginFactor.Password);
         if (security.IsTwoFactorEnabled)
-            methods.Add(SecondStageAuthType.TwoFactor);
+            methods.Add(LoginFactor.TwoFactor);
 
         PasskeyLoginOptions? passkey = null;
         var hasPasskeys = false;
@@ -84,7 +84,7 @@ public class Authenticator : IAuthenticator
             if (hasPasskeys && _passkeyService.IsAvailable)
             {
                 passkey = _passkeyService.BeginLogin(credentials);
-                methods.Add(SecondStageAuthType.FIDO2);
+                methods.Add(LoginFactor.Passkey);
             }
             else if (hasPasskeys)
             {
@@ -94,7 +94,7 @@ public class Authenticator : IAuthenticator
             }
         }
 
-        // Flagged for passkeys that are all gone: the identity is enough again
+        // Flagged for passkeys that are all gone: the user has no factor
         if (methods.Count == 0 && !hasPasskeys)
             return null;
 
@@ -152,7 +152,7 @@ public class Authenticator : IAuthenticator
         if (counter == null)
             return false;
 
-        passkey.RecordUse(counter.Value, DateTime.UtcNow);
+        passkey.RecordUse(counter.Value, DateTimeOffset.UtcNow);
         await _userPasskeyRepository.UpdateAsync(passkey);
         return true;
     }

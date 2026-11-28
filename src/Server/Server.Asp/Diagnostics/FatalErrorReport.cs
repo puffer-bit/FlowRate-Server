@@ -76,6 +76,11 @@ public static class FatalErrorReport
             return new Diagnosis("The database could not be opened or updated:", [database.Message],
                 "check Database:ConnectionString and that its directory exists and is writable.", ShowException: true);
 
+        if (chain.OfType<Npgsql.NpgsqlException>().FirstOrDefault() is { } postgres)
+            return new Diagnosis("PostgreSQL could not be reached or updated:", [postgres.Message],
+                "check Database:ConnectionString, PostgreSQL availability and the database user's permissions.",
+                ShowException: true);
+
         if (chain.FirstOrDefault(IsFromSerilogConfiguration) is { } logging)
             return new Diagnosis("The logging configuration (Serilog section) is invalid:", [logging.Message],
                 "check the Serilog section in appsettings.json and any Serilog__* environment variables; " +

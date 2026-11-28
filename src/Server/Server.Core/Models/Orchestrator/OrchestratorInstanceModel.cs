@@ -16,8 +16,8 @@ public sealed record OrchestratorInstanceModel
     public int MaxUsers { get; init; }
 
     public string? TimeZoneId { get; init; }
-    public DateTime FirstLaunchTime { get; init; }
-    public DateTime CurrentLaunchTime { get; init; }
+    public DateTimeOffset FirstLaunchTime { get; init; }
+    public DateTimeOffset CurrentLaunchTime { get; init; }
 
     public SfuConnectionSettings SfuConnection { get; init; } = new();
 

@@ -1,4 +1,5 @@
 using Shared.Models;
+using Server.Core.Models.User;
 using Server.Application.Abstractions.Gateway;
 using Server.Application.Coordinator.Connections.RateLimiting;
 
@@ -15,6 +16,10 @@ public class ClientConnection : IClientConnection
         get => _webSocketGateway.UserId;
         set => _webSocketGateway.UserId = value;
     }
+
+    public Guid? UserSessionId { get; set; }
+    public DateTimeOffset? WaitsForDeviceLinkUntil { get; set; }
+    public UserDevice? Device { get; set; }
 
     public string IpEndpoint => _webSocketGateway.IpAddress;
     public bool IsAvailable => _webSocketGateway.IsAvailable;

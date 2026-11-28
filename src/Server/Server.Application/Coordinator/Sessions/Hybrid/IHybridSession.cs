@@ -12,7 +12,7 @@ public interface IHybridSession : IDisposable
 
     /// <summary>
     /// Keeps the current SFU node while it is in the pool; otherwise moves the session to the best available node,
-    /// or puts it into <see cref="Shared.Enums.HybridSessionNodeState.WaitingForSfuNode"/> when there is none.
+    /// or puts it into <see cref="Shared.Enums.HybridSessionNodeState.WaitingForSFUNode"/> when there is none.
     /// </summary>
     Task AssignSfuNodeAsync();
 

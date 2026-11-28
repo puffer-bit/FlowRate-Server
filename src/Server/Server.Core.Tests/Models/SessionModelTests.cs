@@ -13,7 +13,7 @@ public class SessionModelTests
     {
         Assert.Equal(SessionType.Chat, ChatSessionModel.Create("coordinator", "chat", 1).SessionType);
         Assert.Equal(SessionType.Hybrid,
-            HybridSessionModel.Create("coordinator", "room", 5, 1, WebRTCEngine.Mediasoup).SessionType);
+            HybridSessionModel.Create("coordinator", "room", 5, WebRTCEngine.Mediasoup).SessionType);
     }
 
     [Theory]
@@ -22,17 +22,14 @@ public class SessionModelTests
     public void InvalidCapacity_Throws(int capacity)
     {
         Assert.Throws<ArgumentOutOfRangeException>(() =>
-            HybridSessionModel.Create("coordinator", "room", capacity, 1, WebRTCEngine.Mediasoup));
+            HybridSessionModel.Create("coordinator", "room", capacity, WebRTCEngine.Mediasoup));
     }
 
     [Fact]
-    public void IsFull_RespectsUnlimitedCapacity()
+    public void IsFull_RespectsCapacity()
     {
-        var chat = ChatSessionModel.Create("coordinator", "chat", 1);
-        var room = HybridSessionModel.Create("coordinator", "room", 2, 1, WebRTCEngine.Mediasoup);
+        var room = HybridSessionModel.Create("coordinator", "room", 2, WebRTCEngine.Mediasoup);
 
-        Assert.Equal(SessionModel.NoCapacityLimit, chat.Capacity);
-        Assert.False(chat.IsFull(1_000));
         Assert.False(room.IsFull(1));
         Assert.True(room.IsFull(2));
     }

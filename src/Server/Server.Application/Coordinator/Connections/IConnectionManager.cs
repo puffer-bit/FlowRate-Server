@@ -20,5 +20,7 @@ public interface IConnectionManager : IDisposable
     /// <summary>The open connections of a user, one per device they are connected from.</summary>
     IReadOnlyList<IClientConnection> GetUserConnections(int userId);
 
+    IReadOnlyList<IClientConnection> GetAllConnections();
+
     void CloseAllConnections();
 }

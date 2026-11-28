@@ -69,11 +69,12 @@ public sealed class SessionVisibility : IDisposable
     }
 
     /// <summary>Sends something that happened in a session to the connected users who may see it.</summary>
-    public void Send(int sessionId, BaseMessage message)
+    /// <param name="alsoTo">A user it concerns, who is told even when they may no longer see the session.</param>
+    public void Send(int sessionId, BaseMessage message, int? alsoTo = null)
     {
         if (_sessions != null && _sessions.TryGetSessionModel(sessionId, out var session))
-            _messageSender.BroadcastMessage(ConnectedUsers().Where(userId => CanView(userId, session)).ToList(),
-                message);
+            _messageSender.BroadcastMessage(ConnectedUsers()
+                .Where(userId => userId == alsoTo || CanView(userId, session)).ToList(), message);
     }
 
     public void Created(SessionModel session)
@@ -90,8 +91,11 @@ public sealed class SessionVisibility : IDisposable
     /// Sends the changed session to those who may see it; those who no longer may get it deleted, those who now
     /// may get it created.
     /// </summary>
+    public event Action? AudienceChanged;
+
     public void Reconfigured(SessionModel session)
     {
+        AudienceChanged?.Invoke();
         foreach (var userId in ConnectedUsers())
             Update(userId, session, ReconfiguredNotification(session));
     }
@@ -99,10 +103,14 @@ public sealed class SessionVisibility : IDisposable
     /// <summary>Tells everyone; a client that never had the session ignores it.</summary>
     public void Deleted(int sessionId, BaseMessage notification)
     {
+        AudienceChanged?.Invoke();
+        List<int> recipients;
         lock (_lock)
-            foreach (var shown in _shown.Values)
-                shown.Remove(sessionId);
-        _messageSender.BroadcastMessage(notification);
+        {
+            recipients = _shown.Where(pair => pair.Value.Contains(sessionId)).Select(pair => pair.Key).ToList();
+            foreach (var shown in _shown.Values) shown.Remove(sessionId);
+        }
+        _messageSender.BroadcastMessage(recipients, notification);
     }
 
     /// <summary>Brings the session lists of the users in step with what they may see now.</summary>

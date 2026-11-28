@@ -23,11 +23,8 @@ public class CreateSessionCategoryHandler : IMessageHandler<CreateSessionCategor
             return HandleMessageResult.ForbiddenRequest;
 
         var (result, categoryId) = await _layout.CreateCategoryAsync(request.Name);
-        _messageSender.SendMessageById(connectionId, request.ToResponse(result, categoryId));
+        _messageSender.SendMessageById(connectionId, request.Answer(result, () => request.ToResponse(categoryId!)));
 
         return HandleMessageResult.NoError;
     }
-
-    public BaseMessage? CreateFailureResponse(CreateSessionCategoryRequest request) =>
-        request.ToResponse(SessionLayoutResult.InternalError);
 }

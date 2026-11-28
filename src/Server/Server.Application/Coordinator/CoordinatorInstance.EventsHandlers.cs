@@ -41,8 +41,14 @@ public partial class CoordinatorInstance
 
     private void DetachConnectionUser(string connectionId, string reason)
     {
-        if (!_connectionManager.TryRemoveConnectionById(connectionId, out var connection)
-            || connection.UserId is not { } userId)
+        if (!_connectionManager.TryRemoveConnectionById(connectionId, out var connection))
+            return;
+
+        // The device was online until now: its lifetime starts from the disconnect, not from its last login
+        if (connection.UserSessionId is { } deviceId)
+            _ = KeepDeviceAliveAsync(deviceId);
+
+        if (connection.UserId is not { } userId)
             return;
 
         // The last connection of the user takes them out of every session; another one only of what was on it
@@ -74,12 +80,12 @@ public partial class CoordinatorInstance
     }
 
     /// <summary>
-    /// Sends the user to everyone, and to the user themselves with the status they picked when others see
+    /// Sends the user to everyone, and to the user themselves with their own presence when others see
     /// another one.
     /// </summary>
     private void BroadcastUser(UserModel user, Func<UserDTO, BaseMessage> notification)
     {
-        if (user.Status == user.Presence)
+        if (user.OwnPresence == user.Presence)
         {
             _messageSender.BroadcastMessage(notification(user.ToDto()));
             return;
@@ -96,6 +102,21 @@ public partial class CoordinatorInstance
     private void OnUserDeleted(int userId)
     {
         _messageSender.BroadcastMessage(new CoordinatorUserDeletedNotification(userId));
+    }
+
+    private async Task KeepDeviceAliveAsync(Guid deviceId)
+    {
+        if (Devices == null)
+            return;
+
+        try
+        {
+            await Devices.KeepAliveAsync([deviceId]);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Keeping device {DeviceId} alive after its disconnect failed.", deviceId);
+        }
     }
 
     private async Task RemoveUserFromAllSessionsAsync(int userId)

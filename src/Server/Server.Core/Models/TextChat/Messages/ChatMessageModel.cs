@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using Server.Core.Models.TextChat.Messages.Content;
 using Server.Core.Models.TextChat.Messages.Reactions;
 using Server.Core.Models.User;
@@ -13,7 +14,7 @@ public sealed class ChatMessageModel
 {
     private ChatTextContentModel? _textContent;
     private ChatReplyContentModel? _replyContent;
-    private DateTime? _editTime;
+    private DateTimeOffset? _editTime;
     private bool _isDelivered;
     private long _revision;
     private readonly List<ChatReactionModel> _reactions = new();
@@ -23,11 +24,11 @@ public sealed class ChatMessageModel
     public long Revision { get => _revision; init => _revision = value; }
     public required int ChatId { get; init; }
     public required int SenderUserId { get; init; }
-    public required DateTime SentTime { get; init; }
-    public DateTime? DelayedSentTime { get; init; }
-    public DateTime? DisposeTime { get; init; }
+    public required DateTimeOffset SentTime { get; init; }
+    public DateTimeOffset? DelayedSentTime { get; init; }
+    public DateTimeOffset? DisposeTime { get; init; }
 
-    public DateTime? EditTime { get => _editTime; init => _editTime = value; }
+    public DateTimeOffset? EditTime { get => _editTime; init => _editTime = value; }
     public ChatTextContentModel? TextContent { get => _textContent; init => _textContent = value; }
     public ChatReplyContentModel? ReplyContent { get => _replyContent; init => _replyContent = value; }
 
@@ -43,23 +44,69 @@ public sealed class ChatMessageModel
 
     public IReadOnlyList<string> UsersIds { get; init; } = [];
 
+    private ChatLinkPreviewModel? _linkPreview;
+    private bool _isLinkPreviewDisabled;
+
+    /// <summary>The preview of <see cref="LinkPreviewTarget"/>, once the page has been fetched.</summary>
+    public ChatLinkPreviewModel? LinkPreview { get => _linkPreview; init => _linkPreview = value; }
+
+    /// <summary>The author sent or edited the message without a preview of its link.</summary>
+    public bool IsLinkPreviewDisabled { get => _isLinkPreviewDisabled; init => _isLinkPreviewDisabled = value; }
+
+    /// <summary>
+    /// The address the message should show a preview of, in its key form; null when it shows none.
+    /// </summary>
+    public string? LinkPreviewTarget => IsLinkPreviewDisabled || IsDeleted || IsSystem
+        ? null
+        : LinkPreviewAddress.TargetOf(TextContent?.Text);
+
+    /// <summary>
+    /// Whether the message waits for a preview: it has an address and no preview of that address yet.
+    /// </summary>
+    public bool NeedsLinkPreview => LinkPreviewTarget is { } target && LinkPreview?.Url != target;
+
+    /// <returns>False when the preview is not of the address the message shows now, or is there already.</returns>
+    public bool SetLinkPreview(ChatLinkPreviewModel preview)
+    {
+        if (LinkPreviewTarget != preview.Url || LinkPreview?.Id == preview.Id)
+            return false;
+        _linkPreview = preview;
+        return true;
+    }
+
+    private DateTimeOffset? _pinnedAt;
+    private int? _pinnedByUserId;
+    public DateTimeOffset? PinnedAt { get => _pinnedAt; init => _pinnedAt = value; }
+    public int? PinnedByUserId { get => _pinnedByUserId; init => _pinnedByUserId = value; }
+    public bool IsPinned => PinnedAt.HasValue;
+
+    public bool SetPinned(bool pinned, int userId, DateTimeOffset now)
+    {
+        if (IsPinned == pinned) return false;
+        _pinnedAt = pinned ? now : null;
+        _pinnedByUserId = pinned ? userId : null;
+        return true;
+    }
+
     public bool IsDelivered { get => _isDelivered; init => _isDelivered = value; }
     public bool IsReposted { get; init; }
     public bool IsDeleted { get; init; }
     public bool IsReadOnly { get; init; }
     public bool IsSystem { get; init; }
+    public ChatSystemContentModel? SystemContent { get; init; }
 
     public bool IsDelayed => DelayedSentTime.HasValue;
     public bool IsDisposable => DisposeTime.HasValue;
     public bool IsEdited => _editTime.HasValue;
 
-    public static ChatMessageModel Create(int chatId, int senderUserId, DateTime now,
+    public static ChatMessageModel Create(int chatId, int senderUserId, DateTimeOffset now,
         ChatTextContentModel? text,
         IEnumerable<ChatImageContentModel>? images = null,
         IEnumerable<ChatVideoContentModel>? videos = null,
         IEnumerable<ChatFileContentModel>? files = null,
-        DateTime? delayedSentTime = null,
-        DateTime? disposeTime = null)
+        DateTimeOffset? delayedSentTime = null,
+        DateTimeOffset? disposeTime = null,
+        bool isLinkPreviewDisabled = false)
     {
         var message = new ChatMessageModel
         {
@@ -71,13 +118,30 @@ public sealed class ChatMessageModel
             Videos = videos?.ToList() ?? [],
             Files = files?.ToList() ?? [],
             DelayedSentTime = delayedSentTime,
-            DisposeTime = disposeTime
+            DisposeTime = disposeTime,
+            IsLinkPreviewDisabled = isLinkPreviewDisabled
         };
 
         if (message.TextContent == null && !message.HasAttachments)
             throw new ArgumentException("A message needs text or an attachment.");
 
         return message;
+    }
+
+    public static ChatMessageModel CreateSystem(int chatId, ChatSystemContentModel content, DateTimeOffset now)
+    {
+        if (chatId <= 0 || !content.IsValid())
+            throw new ArgumentException("Invalid system chat event.");
+        return new ChatMessageModel
+        {
+            ChatId = chatId,
+            SenderUserId = UserModel.SystemUserId,
+            SentTime = now,
+            IsSystem = true,
+            IsReadOnly = true,
+            SystemContent = content,
+            TextContent = new ChatTextContentModel { Text = content.ToFallbackText() }
+        };
     }
 
     public bool HasAttachments => Images.Count + Videos.Count + Files.Count > 0;
@@ -92,14 +156,33 @@ public sealed class ChatMessageModel
         _replyContent = target.ToReplyContent();
     }
 
-    public EditMessageResult Edit(int userId, string text, DateTime now)
+    public void ExecuteCommand(ChatCommandModel command)
     {
-        if (!IsSentBy(userId) || IsDeleted || IsReadOnly || IsSystem)
-            return EditMessageResult.InsufficientPermissions;
+        if (!command.IsValid || TextContent?.CommandResult != null)
+            throw new InvalidOperationException("Only valid, unresolved commands may execute.");
+        var result = new ChatCommandResultModel
+        {
+            Kind = command.Kind, Minimum = command.Minimum, Maximum = command.Maximum,
+            Value = RandomNumberGenerator.GetInt32(command.Minimum, command.Maximum + 1)
+        };
+        _textContent = new ChatTextContentModel { Text = result.ToFallbackText(), CommandResult = result };
+    }
+
+    /// <param name="isLinkPreviewDisabled">Turns the preview off or on again; null leaves it as it was.</param>
+    public ErrorCode? Edit(int userId, string text, DateTimeOffset now, bool? isLinkPreviewDisabled = null)
+    {
+        if (!IsSentBy(userId) || IsDeleted || IsReadOnly || IsSystem || TextContent?.CommandResult != null)
+            return ErrorCode.InsufficientPermissions;
 
         _textContent = new ChatTextContentModel { Text = text };
         _editTime = now;
-        return EditMessageResult.NoError;
+        if (isLinkPreviewDisabled is { } disabled)
+            _isLinkPreviewDisabled = disabled;
+
+        // A preview of an address the text no longer has, or one turned off, goes away at once
+        if (_linkPreview != null && _linkPreview.Url != LinkPreviewTarget)
+            _linkPreview = null;
+        return null;
     }
 
     public void MarkDelivered() => _isDelivered = true;
@@ -107,12 +190,12 @@ public sealed class ChatMessageModel
     public void MarkChanged(long revision) => _revision = revision;
 
     /// <returns>False if the user already reacted with this emoji.</returns>
-    public bool AddReaction(int userId, string emoji)
+    public bool AddReaction(int userId, string emoji, DateTimeOffset? reactedAt = null)
     {
         if (_reactions.Any(r => r.UserId == userId && r.Emoji == emoji))
             return false;
 
-        _reactions.Add(new ChatReactionModel { UserId = userId, Emoji = emoji });
+        _reactions.Add(new ChatReactionModel { UserId = userId, Emoji = emoji, ReactedAt = reactedAt });
         return true;
     }
 
@@ -122,6 +205,7 @@ public sealed class ChatMessageModel
     public ChatReplyContentModel ToReplyContent() => new()
     {
         MessageId = Id,
+        HasAttachments = !IsDeleted && (Images.Count > 0 || Videos.Count > 0 || Files.Count > 0),
         SenderUserId = SenderUserId,
         SentTime = SentTime,
         TextContent = TextContent,

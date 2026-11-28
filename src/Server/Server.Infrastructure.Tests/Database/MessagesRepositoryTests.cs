@@ -1,28 +1,28 @@
-using Microsoft.Data.Sqlite;
+using Server.Database;
+using Shared.Models.DataTransferObjects.ChatSession.Messages;
+using Shared.Models.DataTransferObjects.ChatSession.Messages.Commands;
 using Microsoft.EntityFrameworkCore;
 using Server.Core.Models.TextChat.Messages;
 using Server.Core.Models.TextChat.Messages.Content;
-using Server.Infrastructure.Database;
-using Server.Infrastructure.Database.Entities.TextChat;
+using Server.Database.Entities.TextChat;
 using Server.Infrastructure.Database.Repositories;
 using Xunit;
 
 namespace Server.Infrastructure.Tests.Database;
 
+[Trait("Category", "DatabaseProvider")]
 public sealed class MessagesRepositoryTests : IDisposable
 {
     private const int AuthorId = 1;
 
-    private readonly string _databasePath = Path.Combine(Path.GetTempPath(), $"messages-{Guid.NewGuid():N}.db");
+    private readonly RepositoryTestDatabase _database = new();
     private readonly TestContextFactory _factory;
     private readonly MessagesRepository _repository;
     private readonly int _chatId;
 
     public MessagesRepositoryTests()
     {
-        _factory = new TestContextFactory(new DbContextOptionsBuilder<ServerDbContext>()
-            .UseSqlite($"Data Source={_databasePath}")
-            .Options);
+        _factory = new TestContextFactory(_database.Options);
         _repository = new MessagesRepository(_factory);
 
         using var context = _factory.CreateDbContext();
@@ -36,14 +36,13 @@ public sealed class MessagesRepositoryTests : IDisposable
 
     public void Dispose()
     {
-        SqliteConnection.ClearAllPools();
-        File.Delete(_databasePath);
+        _database.Dispose();
     }
 
     private ChatMessageModel NewMessage(string text) => ChatMessageModel.Create(
         _chatId,
         AuthorId,
-        DateTime.UtcNow,
+        DateTimeOffset.UtcNow,
         new ChatTextContentModel { Text = text });
 
     private async Task<int> Add(string text, int? replyTo = null)
@@ -58,8 +57,142 @@ public sealed class MessagesRepositoryTests : IDisposable
     private async Task Edit(int messageId, string text)
     {
         var message = (await _repository.GetByIdAsync(messageId))!;
-        message.Edit(AuthorId, text, DateTime.UtcNow);
+        message.Edit(AuthorId, text, DateTimeOffset.UtcNow);
         await _repository.UpdateAsync(message);
+    }
+
+    [Theory]
+    [InlineData(ChatSystemEventKind.MemberAdded)]
+    [InlineData(ChatSystemEventKind.MemberRemoved)]
+    [InlineData(ChatSystemEventKind.MemberLeft)]
+    [InlineData(ChatSystemEventKind.CallStarted)]
+    [InlineData(ChatSystemEventKind.CallEnded)]
+    public async Task SystemEvent_SurvivesStorageHistoryAndIncrementalSync(ChatSystemEventKind kind)
+    {
+        var call = kind is ChatSystemEventKind.CallStarted or ChatSystemEventKind.CallEnded;
+        var content = new ChatSystemContentModel
+        {
+            Kind = kind, ActorUserId = 1,
+            SubjectUserId = call ? null : kind == ChatSystemEventKind.MemberLeft ? 1 : 2,
+            CallId = call ? Guid.NewGuid() : null,
+            CallEndReason = kind == ChatSystemEventKind.CallEnded ? Shared.Models.DataTransferObjects.ChatCallEndReason.Completed : null,
+            CallDurationSeconds = kind == ChatSystemEventKind.CallEnded ? 75 : null
+        };
+        var stored = await _repository.AddAsync(ChatMessageModel.CreateSystem(_chatId, content, DateTimeOffset.UtcNow));
+        var loaded = await _repository.GetByIdAsync(stored.Id);
+        Assert.Equal(content, loaded!.SystemContent);
+        Assert.True(loaded.IsSystem);
+        Assert.True(loaded.IsReadOnly);
+        Assert.Equal(content.ToFallbackText(), loaded.TextContent!.Text);
+        Assert.Equal(content, Assert.Single(await _repository.GetBeforeAsync(_chatId, null, 10)).SystemContent);
+        Assert.Equal(content, Assert.Single(await _repository.GetChangesAsync(_chatId, 0, 10)).SystemContent);
+        Assert.Equal(stored.Revision, await _repository.GetRevisionAsync(_chatId));
+        using var context = _factory.CreateDbContext();
+        Assert.False(context.Database.HasPendingModelChanges());
+    }
+
+    [Theory]
+    [InlineData(Shared.Models.DataTransferObjects.ChatCallEndReason.Missed)]
+    [InlineData(Shared.Models.DataTransferObjects.ChatCallEndReason.Declined)]
+    public async Task UnansweredCallOutcome_SurvivesDatabaseReload(Shared.Models.DataTransferObjects.ChatCallEndReason reason)
+    {
+        var content = new ChatSystemContentModel { Kind = ChatSystemEventKind.CallEnded,
+            CallId = Guid.NewGuid(), CallEndReason = reason };
+        var stored = await _repository.AddAsync(ChatMessageModel.CreateSystem(_chatId, content, DateTimeOffset.UtcNow));
+        Assert.Equal(content, (await _repository.GetByIdAsync(stored.Id))!.SystemContent);
+    }
+
+    [Theory]
+    [InlineData("/roll 1000-1000")]
+    [InlineData("/flip")]
+    public async Task CommandOutcome_SurvivesStorageHistoryAndReply(string text)
+    {
+        var message = NewMessage(text);
+        var command = ChatCommandRequest.Parse(text)!;
+        message.ExecuteCommand(new ChatCommandModel(command.Kind, command.Minimum, command.Maximum));
+        var stored = await _repository.AddAsync(message);
+        var loaded = await _repository.GetByIdAsync(stored.Id);
+        Assert.Equal(message.TextContent, loaded!.TextContent);
+        Assert.Equal(message.TextContent, Assert.Single(await _repository.GetBeforeAsync(_chatId, null, 10)).TextContent);
+        var reply = NewMessage("reply");
+        reply.ReplyTo(loaded);
+        var storedReply = await _repository.AddAsync(reply);
+        Assert.Equal(message.TextContent, (await _repository.GetByIdAsync(storedReply.Id))!.ReplyContent!.TextContent);
+        using var context = _factory.CreateDbContext();
+        Assert.False(context.Database.HasPendingModelChanges());
+    }
+
+    [Fact]
+    public async Task Pins_SurviveReloadAndEdits_AndAreRemovedOnDelete()
+    {
+        var id = await Add("pin");
+        var message = (await _repository.GetByIdAsync(id))!;
+        var now = DateTimeOffset.UtcNow;
+        message.SetPinned(true, 42, now);
+        var revision = await _repository.UpdateAsync(message);
+        var stored = Assert.Single(await _repository.GetPinnedAsync(_chatId));
+        // PostgreSQL stores microseconds; SQLite also retains the remaining .NET tick.
+        Assert.NotNull(stored.PinnedAt);
+        Assert.Equal(now.Ticks / 10, stored.PinnedAt.Value.Ticks / 10);
+        Assert.Equal(42, stored.PinnedByUserId);
+        Assert.Null(stored.EditTime);
+        await Edit(id, "new preview");
+        stored = Assert.Single(await _repository.GetPinnedAsync(_chatId));
+        Assert.Equal("new preview", stored.TextContent!.Text);
+        Assert.True(Assert.Single(await _repository.GetChangesAsync(_chatId, revision, 30)).IsPinned);
+        await _repository.DeleteAsync(id);
+        Assert.Empty(await _repository.GetPinnedAsync(_chatId));
+        Assert.False((await _repository.GetByIdAsync(id))!.IsPinned);
+    }
+
+    [Fact]
+    public async Task After_UsesExclusiveCursorAndSkipsDeletedMessages()
+    {
+        var ids = new List<int>();
+        for (int i = 0; i < 12; i++) ids.Add(await Add(i.ToString()));
+        await _repository.DeleteAsync(ids[5]);
+        var page = await _repository.GetAfterAsync(_chatId, ids[3], 4);
+        Assert.Equal(new[] { ids[4], ids[6], ids[7], ids[8] }, page.Select(x => x.Id));
+        var next = await _repository.GetAfterAsync(_chatId, ids[8], 4);
+        Assert.Equal(ids.Skip(9), next.Select(x => x.Id));
+        Assert.Empty(await _repository.GetAfterAsync(_chatId, ids[^1], 4));
+        Assert.Empty(await _repository.GetAfterAsync(_chatId + 1, ids[3], 4));
+        var before = await _repository.GetBeforeAsync(_chatId, ids[6], 3);
+        Assert.Equal(new[] { ids[2], ids[3], ids[4] }, before.Select(x => x.Id));
+    }
+
+    [Theory]
+    [InlineData("👍", "❤️")]
+    [InlineData("🦊", "👍🏽")]
+    [InlineData("👨‍👩‍👧‍👦", "🇷🇺")]
+    public async Task Reactions_InsertAndDeleteOwnedRows_AndSurviveTextEditsAndHistorySync(string first, string second)
+    {
+        var id = await Add("hello");
+        var message = (await _repository.GetByIdAsync(id))!;
+        message.AddReaction(2, first);
+        message.AddReaction(3, first);
+        var reactionRevision = await _repository.UpdateAsync(message);
+
+        var stored = (await _repository.GetByIdAsync(id))!;
+        Assert.Equal(2, stored.Reactions.Count);
+        Assert.Null(stored.EditTime);
+        stored.RemoveReaction(2, first);
+        stored.AddReaction(2, second);
+        await _repository.UpdateAsync(stored);
+        await Edit(id, "changed");
+
+        stored = (await _repository.GetByIdAsync(id))!;
+        Assert.Equal("changed", stored.TextContent!.Text);
+        Assert.Equal(2, stored.Reactions.Count);
+        Assert.Contains(stored.Reactions, r => r.UserId == 3 && r.Emoji == first);
+        Assert.Contains(stored.Reactions, r => r.UserId == 2 && r.Emoji == second);
+        var changes = await _repository.GetChangesAsync(_chatId, reactionRevision, 50);
+        Assert.Equal(2, Assert.Single(changes).Reactions.Count);
+
+        stored.RemoveReaction(3, first);
+        stored.RemoveReaction(2, second);
+        await _repository.UpdateAsync(stored);
+        Assert.Empty((await _repository.GetByIdAsync(id))!.Reactions);
     }
 
     [Fact]
@@ -70,7 +203,7 @@ public sealed class MessagesRepositoryTests : IDisposable
         var secondRevision = (await _repository.AddAsync(NewMessage("two"))).Revision;
 
         var edited = (await _repository.GetByIdAsync(firstId))!;
-        edited.Edit(AuthorId, "one, fixed", DateTime.UtcNow);
+        edited.Edit(AuthorId, "one, fixed", DateTimeOffset.UtcNow);
         var editRevision = await _repository.UpdateAsync(edited);
         var deleteRevision = await _repository.DeleteAsync(firstId);
 
@@ -185,6 +318,31 @@ public sealed class MessagesRepositoryTests : IDisposable
         Assert.True(afterDelete.ReplyContent!.IsDeleted);
         Assert.Null(afterDelete.ReplyContent.TextContent);
         Assert.Equal(2, afterDelete.Revision);
+    }
+
+    [Fact]
+    public async Task ReplyPreview_PreservesAttachmentsWhenLoadedAndHidesThemAfterDeletion()
+    {
+        var targetId = await Add("with file");
+        await using (var context = _factory.CreateDbContext())
+        {
+            var target = await context.ChatMessagesEntities.SingleAsync(m => m.Id == targetId);
+            target.Files.Add(new ChatFileContentEntity
+            {
+                Id = 0, MessageId = targetId, FileName = "report.txt", Size = 12,
+                MimeType = "text/plain", UploadId = "uploaded-file"
+            });
+            await context.SaveChangesAsync();
+        }
+        var reply = await Add("answer", replyTo: targetId);
+
+        Assert.True((await _repository.GetByIdAsync(reply))!.ReplyContent!.HasAttachments);
+        Assert.True((await _repository.GetBeforeAsync(_chatId, null, 10))
+            .Single(m => m.Id == reply).ReplyContent!.HasAttachments);
+
+        await _repository.DeleteAsync(targetId);
+
+        Assert.False((await _repository.GetByIdAsync(reply))!.ReplyContent!.HasAttachments);
     }
 
     private sealed class TestContextFactory(DbContextOptions<ServerDbContext> options) : IDbContextFactory<ServerDbContext>

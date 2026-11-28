@@ -15,6 +15,19 @@ public class LeaveSessionHandler : HybridSessionRequestHandler<LeaveSessionReque
     public LeaveSessionHandler(IHybridSessionManager sessionManager, IMessageSender messageSender)
         : base(sessionManager, messageSender)
     {
+        _callSessions = sessionManager;
+    }
+
+    private readonly IHybridSessionManager _callSessions;
+
+    protected override async Task<BaseMessage> HandleAsync(LeaveSessionRequest request, IHybridSession session, string connectionId)
+    {
+        if (session.Model.CallDevices != null)
+        {
+            await _callSessions.LeaveCallForSessionAsync(request.SessionId, request.SenderId, connectionId);
+            return request.ToResponse();
+        }
+        return await HandleAsync(request, session);
     }
 
     protected override int GetSessionId(LeaveSessionRequest request) => request.SessionId;
@@ -22,14 +35,5 @@ public class LeaveSessionHandler : HybridSessionRequestHandler<LeaveSessionReque
     protected override bool DrivesOwnPeer => true;
 
     protected override async Task<BaseMessage> HandleAsync(LeaveSessionRequest request, IHybridSession session) =>
-        request.ToResponse(await session.PeerManager.RemovePeerAsync(request.SenderId));
-
-    // Only hybrid sessions support this request, so an id of another session type is never found
-    protected override BaseMessage SessionNotFound(LeaveSessionRequest request) =>
-        request.ToResponse(request.SessionType == SessionType.Hybrid
-            ? LeaveSessionResult.SessionNotExists
-            : LeaveSessionResult.UnknownSessionType);
-
-    public override BaseMessage CreateFailureResponse(LeaveSessionRequest request) =>
-        request.ToResponse(LeaveSessionResult.InternalError);
+        request.Answer(await session.PeerManager.RemovePeerAsync(request.SenderId), request.ToResponse);
 }

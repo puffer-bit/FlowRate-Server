@@ -30,6 +30,16 @@ public class RelayPushSenderTests
         Assert.Equal("sealed", body.RootElement.GetProperty("payload").GetString());
     }
 
+    [Fact]
+    public async Task CallLifetime_IsPassedToRelay()
+    {
+        var handler = new StubHandler(HttpStatusCode.OK);
+        var sender = new RelayPushSender(new HttpClient(handler), "https://relay.example/");
+        await sender.SendAsync(Message with { TimeToLiveSeconds = 45 });
+        using var body = JsonDocument.Parse(handler.Body!);
+        Assert.Equal(45, body.RootElement.GetProperty("timeToLiveSeconds").GetInt32());
+    }
+
     [Theory]
     [InlineData(HttpStatusCode.NotFound, PushSendStatus.TokenInvalid)]
     [InlineData(HttpStatusCode.TooManyRequests, PushSendStatus.Failed)]

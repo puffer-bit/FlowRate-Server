@@ -1,22 +1,20 @@
-using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Server.Core.Models.Layout;
-using Server.Infrastructure.Database;
+using Server.Database;
 using Server.Infrastructure.Database.Repositories;
 using Xunit;
 
 namespace Server.Infrastructure.Tests.Database;
 
+[Trait("Category", "DatabaseProvider")]
 public sealed class SessionLayoutRepositoryTests : IDisposable
 {
-    private readonly string _databasePath = Path.Combine(Path.GetTempPath(), $"layout-{Guid.NewGuid():N}.db");
+    private readonly RepositoryTestDatabase _database = new();
     private readonly SessionLayoutRepository _repository;
 
     public SessionLayoutRepositoryTests()
     {
-        var factory = new TestContextFactory(new DbContextOptionsBuilder<ServerDbContext>()
-            .UseSqlite($"Data Source={_databasePath}")
-            .Options);
+        var factory = new TestContextFactory(_database.Options);
         _repository = new SessionLayoutRepository(factory);
 
         using var context = factory.CreateDbContext();
@@ -25,8 +23,7 @@ public sealed class SessionLayoutRepositoryTests : IDisposable
 
     public void Dispose()
     {
-        SqliteConnection.ClearAllPools();
-        File.Delete(_databasePath);
+        _database.Dispose();
     }
 
     [Fact]

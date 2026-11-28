@@ -11,7 +11,7 @@ public class ChatMessageModelTests
     private const int ChatId = 7;
     private const int AuthorId = 1;
     private const int OtherUserId = 2;
-    private static readonly DateTime Now = new(2026, 1, 1, 12, 0, 0, DateTimeKind.Utc);
+    private static readonly DateTimeOffset Now = new(2026, 1, 1, 12, 0, 0, TimeSpan.Zero);
 
     private static ChatMessageModel Message(int chatId = ChatId) =>
         ChatMessageModel.Create(chatId, AuthorId, Now, new ChatTextContentModel { Text = "hello" });
@@ -39,7 +39,7 @@ public class ChatMessageModelTests
         var message = Message();
         var editTime = Now.AddMinutes(5);
 
-        Assert.Equal(EditMessageResult.NoError, message.Edit(AuthorId, "changed", editTime));
+        Assert.Equal(null, message.Edit(AuthorId, "changed", editTime));
 
         Assert.Equal("changed", message.TextContent!.Text);
         Assert.Equal(editTime, message.EditTime);
@@ -51,7 +51,7 @@ public class ChatMessageModelTests
     {
         var message = Message();
 
-        Assert.Equal(EditMessageResult.InsufficientPermissions, message.Edit(OtherUserId, "changed", Now));
+        Assert.Equal(ErrorCode.InsufficientPermissions, message.Edit(OtherUserId, "changed", Now));
         Assert.Equal("hello", message.TextContent!.Text);
         Assert.False(message.IsEdited);
     }

@@ -5,6 +5,7 @@ using System.Text.Json.Serialization;
 using Moq;
 using Server.Application.Coordinator.Roles;
 using Server.Application.Coordinator.Sessions.Hybrid;
+using Server.Application.Coordinator.Sessions.Hybrid.Peers;
 using Server.Core.Models.HybridSession;
 using Server.Core.Models.User;
 using Shared.Enums;
@@ -15,31 +16,36 @@ using Shared.Models.Requests;
 using Shared.Models.Requests.Coordinator;
 using Shared.Models.Requests.SessionActions.ChatSession;
 using Shared.Models.Requests.SessionActions.Generic;
+using Shared.Models.Requests.SessionActions.HybridSession;
 
 namespace Server.Application.Tests.Coordinator;
 
 public class RequestAuthorizerTests
 {
     private const int SessionId = 5;
-    private const int HostId = 1;
+    private const int CreatorId = 1;
     private const int ModeratorId = 2;
     private const int PlainId = 3;
     private const int AdminId = 4;
+    private const int ViewerId = 6;
 
     private readonly Mock<ICoordinatorPermissions> _permissions = new();
     private readonly Mock<IHybridSessionManager> _sessions = new();
+    private readonly Mock<IHybridSessionPeerManager> _peers = new();
     private readonly RequestAuthorizer _authorizer;
 
     public RequestAuthorizerTests()
     {
         var permissions = new Dictionary<int, Permission>
         {
-            [HostId] = Permission.None,
+            [CreatorId] = Permission.None,
             [ModeratorId] = Permission.KickMembers,
             [PlainId] = Permission.None,
-            [AdminId] = Permission.All
+            [AdminId] = Permission.All,
+            [ViewerId] = Permission.ViewSessions
         };
-        var positions = new Dictionary<int, int> { [HostId] = 0, [ModeratorId] = 1, [PlainId] = 0, [AdminId] = 2 };
+        var positions = new Dictionary<int, int>
+            { [CreatorId] = 0, [ModeratorId] = 1, [PlainId] = 0, [AdminId] = 2, [ViewerId] = 0 };
 
         _permissions.Setup(p => p.Has(It.IsAny<int>(), It.IsAny<Permission>()))
             .Returns((int userId, Permission permission) => (permissions[userId] & permission) == permission);
@@ -48,7 +54,8 @@ public class RequestAuthorizerTests
 
         var session = new Mock<IHybridSession>();
         session.SetupGet(s => s.Model)
-            .Returns(HybridSessionModel.Create("c", "Room", 10, HostId, WebRTCEngine.Mediasoup));
+            .Returns(HybridSessionModel.Create("c", "Room", 10, WebRTCEngine.Mediasoup));
+        session.SetupGet(s => s.PeerManager).Returns(_peers.Object);
         IHybridSession? found = session.Object;
         _sessions.Setup(s => s.TryGetSession(SessionId, out found)).Returns(true);
 
@@ -62,12 +69,62 @@ public class RequestAuthorizerTests
     }
 
     private static KickFromSessionRequest Kick(int senderId, int targetId, int sessionId = SessionId) =>
-        From(senderId, new KickFromSessionRequest(sessionId, targetId, SessionType.Hybrid, null));
+        From(senderId, new KickFromSessionRequest(sessionId, targetId, null));
+
+    [Fact]
+    public async Task CallPeers_AreReadByChatMembers_ActionsStayWithThoseInTheCall()
+    {
+        const int callId = 9;
+        var chat = Server.Core.Models.TextChat.ChatSessionModel.Create("c", "Group", CreatorId);
+        chat.SetAudience(ChatKind.Group, [CreatorId, PlainId]);
+        var call = new Mock<IHybridSession>();
+        call.SetupGet(s => s.Model).Returns(new HybridSessionModel(callId, "c", "Group", 2, WebRTCEngine.Mediasoup)
+            { CallDevices = new Dictionary<int, string> { [CreatorId] = "device" } });
+        IHybridSession? found = call.Object;
+        _sessions.Setup(s => s.TryGetSession(callId, out found)).Returns(true);
+        var sessions = new Mock<ISessionManager>();
+        Server.Core.Models.SessionModel? chatModel = chat;
+        sessions.Setup(s => s.TryGetSessionModel(callId, out chatModel)).Returns(true);
+        var authorizer = new RequestAuthorizer(_permissions.Object, _sessions.Object, sessions.Object);
+
+        Assert.True(await authorizer.IsAllowedAsync(From(PlainId, new HybridSessionPeerListRequest(callId))));
+        Assert.False(await authorizer.IsAllowedAsync(From(ViewerId, new HybridSessionPeerListRequest(callId))));
+        Assert.False(await authorizer.IsAllowedAsync(From(PlainId, new HybridSessionPokeRequest(callId, CreatorId))));
+        Assert.True(await authorizer.IsAllowedAsync(From(CreatorId, new HybridSessionPeerListRequest(callId))));
+    }
+
+    [Theory]
+    [InlineData(true, true)]
+    [InlineData(false, false)]
+    public async Task Join_WithoutJoinSessions_OnlyIntoAPlaceKeptForAMove(bool isAwaitingMove, bool allowed)
+    {
+        _peers.Setup(p => p.IsAwaitingMove(ViewerId)).Returns(isAwaitingMove);
+
+        Assert.Equal(allowed, await _authorizer.IsAllowedAsync(
+            From(ViewerId, new HybridSessionJoinRequest(SessionId))));
+    }
+
+    [Fact]
+    public async Task Join_IntoAKeptPlace_StillNeedsToSeeTheSession()
+    {
+        _peers.Setup(p => p.IsAwaitingMove(PlainId)).Returns(true);
+
+        Assert.False(await _authorizer.IsAllowedAsync(From(PlainId, new HybridSessionJoinRequest(SessionId))));
+    }
 
     [Fact]
     public async Task OpenRequest_IsAllowed()
     {
         Assert.True(await _authorizer.IsAllowedAsync(From(PlainId, new CoordinatorInfoRequest())));
+    }
+
+    [Theory]
+    [InlineData(true, true)]
+    [InlineData(false, false)]
+    public async Task MicrophoneMute_WithoutSpeak_CanMuteButCannotUnmute(bool isMuted, bool allowed)
+    {
+        Assert.Equal(allowed, await _authorizer.IsAllowedAsync(
+            From(PlainId, new HybridSessionSetMicrophoneMuteRequest(SessionId, isMuted))));
     }
 
     [Fact]
@@ -94,37 +151,23 @@ public class RequestAuthorizerTests
         Assert.False(await _authorizer.IsAllowedAsync(Kick(ModeratorId, AdminId)));
     }
 
+    // Sessions have no host: creating a session gives no right in it
     [Fact]
-    public async Task Kick_ByHost_OnUserOfTheSameRank_IsAllowed()
+    public async Task Kick_ByCreatorWithoutARole_IsRefused()
     {
-        Assert.True(await _authorizer.IsAllowedAsync(Kick(HostId, PlainId)));
-    }
-
-    [Fact]
-    public async Task Kick_ByHost_OnHigherUser_IsRefused()
-    {
-        Assert.False(await _authorizer.IsAllowedAsync(Kick(HostId, ModeratorId)));
+        Assert.False(await _authorizer.IsAllowedAsync(Kick(CreatorId, PlainId)));
     }
 
     [Fact]
     public async Task Kick_ByPlainUser_IsRefused()
     {
-        Assert.False(await _authorizer.IsAllowedAsync(Kick(PlainId, HostId)));
+        Assert.False(await _authorizer.IsAllowedAsync(Kick(PlainId, CreatorId)));
     }
 
     [Fact]
-    public async Task HostOfAnotherSession_IsNotHost()
+    public async Task Creator_IsNotAllowedWhatPlainUsersMayNotDo()
     {
-        IHybridSession? none = null;
-        _sessions.Setup(s => s.TryGetSession(9, out none)).Returns(false);
-
-        Assert.False(await _authorizer.IsAllowedAsync(Kick(HostId, PlainId, sessionId: 9)));
-    }
-
-    [Fact]
-    public async Task Host_IsNotAllowedWhatHostsMayNotDo()
-    {
-        Assert.False(await _authorizer.IsAllowedAsync(From(HostId, new CreateSessionCategoryRequest("x"))));
+        Assert.False(await _authorizer.IsAllowedAsync(From(CreatorId, new CreateSessionCategoryRequest("x"))));
     }
 
     [Fact]
@@ -132,17 +175,26 @@ public class RequestAuthorizerTests
     {
         Assert.True(await _authorizer.IsAllowedAsync(From(PlainId, new CoordinatorChangeUsernameRequest("x"))));
         Assert.True(await _authorizer.IsAllowedAsync(From(PlainId, new CoordinatorChangeUsernameRequest("x", PlainId))));
-        Assert.False(await _authorizer.IsAllowedAsync(From(PlainId, new CoordinatorChangeUsernameRequest("x", HostId))));
+        Assert.False(await _authorizer.IsAllowedAsync(From(PlainId, new CoordinatorChangeUsernameRequest("x", CreatorId))));
         Assert.True(await _authorizer.IsAllowedAsync(From(AdminId, new CoordinatorChangeUsernameRequest("x", PlainId))));
     }
 
     [Fact]
     public async Task BanOrDeleteUser_NeedsBanMembers_AndAHigherRole()
     {
-        Assert.False(await _authorizer.IsAllowedAsync(From(PlainId, new CoordinatorSetUserStateRequest(HostId, UserState.Banned))));
-        Assert.True(await _authorizer.IsAllowedAsync(From(AdminId, new CoordinatorSetUserStateRequest(PlainId, UserState.Banned))));
+        Assert.False(await _authorizer.IsAllowedAsync(From(PlainId, new CoordinatorBanRequest(CreatorId, BanKind.Account))));
+        Assert.True(await _authorizer.IsAllowedAsync(From(AdminId, new CoordinatorBanRequest(PlainId, BanKind.Account))));
         Assert.True(await _authorizer.IsAllowedAsync(From(AdminId, new CoordinatorDeleteUserRequest(PlainId))));
-        Assert.False(await _authorizer.IsAllowedAsync(From(PlainId, new CoordinatorDeleteUserRequest(HostId))));
+        Assert.False(await _authorizer.IsAllowedAsync(From(PlainId, new CoordinatorDeleteUserRequest(CreatorId))));
+    }
+
+    [Fact]
+    public async Task BanListingAndRevocation_AreNotGrantedToPlainUsers()
+    {
+        Assert.False(await _authorizer.IsAllowedAsync(From(CreatorId, new CoordinatorBansRequest())));
+        Assert.False(await _authorizer.IsAllowedAsync(From(CreatorId, new CoordinatorRevokeBanRequest(Guid.NewGuid()))));
+        Assert.True(await _authorizer.IsAllowedAsync(From(AdminId, new CoordinatorBansRequest())));
+        Assert.True(await _authorizer.IsAllowedAsync(From(AdminId, new CoordinatorRevokeBanRequest(Guid.NewGuid()))));
     }
 
     [Fact]
@@ -150,11 +202,10 @@ public class RequestAuthorizerTests
     {
         _permissions.Setup(p => p.IsFrozen(PlainId)).Returns(true);
 
-        Assert.False(_authorizer.IsFrozenOut(From(PlainId, new ChatSessionHistoryRequest(1, 10, null))));
-        Assert.False(_authorizer.IsFrozenOut(From(PlainId, new JoinSessionRequest(1, SessionType.Chat))));
-        Assert.True(_authorizer.IsFrozenOut(From(PlainId, new JoinSessionRequest(1, SessionType.Hybrid))));
+        Assert.False(_authorizer.IsFrozenOut(From(PlainId, new ChatSessionHistoryPageRequest(1, null, 10))));
+        Assert.True(_authorizer.IsFrozenOut(From(PlainId, new HybridSessionJoinRequest(1))));
         Assert.True(_authorizer.IsFrozenOut(From(PlainId, new CoordinatorChangeUsernameRequest("x"))));
-        Assert.False(_authorizer.IsFrozenOut(From(HostId, new CoordinatorChangeUsernameRequest("x"))));
+        Assert.False(_authorizer.IsFrozenOut(From(CreatorId, new CoordinatorChangeUsernameRequest("x"))));
     }
 
     public static TheoryData<Type> RequestTypes()

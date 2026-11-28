@@ -2,6 +2,9 @@ import type { components } from './schema'
 
 type Schemas = components['schemas']
 
+export type CreateCoordinator = Schemas['CreateCoordinatorDto']
+export type CoordinatorCreated = Schemas['CoordinatorCreatedDto']
+
 export type PanelOverview = Schemas['PanelOverviewDto']
 export type CoordinatorSummary = Schemas['CoordinatorSummaryDto']
 export type CoordinatorDetails = Schemas['CoordinatorDetailsDto']
@@ -13,8 +16,10 @@ export type CoordinatorSettings = Schemas['CoordinatorSettingsDto']
 export type UpdateCoordinatorSettings = Schemas['UpdateCoordinatorSettingsDto']
 export type RateLimitSettings = Schemas['RateLimitSettingsDto']
 export type SfuNode = Schemas['SfuNodeDto']
+export type SfuCredentials = { username: string, password: string }
+export type CreateSfuNode = SfuCredentials & { name: string, host: string, port: number, isSecured: boolean }
 export type SfuNodeStatus = Schemas['SfuNodeStatusDto']
-export type SfuNodeConnectionState = Schemas['SfuNodeConnectionState']
+export type SfuNodeConnectionState = Schemas['SFUNodeConnectionState']
 export type Role = Schemas['RoleDto']
 export type RoleChange = Schemas['RoleChangeDto']
 export type UpdateRole = Schemas['UpdateRoleDto']
@@ -74,9 +79,14 @@ const send = <T>(method: 'POST' | 'PUT' | 'DELETE', path: string, body?: unknown
 
 const coordinatorPath = (id: string) => `/coordinators/${encodeURIComponent(id)}`
 
+export const createCoordinator = (settings: CreateCoordinator) => send<CoordinatorCreated>('POST', '/coordinators', settings)
+
 export const getOverview = () => get<PanelOverview>('/overview')
 
 export const getSfuNodes = () => get<SfuNode[]>('/sfu-nodes')
+export const createSfuNode = (node: CreateSfuNode) => send<SfuNode>('POST', '/sfu-nodes', node)
+export const updateSfuCredentials = (id: number, credentials: SfuCredentials) =>
+  send<SfuNode>('PUT', `/sfu-nodes/${id}/credentials`, credentials)
 
 export const getCoordinator = (id: string) => get<CoordinatorDetails>(coordinatorPath(id))
 
@@ -141,6 +151,22 @@ export const registerPasskey = (id: string, userId: number, label: string | null
 export const deletePasskey = (id: string, userId: number, passkeyId: number) =>
   send<UserSecurity>('DELETE', `${securityPath(id, userId)}/passkeys/${passkeyId}`)
 
+export type UserDevice = Schemas['UserDeviceDto']
+export type LoginCode = Schemas['LoginCodeDto']
+
+const userPath = (id: string, userId: number) => `${coordinatorPath(id)}/users/${userId}`
+
+/** The devices of the user's account, the latest used first. */
+export const getUserDevices = (id: string, userId: number) => get<UserDevice[]>(`${userPath(id, userId)}/devices`)
+
+/** Removes a device; a connected one is disconnected. */
+export const revokeUserDevice = (id: string, userId: number, deviceId: string) =>
+  send<void>('DELETE', `${userPath(id, userId)}/devices/${encodeURIComponent(deviceId)}`)
+
+/** A one-time login code, shown once; codes given before stop working. */
+export const createLoginCode = (id: string, userId: number) =>
+  send<LoginCode>('POST', `${userPath(id, userId)}/login-code`)
+
 // Everything about one coordinator starts with ['coordinator', id]
 export const queryKeys = {
   overview: ['overview'] as const,
@@ -150,4 +176,23 @@ export const queryKeys = {
   roles: (id: string) => ['coordinator', id, 'roles'] as const,
   coordinatorUsers: (id: string) => ['coordinator', id, 'users'] as const,
   userSecurity: (id: string, userId: number) => ['coordinator', id, 'users', userId, 'security'] as const,
+  userDevices: (id: string, userId: number) => ['coordinator', id, 'users', userId, 'devices'] as const,
 }
+
+export type GlobalBan = Schemas['BanDTO']
+export type CreateGlobalBan = Schemas['CreateBan']
+export const getBans = (id: string) => get<GlobalBan[]>(`${coordinatorPath(id)}/bans`)
+export const createBan = (id: string, ban: CreateGlobalBan) => send<void>('POST', `${coordinatorPath(id)}/bans`, ban)
+export const revokeBan = (id: string, banId: string) => send<void>('DELETE', `${coordinatorPath(id)}/bans/${encodeURIComponent(banId)}`)
+
+/** Why the server goes down; the users are warned with it. */
+export type RestartReason = 'Restart' | 'Update' | 'Shutdown'
+export type RestartNotice = { reason: RestartReason, at: string, message?: string | null, restartsAtEnd: boolean }
+export type AnnounceRestart = { reason: RestartReason, delayMinutes: number, message?: string, restartsAtEnd: boolean }
+
+/** The warning that stands, or null (204) when there is none. */
+export const getRestartNotice = async () => (await get<RestartNotice | undefined>('/restart-notice')) ?? null
+export const announceRestart = (value: AnnounceRestart) => send<RestartNotice>('POST', '/restart-notice', value)
+export const cancelRestartNotice = () => send<void>('DELETE', '/restart-notice')
+/** Stops the server at once for its supervisor to start it again; the users get only the going-down notice. */
+export const restartNow = (message?: string) => send<void>('POST', '/restart-notice/now', { message })

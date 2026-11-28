@@ -65,7 +65,7 @@ public partial class MediasoupGateway
         {
             UsernameFragment = proto.UsernameFragment,
             Password = proto.Password,
-            ICECandidates = proto.ServerIceCandidates
+            Candidates = proto.ServerIceCandidates
                 .Select(c => new ICECandidate
                 {
                     Candidate = c.Candidate,

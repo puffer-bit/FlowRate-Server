@@ -17,6 +17,10 @@ public interface IMessagesRepository
         int take,
         CancellationToken cancellationToken = default);
 
+    Task<List<ChatMessageModel>> GetAfterAsync(int chatId, int afterMessageId, int take,
+        CancellationToken cancellationToken = default);
+    Task<List<ChatMessageModel>> GetPinnedAsync(int chatId, CancellationToken cancellationToken = default);
+
     Task<List<ChatMessageModel>> GetChangesAsync(int chatId,
         long afterRevision,
         int take,

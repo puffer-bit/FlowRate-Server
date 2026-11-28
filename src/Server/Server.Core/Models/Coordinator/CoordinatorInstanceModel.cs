@@ -11,15 +11,23 @@ public sealed class CoordinatorInstanceModel
     public string Ip { get; private set; }
     public int Port { get; private set; }
     public string? PasswordHash { get; private set; } 
-    public DateTime CreateTime { get; }
-    public DateTime FirstLaunchTime { get; }
-    public DateTime CurrentLaunchTime { get; private set; }
+    public DateTimeOffset CreateTime { get; }
+    public DateTimeOffset FirstLaunchTime { get; }
+    public DateTimeOffset CurrentLaunchTime { get; private set; }
     /// <summary>How many users may be connected at once; <see cref="NoUserLimit"/> for any number.</summary>
     public int MaxOnlineUsers { get; private set; }
     /// <summary>How many users the coordinator may register; <see cref="NoUserLimit"/> for any number.</summary>
     public int MaxUsers { get; private set; }
 
     public const int NoUserLimit = 0;
+
+    /// <summary>
+    /// How many bots the coordinator may have; 0 lets none be made. Bots count neither in <see cref="MaxUsers"/> nor
+    /// in <see cref="MaxOnlineUsers"/>.
+    /// </summary>
+    public int MaxBots { get; private set; }
+
+    public const int DefaultMaxBots = 5;
 
     public MotdSettings Motd { get; private set; }
     public AccessListSettings AccessList { get; private set; }
@@ -35,11 +43,11 @@ public sealed class CoordinatorInstanceModel
     public long Revision { get; private set; }
 
     public CoordinatorInstanceModel(string id, string name, bool isDefault, string ip, int port,
-        DateTime createTime, DateTime firstLaunchTime, DateTime currentLaunchTime,
+        DateTimeOffset createTime, DateTimeOffset firstLaunchTime, DateTimeOffset currentLaunchTime,
         int maxOnlineUsers, int maxUsers,
         MotdSettings motd, AccessListSettings accessList, CoordinatorHeartbeatSettings heartbeat,
         CoordinatorMediaSettings media, CoordinatorUploadSettings uploads, CoordinatorRateLimitSettings rateLimits,
-        IEnumerable<int> sfuNodeIds, string? passwordHash = null, long revision = 0)
+        IEnumerable<int> sfuNodeIds, string? passwordHash = null, long revision = 0, int maxBots = DefaultMaxBots)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(id);
 
@@ -52,6 +60,7 @@ public sealed class CoordinatorInstanceModel
         FirstLaunchTime = firstLaunchTime;
         CurrentLaunchTime = currentLaunchTime;
         (MaxOnlineUsers, MaxUsers) = ValidateLimits(maxOnlineUsers, maxUsers);
+        MaxBots = ValidateBotLimit(maxBots);
         Motd = motd;
         AccessList = accessList;
         Heartbeat = heartbeat;
@@ -63,7 +72,7 @@ public sealed class CoordinatorInstanceModel
         Revision = revision;
     }
 
-    public static CoordinatorInstanceModel Create(string name, string ip, int port, DateTime now, bool isDefault = false, string? passwordHash = null) =>
+    public static CoordinatorInstanceModel Create(string name, string ip, int port, DateTimeOffset now, bool isDefault = false, string? passwordHash = null) =>
         new(Guid.NewGuid().ToString(), name, isDefault, ip, port,now, now, now,
             maxOnlineUsers: 0, maxUsers: 0,
             MotdSettings.Disabled, AccessListSettings.Open, new CoordinatorHeartbeatSettings(0, 0),
@@ -79,6 +88,8 @@ public sealed class CoordinatorInstanceModel
     public void SetUserLimits(int maxOnlineUsers, int maxUsers) =>
         (MaxOnlineUsers, MaxUsers) = ValidateLimits(maxOnlineUsers, maxUsers);
 
+    public void SetBotLimit(int maxBots) => MaxBots = ValidateBotLimit(maxBots);
+
     public void SetMotd(MotdSettings motd) => Motd = motd;
 
     public void SetAccessList(AccessListSettings accessList) => AccessList = accessList;
@@ -93,7 +104,7 @@ public sealed class CoordinatorInstanceModel
 
     public void AssignSfuNodes(IEnumerable<int> sfuNodeIds) => SfuNodeIds = sfuNodeIds.Distinct().ToList();
 
-    public void MarkLaunched(DateTime now) => CurrentLaunchTime = now;
+    public void MarkLaunched(DateTimeOffset now) => CurrentLaunchTime = now;
 
     public void NextRevision() => Revision++;
 
@@ -109,6 +120,12 @@ public sealed class CoordinatorInstanceModel
         ArgumentOutOfRangeException.ThrowIfNegative(port);
         ArgumentOutOfRangeException.ThrowIfGreaterThan(port, ushort.MaxValue);
         return (ip, port);
+    }
+
+    private static int ValidateBotLimit(int maxBots)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(maxBots);
+        return maxBots;
     }
 
     private static (int, int) ValidateLimits(int maxOnlineUsers, int maxUsers)

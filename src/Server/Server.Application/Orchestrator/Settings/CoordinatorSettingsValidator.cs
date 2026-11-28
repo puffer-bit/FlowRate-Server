@@ -42,12 +42,14 @@ public static class CoordinatorSettingsValidator
             errors.Add(CoordinatorSettingsFields.MaxOnlineUsers,
                 "More users cannot be online than may be registered.");
 
-        if (change.MotdText?.Length > Limits.MotdTextMaxLength)
+        if (change.MaxBots < 0)
+            errors.Add(CoordinatorSettingsFields.MaxBots, "The bot limit cannot be negative.");
+
+        if (change.MotdText?.Length > Limits.MOTDTextMaxLength)
             errors.Add(CoordinatorSettingsFields.MotdText,
-                $"The message cannot be longer than {Limits.MotdTextMaxLength} characters.");
+                $"The message cannot be longer than {Limits.MOTDTextMaxLength} characters.");
 
         ValidateIps(errors, CoordinatorSettingsFields.AllowedIps, change.AllowedIps);
-        ValidateIps(errors, CoordinatorSettingsFields.BannedIps, change.BannedIps);
 
         if (change.HeartbeatIntervalSeconds is < 1 or > MaxHeartbeatSeconds)
             errors.Add(CoordinatorSettingsFields.HeartbeatInterval,
@@ -62,6 +64,15 @@ public static class CoordinatorSettingsValidator
             errors.Add(CoordinatorSettingsFields.MaxFileSize, "The largest file must be at least one byte.");
         if (change.StorageQuotaBytes < 0)
             errors.Add(CoordinatorSettingsFields.StorageQuota, "The quota cannot be negative; 0 leaves it unlimited.");
+        if (change.ImageMaxSide is < Limits.ChatImageCompressedSideMin or > Limits.ChatImageMaxSide)
+            errors.Add(CoordinatorSettingsFields.ImageMaxSide,
+                $"The side of compressed images must be from {Limits.ChatImageCompressedSideMin} to {Limits.ChatImageMaxSide} pixels.");
+        if (change.ImageQuality is < Limits.ChatImageQualityMin or > Limits.ChatImageQualityMax)
+            errors.Add(CoordinatorSettingsFields.ImageQuality,
+                $"The quality of compressed images must be from {Limits.ChatImageQualityMin} to {Limits.ChatImageQualityMax}.");
+        if (change.VideoMaxSide is < Limits.ChatVideoCompressedSideMin or > Limits.ChatVideoCompressedSideMax)
+            errors.Add(CoordinatorSettingsFields.VideoMaxSide,
+                $"The side of compressed videos must be from {Limits.ChatVideoCompressedSideMin} to {Limits.ChatVideoCompressedSideMax} pixels.");
 
         ValidateUploads(errors, change);
         ValidateRateLimits(errors, change.RateLimits);
@@ -151,13 +162,16 @@ public static class CoordinatorSettingsFields
     public const string NewPassword = "NewPassword";
     public const string MaxOnlineUsers = "MaxOnlineUsers";
     public const string MaxUsers = "MaxUsers";
+    public const string MaxBots = "MaxBots";
     public const string MotdText = "Motd.Text";
     public const string AllowedIps = "AccessList.AllowedIps";
-    public const string BannedIps = "AccessList.BannedIps";
     public const string HeartbeatInterval = "Heartbeat.IntervalSeconds";
     public const string HeartbeatTimeout = "Heartbeat.TimeoutSeconds";
     public const string MaxFileSize = "Media.MaxFileSizeBytes";
     public const string StorageQuota = "Media.StorageQuotaBytes";
+    public const string ImageMaxSide = "Media.ImageMaxSide";
+    public const string ImageQuality = "Media.ImageQuality";
+    public const string VideoMaxSide = "Media.VideoMaxSide";
     public const string MaxUnattachedUploads = "Uploads.MaxUnattachedPerUser";
     public const string UnattachedUploadLifetime = "Uploads.UnattachedLifetimeHours";
     public const string MediaTokenLifetime = "Uploads.TokenLifetimeMinutes";

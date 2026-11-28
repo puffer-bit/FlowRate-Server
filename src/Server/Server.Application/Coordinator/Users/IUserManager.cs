@@ -1,3 +1,4 @@
+using Shared.Enums;
 using Server.Core.Models.User;
 using Server.Application.Coordinator.Connections;
 using Server.Application.Coordinator.Sessions;
@@ -20,28 +21,56 @@ public interface IUserManager
     int ConnectedUsersCount { get; }
 
     /// <summary>
-    /// Attaches the user and makes the connection theirs, unless the coordinator limits say no; see
-    /// <see cref="AttachUserResult"/>. A user can be on several connections, one per device: a user connected
+    /// Registers a new user with the recovery keys of the account and attaches them, unless the coordinator limits say
+    /// no; see <see cref="AttachUserResult"/>.
+    /// </summary>
+    Task<UserAttachment> RegisterUser(UserRecoveryKeys recoveryKeys, IClientConnection clientConnection);
+
+    /// <summary>
+    /// Attaches a user who proved themselves and makes the connection theirs, unless the coordinator limits say no;
+    /// see <see cref="AttachUserResult"/>. A user can be on several connections, one per device: a user connected
     /// already stays attached as they are, and <see cref="UserConnected"/> is raised only when they come online.
     /// </summary>
-    Task<UserAttachment> AttachUser(string? userIdentity, IClientConnection clientConnection);
-    Task<ChangeUsernameResult> ChangeUsername(int userId, string newUsername);
-    Task<SetAvatarResult> SetAvatar(int userId, string? avatarUrl);
+    Task<UserAttachment> AttachUser(int userId, IClientConnection clientConnection);
+    Task<ErrorCode?> ChangeUsername(int userId, string newUsername);
+    Task<ErrorCode?> SetAvatar(int userId, string? avatarUrl);
 
     /// <summary>Sets the status a connected user picked; announced as an update of the user.</summary>
-    Task<SetUserStatusResult> SetStatus(int userId, UserStatus status);
+    Task<ErrorCode?> SetStatus(int userId, UserStatus status);
+
+    /// <summary>
+    /// Sets how long the device on the connection has gone without input; announced as an update of the user when
+    /// what others see changes. Not saved.
+    /// </summary>
+    ErrorCode? SetIdleLevel(int userId, string connectionId, IdleLevel level);
 
     /// <summary>
     /// Bans, freezes or reinstates a user, connected or not; announced as an update of the user. Neither
     /// disconnects them.
     /// </summary>
-    Task<ModerateUserResult> SetState(int userId, UserState state);
+    Task<ErrorCode?> SetState(int userId, UserState state);
 
-    /// <summary>Deletes a user, detaching them when connected; their connection stays open.</summary>
-    Task<ModerateUserResult> DeleteUser(int userId);
+    /// <summary>
+    /// Deletes a user, detaching them when connected; their connection stays open. Bots the user made lose their
+    /// owner.
+    /// </summary>
+    Task<ErrorCode?> DeleteUser(int userId);
 
-    /// <summary>Takes the roles of a connected user saved elsewhere; announced as an update of the user.</summary>
-    void SetRoles(int userId, IEnumerable<int> roleIds);
+    /// <summary>
+    /// Makes a bot owned by <paramref name="ownerUserId"/>, a debug bot with <paramref name="isDebug"/>: refused
+    /// with <see cref="ErrorCode.NameTaken"/> or, past the limit of the coordinator (debug bots do not count),
+    /// <see cref="ErrorCode.BotLimitReached"/>.
+    /// </summary>
+    Task<(ErrorCode? Error, UserModel? Bot)> CreateBot(int ownerUserId, string username, bool isDebug);
+
+    /// <summary>The bots of the coordinator, the connected ones as they are attached.</summary>
+    Task<IReadOnlyList<UserModel>> GetBotsAsync();
+
+    /// <summary>
+    /// Takes the roles of a user saved elsewhere; announced as an update of the user. A connected user takes them
+    /// at once, before the task completes; one not connected is read as saved, so that the others see them too.
+    /// </summary>
+    Task SetRolesAsync(int userId, IEnumerable<int> roleIds);
     void DetachUser(int userId, string reason);
     /// <summary>
     /// Takes a closed connection from its user, and detaches the user when it was their last one.

@@ -2,6 +2,7 @@ import 'dotenv/config';
 import { isIP } from 'net';
 import { availableParallelism } from 'os';
 import type { WorkerLogLevel } from 'mediasoup/types';
+import { readAuth, type SfuAuth } from './auth.js';
 
 export interface RtcEndpoint {
     listenIp: string;
@@ -12,6 +13,7 @@ export interface RtcEndpoint {
 export interface SfuConfig {
     /** Address the gRPC API listens on, e.g. 0.0.0.0:50051. Only the server should reach it. */
     grpcBind: string;
+    auth: SfuAuth | undefined;
     rtc: {
         endpoints: [RtcEndpoint, ...RtcEndpoint[]];
     };
@@ -162,6 +164,7 @@ export function loadConfig(): SfuConfig {
 
     return {
         grpcBind,
+        auth: readAuth(process.env.SFU_GRPC_USERNAME, process.env.SFU_GRPC_PASSWORD),
         rtc: { endpoints },
         logLevel,
         workers

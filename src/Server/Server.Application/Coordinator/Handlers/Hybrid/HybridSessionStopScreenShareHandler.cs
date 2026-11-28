@@ -20,11 +20,5 @@ public class HybridSessionStopScreenShareHandler : HybridSessionRequestHandler<H
     protected override int GetSessionId(HybridSessionStopScreenShareRequest request) => request.SessionId;
 
     protected override async Task<BaseMessage> HandleAsync(HybridSessionStopScreenShareRequest request, IHybridSession session) =>
-        request.ToResponse(await session.PeerManager.StopScreenShareAsync(request.SenderId, request.SenderId));
-
-    protected override BaseMessage SessionNotFound(HybridSessionStopScreenShareRequest request) =>
-        request.ToResponse(StopScreenShareResult.PeerNotExists);
-
-    public override BaseMessage CreateFailureResponse(HybridSessionStopScreenShareRequest request) =>
-        request.ToResponse(StopScreenShareResult.InternalError);
+        request.Answer(await session.PeerManager.StopScreenShareAsync(request.SenderId, request.SenderId), request.ToResponse);
 }

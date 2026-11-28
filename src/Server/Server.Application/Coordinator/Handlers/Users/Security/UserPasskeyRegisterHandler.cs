@@ -19,10 +19,7 @@ public class UserPasskeyRegisterHandler(IMessageSender messageSender, UserSecuri
         var status = await replies.Security.RegisterPasskeyAsync(replies.CoordinatorId, request.SenderId,
             request.Label, request.CredentialJson);
         var (result, security) = await replies.AfterAsync(request.SenderId, status);
-        messageSender.SendMessageById(connectionId, request.ToResponse(result, security));
+        messageSender.SendMessageById(connectionId, request.Answer(result, () => request.ToResponse(security!)));
         return HandleMessageResult.NoError;
     }
-
-    public BaseMessage? CreateFailureResponse(UserPasskeyRegisterRequest request) =>
-        request.ToResponse(UserSecurityResult.InternalError);
 }

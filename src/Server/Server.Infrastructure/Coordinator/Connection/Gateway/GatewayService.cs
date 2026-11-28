@@ -23,6 +23,7 @@ public class GatewayService : IGatewayService
     private static readonly TimeSpan StopTimeout = TimeSpan.FromSeconds(10);
 
     public bool IsGatewayReady { get; private set; }
+    public Func<string, Task<string?>>? CheckAddress { get; set; }
 
     private WebApplication? _app;
     private CancellationTokenSource? _stopping;
@@ -59,6 +60,14 @@ public class GatewayService : IGatewayService
         _certificate = certificate;
     }
 
+    // The response headers the browser client reads: tus uploads, ranged downloads, the ban reason
+    private static readonly string[] BrowserExposedHeaders =
+    [
+        "Location", "Upload-Offset", "Upload-Length", "Upload-Expires", "Upload-Metadata",
+        "Tus-Resumable", "Tus-Version", "Tus-Extension", "Tus-Max-Size",
+        "Content-Range", "Accept-Ranges", "Content-Disposition", "FlowRate-Ban-Reason"
+    ];
+
     public async Task StartAsync(IMessageRouter messageRouter)
     {
         if (!IPAddress.TryParse(_ip, out var address))
@@ -71,6 +80,13 @@ public class GatewayService : IGatewayService
         var builder = WebApplication.CreateEmptyBuilder(new WebApplicationOptions());
         builder.Services.AddLogging();
         builder.Services.AddRouting();
+        // The browser client is served from another origin. Media and push use a Bearer token, not cookies,
+        // so any origin may call them; the WebSocket is not subject to CORS
+        builder.Services.AddCors(cors => cors.AddDefaultPolicy(policy => policy
+            .AllowAnyOrigin()
+            .AllowAnyMethod()
+            .AllowAnyHeader()
+            .WithExposedHeaders(BrowserExposedHeaders)));
         builder.WebHost.UseKestrelCore();
         builder.WebHost.ConfigureKestrel(kestrel =>
         {
@@ -85,6 +101,20 @@ public class GatewayService : IGatewayService
         var app = builder.Build();
         var stopping = new CancellationTokenSource();
 
+        // First, so that preflight requests and refusals reach the browser too
+        app.UseCors();
+        app.Use(async (context, next) =>
+        {
+            var ip = Server.Core.Models.Moderation.Ban.NormalizeAddress(context.Connection.RemoteIpAddress?.ToString()) ?? "";
+            if (CheckAddress != null && await CheckAddress(ip) is { } reason)
+            {
+                context.Response.StatusCode = StatusCodes.Status403Forbidden;
+                context.Response.Headers["FlowRate-Ban-Reason"] = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(reason));
+                await context.Response.WriteAsJsonAsync(new { reason });
+                return;
+            }
+            await next(context);
+        });
         app.UseWebSockets(new WebSocketOptions { KeepAliveInterval = TimeSpan.Zero });
         _mediaEndpoints?.Map(app);
         _pushEndpoints?.Map(app);
@@ -121,7 +151,10 @@ public class GatewayService : IGatewayService
             remoteAddress = remoteAddress.MapToIPv4();
         var ip = remoteAddress?.ToString() ?? string.Empty;
 
+        // A browser cannot set headers on a WebSocket: it names the version in the query
         var clientVersion = context.Request.Headers[ProtocolVersion.Header].ToString();
+        if (clientVersion.Length == 0)
+            clientVersion = context.Request.Query[ProtocolVersion.Header].ToString();
         if (!ProtocolVersion.IsSupported(clientVersion))
         {
             _logger.LogInformation("Rejected a connection from {Ip}: protocol version '{ClientVersion}' is outside {MinVersion}..{Version}.",
@@ -164,7 +197,8 @@ public class GatewayService : IGatewayService
             {
                 GatewayMetrics.OpenConnections.Add(-1);
             }
-            context.Abort();
+            if (socket.State != System.Net.WebSockets.WebSocketState.Closed)
+                context.Abort();
         }
         finally
         {

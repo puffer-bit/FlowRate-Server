@@ -1,0 +1,249 @@
+using Shared.Enums.Auth;
+using Microsoft.Data.Sqlite;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
+using Microsoft.Extensions.DependencyInjection;
+using Server.Application.Coordinator.Authentication;
+using Server.Core.Models.User;
+using Server.Database.Sqlite;
+using Server.Database;
+using Server.Infrastructure.Database.Repositories;
+using Xunit;
+
+namespace Server.Infrastructure.Tests.Database;
+
+public sealed class UserSessionRepositoryTests : IDisposable
+{
+    private const string Coordinator = "coordinator";
+
+    private readonly string _databasePath = Path.Combine(Path.GetTempPath(), $"sessions-{Guid.NewGuid():N}.db");
+    private readonly TestContextFactory _factory;
+    private readonly DateTimeOffset _now = new(2026, 10, 28, 12, 0, 0, TimeSpan.Zero);
+
+    public UserSessionRepositoryTests()
+    {
+        _factory = new TestContextFactory(new DbContextOptionsBuilder<ServerDbContext>()
+            .UseServerSqlite($"Data Source={_databasePath}")
+            .Options);
+    }
+
+    public void Dispose()
+    {
+        SqliteConnection.ClearAllPools();
+        File.Delete(_databasePath);
+    }
+
+    /// <summary>A database as the previous version left it, with one user, migrated to the current one.</summary>
+    private async Task<int> MigrateWithLegacyUser(string identity)
+    {
+        await using var context = _factory.CreateDbContext();
+        var migrator = context.GetService<IMigrator>();
+        await migrator.MigrateAsync("PasskeyLogins");
+        await context.Database.ExecuteSqlRawAsync("PRAGMA foreign_keys = OFF;");
+        await context.Database.ExecuteSqlRawAsync("""
+            INSERT INTO "UserEntities" ("UserIdentity", "Username", "CoordinatorInstanceId", "State", "LastStatus",
+                "FirstConnectionTime", "LastConnectionTime")
+            VALUES ({0}, 'alice', {1}, 0, 0, '2026-01-01 00:00:00', '2026-01-01 00:00:00');
+            """, identity, Coordinator);
+        await migrator.MigrateAsync();
+        return await context.UserEntities.Select(x => x.Id).SingleAsync();
+    }
+
+    private async Task<int> MigrateWithUser()
+    {
+        await using var context = _factory.CreateDbContext();
+        await context.Database.MigrateAsync();
+        await context.Database.ExecuteSqlRawAsync("PRAGMA foreign_keys = OFF;");
+        await context.Database.ExecuteSqlRawAsync("""
+            INSERT INTO "UserEntities" ("IdentityHash", "Username", "CoordinatorInstanceId", "State", "LastStatus",
+                "FirstConnectionTime", "LastConnectionTime")
+            VALUES (X'00', 'alice', {0}, 0, 0, '2026-01-01 00:00:00', '2026-01-01 00:00:00');
+            """, Coordinator);
+        return await context.UserEntities.Select(x => x.Id).SingleAsync();
+    }
+
+    private UserSession Session(int userId, string token, DateTimeOffset? expiresAt = null) =>
+        new(Guid.NewGuid(), Coordinator, userId, SecretHash.Of(token), null, "desk", "Linux", "0.8.0", _now, _now,
+            expiresAt ?? _now.AddDays(90), "10.0.0.1");
+
+    [Fact]
+    public async Task Migration_KeepsOnlyTheHashOfAnIdentity_AndTheUserStillLogsInWithIt()
+    {
+        var userId = await MigrateWithLegacyUser("#legacy-identity");
+
+        var users = new UserRepository(_factory);
+        var user = await users.GetByIdentityAsync(Coordinator, "#legacy-identity");
+
+        Assert.Equal(userId, user?.Id);
+        Assert.Null(await users.GetByIdentityAsync(Coordinator, "#another"));
+        await using var context = _factory.CreateDbContext();
+        Assert.Equal(SecretHash.Of("#legacy-identity"),
+            await context.UserEntities.Select(x => x.IdentityHash).SingleAsync());
+    }
+
+    [Fact]
+    public async Task Migration_RunsOnThePooledContextsOfTheServer()
+    {
+        await using (var context = _factory.CreateDbContext())
+        {
+            await context.GetService<IMigrator>().MigrateAsync("PasskeyLogins");
+            await context.Database.ExecuteSqlRawAsync("PRAGMA foreign_keys = OFF;");
+            await context.Database.ExecuteSqlRawAsync("""
+                INSERT INTO "UserEntities" ("UserIdentity", "Username", "CoordinatorInstanceId", "State", "LastStatus",
+                    "FirstConnectionTime", "LastConnectionTime")
+                VALUES ('#pooled', 'alice', {0}, 0, 0, '2026-01-01 00:00:00', '2026-01-01 00:00:00');
+                """, Coordinator);
+        }
+
+        // As Program registers them: a pooled context must not change its options
+        var services = new ServiceCollection()
+            .AddPooledDbContextFactory<ServerDbContext>(options => options.UseServerSqlite($"Data Source={_databasePath}"))
+            .BuildServiceProvider();
+        var pooled = services.GetRequiredService<IDbContextFactory<ServerDbContext>>();
+        await using (var context = await pooled.CreateDbContextAsync())
+            await context.Database.MigrateAsync();
+
+        Assert.NotNull(await new UserRepository(pooled).GetByIdentityAsync(Coordinator, "#pooled"));
+    }
+
+    [Fact]
+    public async Task RecoveryKeys_ReplaceTheIdentity_AndFindTheUser()
+    {
+        var userId = await MigrateWithLegacyUser("#old");
+        var users = new UserRepository(_factory);
+        var hash = SecretHash.Of("recovery key");
+
+        await users.SetRecoveryKeysAsync(userId, new UserRecoveryKeys(hash, [1, 2, 3]));
+
+        Assert.Null(await users.GetByIdentityAsync(Coordinator, "#old"));
+        Assert.Equal(userId, (await users.GetByRecoveryKeyHashAsync(Coordinator, hash))?.Id);
+        Assert.Null(await users.GetByRecoveryKeyHashAsync("other", hash));
+        Assert.True(await users.IsRecoveryKeyTakenAsync(hash, 0));
+        Assert.False(await users.IsRecoveryKeyTakenAsync(hash, userId));
+    }
+
+    [Fact]
+    public async Task Username_IsFoundIgnoringCase_AndAnUpdateKeepsTheRecoveryKeys()
+    {
+        var userId = await MigrateWithUser();
+        var users = new UserRepository(_factory);
+        var hash = SecretHash.Of("recovery key");
+        await users.SetRecoveryKeysAsync(userId, new UserRecoveryKeys(hash, [1]));
+
+        var user = await users.GetByUsernameAsync(Coordinator, "ALICE");
+        Assert.Equal(userId, user?.Id);
+        user!.Rename("Alice2");
+        await users.UpdateAsync(user);
+
+        Assert.Equal(userId, (await users.GetByRecoveryKeyHashAsync(Coordinator, hash))?.Id);
+        Assert.True(await users.IsUsernameTakenAsync("alice2", 0));
+    }
+
+    [Fact]
+    public async Task Device_IsFoundByItsId_AndItsKeyIsTaken()
+    {
+        var userId = await MigrateWithUser();
+        var repository = new UserSessionRepository(_factory);
+        var device = Session(userId, "unused") with { TokenHash = null, PublicKey = [9, 9, 9], IsTemporary = true,
+            AddedBy = DeviceLoginMethod.Recovery };
+        await repository.AddAsync(device);
+
+        var found = await repository.GetAsync(Coordinator, device.Id, _now);
+        Assert.Equal(DeviceLoginMethod.Recovery, found?.AddedBy);
+        Assert.True(found!.IsTemporary);
+        Assert.True(await repository.IsPublicKeyTakenAsync([9, 9, 9]));
+        Assert.False(await repository.IsPublicKeyTakenAsync([1]));
+        Assert.Null(await repository.GetAsync(Coordinator, device.Id, _now.AddDays(91)));
+    }
+
+    [Fact]
+    public async Task DeleteLegacy_KeepsTheDevicesWithKeys()
+    {
+        var userId = await MigrateWithUser();
+        var repository = new UserSessionRepository(_factory);
+        var legacy = Session(userId, "legacy");
+        var device = Session(userId, "unused") with { TokenHash = null, PublicKey = [7] };
+        await repository.AddAsync(legacy);
+        await repository.AddAsync(device);
+
+        Assert.Equal(legacy.Id, Assert.Single(await repository.DeleteLegacyAsync(Coordinator, userId)));
+        Assert.Equal(device.Id, Assert.Single(await repository.GetByUserAsync(Coordinator, userId, _now)).Id);
+    }
+
+    [Fact]
+    public async Task Session_IsFoundByItsTokenOrThePreviousOne_UntilItExpires()
+    {
+        var userId = await MigrateWithUser();
+        var repository = new UserSessionRepository(_factory);
+        var session = Session(userId, "first");
+        await repository.AddAsync(session);
+        await repository.UpdateAsync(session with
+        {
+            TokenHash = SecretHash.Of("second"), PreviousTokenHash = SecretHash.Of("first")
+        });
+
+        Assert.Equal(session.Id, (await repository.FindByTokenAsync(Coordinator, SecretHash.Of("first"), _now))?.Id);
+        Assert.Equal(session.Id, (await repository.FindByTokenAsync(Coordinator, SecretHash.Of("second"), _now))?.Id);
+        Assert.Null(await repository.FindByTokenAsync("other", SecretHash.Of("second"), _now));
+        Assert.Null(await repository.FindByTokenAsync(Coordinator, SecretHash.Of("second"), _now.AddDays(91)));
+    }
+
+    [Fact]
+    public async Task DeleteAllBut_KeepsOneSession_AndDeleteAllButNothing_KeepsNone()
+    {
+        var userId = await MigrateWithUser();
+        var repository = new UserSessionRepository(_factory);
+        var kept = Session(userId, "a");
+        await repository.AddAsync(kept);
+        await repository.AddAsync(Session(userId, "b"));
+        await repository.AddAsync(Session(userId, "c"));
+
+        Assert.Equal(2, (await repository.DeleteAllButAsync(Coordinator, userId, kept.Id)).Count);
+        Assert.Equal(kept.Id, Assert.Single(await repository.GetByUserAsync(Coordinator, userId, _now)).Id);
+
+        Assert.Single(await repository.DeleteAllButAsync(Coordinator, userId, null));
+        Assert.Empty(await repository.GetByUserAsync(Coordinator, userId, _now));
+    }
+
+    [Fact]
+    public async Task ExpiredSessions_AreDeleted()
+    {
+        var userId = await MigrateWithUser();
+        var repository = new UserSessionRepository(_factory);
+        var alive = Session(userId, "alive");
+        await repository.AddAsync(alive);
+        await repository.AddAsync(Session(userId, "old", _now.AddDays(-1)));
+
+        await repository.DeleteExpiredAsync(_now);
+
+        Assert.Equal(alive.Id, Assert.Single(await repository.GetByUserAsync(Coordinator, userId, _now.AddDays(-30))).Id);
+    }
+
+    [Fact]
+    public async Task Extend_MovesTheExpiryOfTheGivenDevices_ButNotOfExpiredOnes()
+    {
+        var userId = await MigrateWithUser();
+        var repository = new UserSessionRepository(_factory);
+        var lasting = Session(userId, "lasting", _now.AddDays(5));
+        var temporary = Session(userId, "temporary", _now.AddHours(2)) with { IsTemporary = true };
+        var other = Session(userId, "other", _now.AddDays(5));
+        var expired = Session(userId, "expired", _now.AddDays(-1));
+        foreach (var session in new[] { lasting, temporary, other, expired })
+            await repository.AddAsync(session);
+
+        await repository.ExtendAsync(Coordinator, [lasting.Id, temporary.Id, expired.Id], _now, _now.AddDays(90),
+            _now.AddDays(1));
+
+        Assert.Equal(_now.AddDays(90), (await repository.GetAsync(Coordinator, lasting.Id, _now))?.ExpiresAt);
+        Assert.Equal(_now.AddDays(1), (await repository.GetAsync(Coordinator, temporary.Id, _now))?.ExpiresAt);
+        Assert.Equal(_now.AddDays(5), (await repository.GetAsync(Coordinator, other.Id, _now))?.ExpiresAt);
+        Assert.Null(await repository.GetAsync(Coordinator, expired.Id, _now));
+        Assert.Equal(_now, (await repository.GetAsync(Coordinator, lasting.Id, _now))?.LastUsedAt);
+    }
+
+    private sealed class TestContextFactory(DbContextOptions<ServerDbContext> options) : IDbContextFactory<ServerDbContext>
+    {
+        public ServerDbContext CreateDbContext() => new(options);
+    }
+}

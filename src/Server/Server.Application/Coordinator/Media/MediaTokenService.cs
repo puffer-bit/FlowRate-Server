@@ -24,11 +24,11 @@ public sealed class MediaTokenService
         set => Interlocked.Exchange(ref _lifetimeTicks, value.Ticks);
     }
 
-    public (string Token, DateTime ExpiresAt) Issue(int userId)
+    public (string Token, DateTimeOffset ExpiresAt) Issue(int userId)
     {
         var expiresAt = _timeProvider.GetUtcNow().Add(Lifetime);
         var payload = string.Create(CultureInfo.InvariantCulture, $"{userId}.{expiresAt.ToUnixTimeSeconds()}");
-        return ($"{payload}.{Sign(payload)}", expiresAt.UtcDateTime);
+        return ($"{payload}.{Sign(payload)}", expiresAt);
     }
 
     public bool TryValidate(string? token, out int userId)

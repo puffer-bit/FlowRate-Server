@@ -61,16 +61,16 @@ public sealed class PushEndpointsTests : IDisposable
             .ReturnsAsync(new PushDeviceModel(Coordinator, UserId, "fcm", PushPlatform.Android, "00", new byte[32], hash));
         var users = new Mock<IUserManager>();
         users.Setup(u => u.GetUserAsync(UserId)).ReturnsAsync(new UserModel(UserId, Coordinator, "alice",
-            UserState.Normal, UserStatus.Online, DateTime.UtcNow, DateTime.UtcNow));
+            UserState.Normal, UserStatus.Online, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow));
         _chats.Setup(c => c.AddMessageAsync(It.IsAny<int>(), It.IsAny<NewChatMessageModel>(), UserId))
             .ReturnsAsync((int chatId, NewChatMessageModel _, int _) =>
-                chatId == ChatId ? AddMessageResult.NoError : AddMessageResult.ChatNotExists);
+                chatId == ChatId ? null : ErrorCode.ChatNotFound);
 
         var chat = ChatSessionModel.Create(Coordinator, "general", UserId);
         _chats.Setup(c => c.TryGetSession(ChatId, out chat)).Returns(true);
         _reads.Setup(r => r.GetLastMessageIdAsync(ChatId, It.IsAny<CancellationToken>())).ReturnsAsync(50);
-        _reads.Setup(r => r.MoveAsync(UserId, ChatId, It.IsAny<int>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((int _, int _, int messageId, CancellationToken _) => messageId);
+        _reads.Setup(r => r.MoveAsync(UserId, ChatId, It.IsAny<int>(), It.IsAny<DateTimeOffset?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((int _, int _, int messageId, DateTimeOffset? _, CancellationToken _) => new ChatReadMove(messageId, true));
         _reads.Setup(r => r.GetUnreadAsync(ChatId, UserId, It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync([]);
         var reads = new ChatReadService(NullLogger.Instance, _reads.Object, new Mock<IMessageSender>().Object);
@@ -172,7 +172,7 @@ public sealed class PushEndpointsTests : IDisposable
         Assert.Equal(HttpStatusCode.NoContent,
             await PostAsync(_token, """{"chatId":7,"messageId":42}""", PushEndpoints.MarkRead));
 
-        _reads.Verify(r => r.MoveAsync(UserId, ChatId, 42, It.IsAny<CancellationToken>()), Times.Once);
+        _reads.Verify(r => r.MoveAsync(UserId, ChatId, 42, It.IsAny<DateTimeOffset?>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Theory]

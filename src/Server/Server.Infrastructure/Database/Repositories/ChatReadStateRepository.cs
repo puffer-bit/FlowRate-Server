@@ -1,7 +1,8 @@
 using Microsoft.EntityFrameworkCore;
 using Server.Application.Abstractions.Persistence;
 using Server.Core.Models.TextChat;
-using Server.Infrastructure.Database.Entities.TextChat;
+using Server.Database.Entities.TextChat;
+using Server.Database;
 
 namespace Server.Infrastructure.Database.Repositories;
 
@@ -24,7 +25,7 @@ public class ChatReadStateRepository : IChatReadStateRepository
             .ToDictionaryAsync(x => x.ChatId, x => x.LastReadMessageId, cancellationToken);
     }
 
-    public async Task<int> MoveAsync(int userId, int chatId, int messageId,
+    public async Task<ChatReadMove> MoveAsync(int userId, int chatId, int messageId, DateTimeOffset? markAt,
         CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
@@ -33,19 +34,31 @@ public class ChatReadStateRepository : IChatReadStateRepository
         var entity = await context.ChatReadStates
             .FirstOrDefaultAsync(x => x.UserId == userId && x.ChatId == chatId, cancellationToken);
 
+        var moved = false;
         if (entity == null)
         {
             entity = new ChatReadStateEntity { UserId = userId, ChatId = chatId, LastReadMessageId = messageId };
             context.ChatReadStates.Add(entity);
+            moved = messageId > 0;
         }
         else if (messageId > entity.LastReadMessageId)
         {
             entity.LastReadMessageId = messageId;
+            moved = true;
+        }
+
+        if (moved && markAt is { } at)
+        {
+            context.ChatReadMarks.Add(new ChatReadMarkEntity
+            {
+                ChatId = chatId, UserId = userId, UpToMessageId = messageId,
+                ReadAt = at
+            });
         }
 
         await context.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
-        return entity.LastReadMessageId;
+        return new ChatReadMove(entity.LastReadMessageId, moved);
     }
 
     public async Task<IReadOnlyList<ChatUnreadMessage>> GetUnreadAsync(int chatId, int userId, int afterMessageId,
@@ -68,5 +81,55 @@ public class ChatReadStateRepository : IChatReadStateRepository
             .AsNoTracking()
             .Where(x => x.ChatId == chatId)
             .MaxAsync(x => (int?)x.Id, cancellationToken) ?? 0;
+    }
+
+    public async Task<IReadOnlyDictionary<int, int>> GetPeerPositionsAsync(int userId,
+        IReadOnlyCollection<int> chatIds, CancellationToken cancellationToken = default)
+    {
+        if (chatIds.Count == 0)
+            return new Dictionary<int, int>();
+
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+        return await context.ChatReadStates
+            .AsNoTracking()
+            .Where(x => chatIds.Contains(x.ChatId) && x.UserId != userId)
+            .GroupBy(x => x.ChatId)
+            .Select(g => new { ChatId = g.Key, Position = g.Max(x => x.LastReadMessageId) })
+            .ToDictionaryAsync(x => x.ChatId, x => x.Position, cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<ChatMessageReader>> GetReadersAsync(int chatId, int messageId, int exceptUserId,
+        CancellationToken cancellationToken = default)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+        var readers = await context.ChatReadStates
+            .AsNoTracking()
+            .Where(x => x.ChatId == chatId && x.UserId != exceptUserId && x.LastReadMessageId >= messageId)
+            .Select(x => new
+            {
+                x.UserId,
+                ReadAt = context.ChatReadMarks
+                    .Where(m => m.ChatId == chatId && m.UserId == x.UserId && m.UpToMessageId >= messageId)
+                    .Min(m => (DateTimeOffset?)m.ReadAt)
+            })
+            .ToListAsync(cancellationToken);
+
+        return readers
+            .Select(x => new ChatMessageReader(x.UserId,
+                x.ReadAt is { } at ? at : null))
+            .OrderBy(x => x.ReadAt ?? DateTimeOffset.MinValue)
+            .ThenBy(x => x.UserId)
+            .ToList();
+    }
+
+    public async Task<ChatReadTarget?> GetTargetAsync(int chatId, int messageId,
+        CancellationToken cancellationToken = default)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+        return await context.ChatMessagesEntities
+            .AsNoTracking()
+            .Where(x => x.ChatId == chatId && x.Id == messageId)
+            .Select(x => new ChatReadTarget(x.SenderUserId, x.IsSystem, x.IsDeleted))
+            .FirstOrDefaultAsync(cancellationToken);
     }
 }

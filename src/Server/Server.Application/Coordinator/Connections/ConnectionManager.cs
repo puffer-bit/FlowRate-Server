@@ -41,6 +41,10 @@ namespace Server.Application.Coordinator.Connections {
             try
             {
                 await Task.Delay(AuthenticationTimeout, connection.TokenSource.Token);
+                // A new device waiting for another one to approve it stays until its code expires
+                while (connection.UserId == null && connection.WaitsForDeviceLinkUntil is { } until
+                       && until > DateTimeOffset.UtcNow)
+                    await Task.Delay(until - DateTimeOffset.UtcNow + TimeSpan.FromSeconds(1), connection.TokenSource.Token);
             }
             catch (Exception ex) when (ex is OperationCanceledException or ObjectDisposedException)
             {
@@ -95,6 +99,8 @@ namespace Server.Application.Coordinator.Connections {
             return false;
         }
         
+        public IReadOnlyList<IClientConnection> GetAllConnections() => _context.ClientConnections.Values.ToList();
+
         public void CloseAllConnections()
         {
             foreach (var connection in _context.ClientConnections.Values)
