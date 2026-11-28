@@ -39,6 +39,13 @@ public interface IChatSessionManager
     Task<ErrorCode?> AddCallSystemMessageAsync(int sessionId,
         ChatSystemContent content);
     Task<ErrorCode?> AddMessageAsync(int sessionId, NewChatMessageModel message, int senderUserId);
+
+    /// <summary>
+    /// <see cref="AddMessageAsync"/> that also gives the stored message. A message whose ClientMessageId the
+    /// author already sent to this chat is not stored again: the stored one comes back, with no notification.
+    /// </summary>
+    Task<(ErrorCode? result, ChatMessageModel? message)> AddMessageWithResultAsync(int sessionId,
+        NewChatMessageModel message, int senderUserId);
     Task<ErrorCode?> SetReactionAsync(int sessionId, int messageId, string emoji, bool isAdded, int userId);
     /// <param name="isLinkPreviewDisabled">Turns the preview of the link off or on again; null leaves it as it was.</param>
     Task<ErrorCode?> EditMessageAsync(int sessionId, int messageId, string text, int userId,

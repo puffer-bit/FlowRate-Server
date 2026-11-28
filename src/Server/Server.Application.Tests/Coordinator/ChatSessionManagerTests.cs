@@ -321,6 +321,37 @@ public class ChatSessionManagerTests
         Assert.Equal(outcome, stored.TextContent.CommandResult);
     }
 
+    [Fact]
+    public async Task RepeatedClientMessageId_AnswersWithTheStoredMessage_AndStoresNothing()
+    {
+        int chatId = await CreateChat("repeats");
+        var clientMessageId = Guid.NewGuid();
+        ChatMessageModel? stored = null;
+        _messages.Setup(r => r.AddAsync(It.IsAny<ChatMessageModel>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((ChatMessageModel message, CancellationToken _) =>
+            {
+                message.Id = 7;
+                stored = message;
+                return message;
+            });
+        _messages.Setup(r => r.GetByClientMessageIdAsync(chatId, AuthorId, clientMessageId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(() => stored);
+        NewChatMessageModel Message() => new()
+        {
+            ChatId = chatId, TextContent = new ChatTextContentDTO { Text = "hi" }, ClientMessageId = clientMessageId
+        };
+
+        var (firstResult, first) = await _manager.AddMessageWithResultAsync(chatId, Message(), AuthorId);
+        var (repeatResult, repeat) = await _manager.AddMessageWithResultAsync(chatId, Message(), AuthorId);
+
+        Assert.Null(firstResult);
+        Assert.Null(repeatResult);
+        Assert.Equal(clientMessageId, first!.ClientMessageId);
+        Assert.Same(first, repeat);
+        _messages.Verify(r => r.AddAsync(It.IsAny<ChatMessageModel>(), It.IsAny<CancellationToken>()), Times.Once);
+        Assert.Single(_events.Of<ChatSessionMessageAddedEvent>());
+    }
+
     [Theory]
     [InlineData("/roll 100-1")]
     [InlineData("/roll 1-1001")]

@@ -24,6 +24,13 @@ public sealed class ChatMessageModel
     public long Revision { get => _revision; init => _revision = value; }
     public required int ChatId { get; init; }
     public required int SenderUserId { get; init; }
+
+    /// <summary>
+    /// What the author's client gave the message when sending it; a repeat of it in the same chat by the same
+    /// author is the same message. Null for older clients and system messages.
+    /// </summary>
+    public Guid? ClientMessageId { get; init; }
+
     public required DateTimeOffset SentTime { get; init; }
     public DateTimeOffset? DelayedSentTime { get; init; }
     public DateTimeOffset? DisposeTime { get; init; }
@@ -106,12 +113,14 @@ public sealed class ChatMessageModel
         IEnumerable<ChatFileContentModel>? files = null,
         DateTimeOffset? delayedSentTime = null,
         DateTimeOffset? disposeTime = null,
-        bool isLinkPreviewDisabled = false)
+        bool isLinkPreviewDisabled = false,
+        Guid? clientMessageId = null)
     {
         var message = new ChatMessageModel
         {
             ChatId = chatId,
             SenderUserId = senderUserId,
+            ClientMessageId = clientMessageId,
             SentTime = now,
             TextContent = text,
             Images = images?.ToList() ?? [],

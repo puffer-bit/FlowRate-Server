@@ -169,6 +169,25 @@ public class MessagesRepository : IMessagesRepository
         return (await ToModelsAsync(context, [entity], cancellationToken))[0];
     }
 
+    public async Task<ChatMessageModel?> GetByClientMessageIdAsync(int chatId, int senderUserId, Guid clientMessageId,
+        CancellationToken cancellationToken = default)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+
+        var entity = await WithContent(context.ChatMessagesEntities)
+            .IgnoreQueryFilters()
+            .FirstOrDefaultAsync(x => x.ChatId == chatId && x.SenderUserId == senderUserId
+                                      && x.ClientMessageId == clientMessageId, cancellationToken);
+
+        if (entity is null)
+            return null;
+
+        if (entity.IsDeleted)
+            ClearContent(entity);
+
+        return (await ToModelsAsync(context, [entity], cancellationToken))[0];
+    }
+
     public async Task<IReadOnlyList<ChatMessageModel>> GetLastMessagesAsync(
         int chatId, 
         int count, 
