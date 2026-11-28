@@ -17,6 +17,12 @@ public class OrchestratorOptions : IValidatableObject
     [Range(1, 65535)]
     public int Port { get; set; } = 7114;
 
+    /// <summary>
+    /// The address users reach the coordinators by (an IP or a domain, without scheme or port), for the login links
+    /// the panel gives out. Empty: taken from the listen address of the coordinator when that is a specific one.
+    /// </summary>
+    public string PublicHost { get; set; } = string.Empty;
+
     /// <summary>Host of the SFU next to the server, written to the database on the first launch only.</summary>
     [Required]
     public string LocalSfuHost { get; set; } = "127.0.0.1";
@@ -29,6 +35,9 @@ public class OrchestratorOptions : IValidatableObject
     {
         if (!IPAddress.TryParse(ListenIp, out _))
             yield return new ValidationResult($"'{ListenIp}' is not a valid IP address.", [nameof(ListenIp)]);
+        if (PublicHost.Length > 0 && Uri.CheckHostName(PublicHost) == UriHostNameType.Unknown)
+            yield return new ValidationResult($"'{PublicHost}' is not an IP address or a domain (no scheme or port).",
+                [nameof(PublicHost)]);
         if ((string.IsNullOrEmpty(LocalSfuUsername) != string.IsNullOrEmpty(LocalSfuPassword)) ||
             LocalSfuUsername.Contains(':') || LocalSfuUsername.Trim() != LocalSfuUsername)
             yield return new ValidationResult("Local SFU credentials must both be set, and the username cannot contain a colon or surrounding whitespace.",

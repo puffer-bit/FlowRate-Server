@@ -1,6 +1,9 @@
+using System.Net;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Options;
 using Server.Application.Abstractions.Persistence;
 using Server.Application.Coordinator.Authentication;
+using Server.Application.Options;
 using Server.Application.Orchestrator;
 using Server.Asp.Web.Api.Contracts;
 using Server.Infrastructure.Security;
@@ -21,6 +24,7 @@ public class UserDevicesController(
     IUserSessionRepository devices,
     IUserLoginCodeRepository loginCodes,
     ServerCertificate certificate,
+    IOptions<OrchestratorOptions> options,
     TimeProvider timeProvider) : ControllerBase
 {
     [HttpGet("devices")]
@@ -71,10 +75,28 @@ public class UserDevicesController(
         var expiresAt = now + LoginCodes.Lifetime;
         await loginCodes.DeleteByUserAsync(id, userId, ct);
         await loginCodes.AddAsync(id, userId, LoginCodes.Hash(code), now, expiresAt, ct);
-        var port = orchestrator.GetCoordinatorSnapshots().FirstOrDefault(coordinator => coordinator.Id == id)?.Port;
-        return new LoginCodeDto(code, expiresAt, port,
-            certificate.Certificate.GetCertHashString(System.Security.Cryptography.HashAlgorithmName.SHA256));
+        var coordinator = orchestrator.GetCoordinatorSnapshots().FirstOrDefault(snapshot => snapshot.Id == id);
+        return new LoginCodeDto(code, expiresAt, coordinator?.Port,
+            certificate.Certificate.GetCertHashString(System.Security.Cryptography.HashAlgorithmName.SHA256),
+            PublicHost(coordinator?.Ip));
     }
+
+    /// <summary>
+    /// The address for the login link: the configured public host, else the listen address of the coordinator when it
+    /// is a specific one. Loopback and wildcard addresses lead nowhere on another device, so they give null.
+    /// </summary>
+    private string? PublicHost(string? coordinatorIp)
+    {
+        var configured = options.Value.PublicHost.Trim();
+        if (configured.Length > 0 && !IsLocalOnly(configured))
+            return configured;
+        return coordinatorIp is { Length: > 0 } && !IsLocalOnly(coordinatorIp) ? coordinatorIp : null;
+    }
+
+    private static bool IsLocalOnly(string host) =>
+        host.Equals("localhost", StringComparison.OrdinalIgnoreCase)
+        || (IPAddress.TryParse(host, out var address)
+            && (IPAddress.IsLoopback(address) || address.Equals(IPAddress.Any) || address.Equals(IPAddress.IPv6Any)));
 
     private async Task<bool> IsUserAsync(string coordinatorId, int userId, CancellationToken ct) =>
         await users.GetByIdAsync(userId, ct) is { IsSystem: false } user && user.CoordinatorInstanceId == coordinatorId;

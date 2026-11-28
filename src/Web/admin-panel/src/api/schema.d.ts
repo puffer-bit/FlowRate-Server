@@ -1267,6 +1267,7 @@ export interface components {
             /** Format: int32 */
             port: number | null;
             certificateFingerprint: string;
+            host: string | null;
         };
         UserDeviceDto: {
             /** Format: uuid */

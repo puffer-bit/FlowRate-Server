@@ -62,4 +62,10 @@ public sealed record UserDeviceDto(
 /// SHA-256 of the certificate of the server in hex, for the link: the client trusts it without asking when the system
 /// cannot verify it.
 /// </param>
-public sealed record LoginCodeDto(string Code, DateTimeOffset ExpiresAtUtc, int? Port, string CertificateFingerprint);
+/// <param name="Host">
+/// The address users reach the coordinator by, for the link: Orchestrator:PublicHost (PUBLIC_HOST, else PUBLIC_IP
+/// under Docker), else the listen address of the coordinator when it is a specific one. Null when the server does not
+/// know it; the panel then falls back to the address it is open on, unless that is a loopback one.
+/// </param>
+public sealed record LoginCodeDto(
+    string Code, DateTimeOffset ExpiresAtUtc, int? Port, string CertificateFingerprint, string? Host);
