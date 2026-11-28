@@ -4,7 +4,10 @@
 name: Tests
 
 on:
+  # A branch is tested by its pull request, against what it merges into; a push alone runs only on the main
+  # branches, after a merge. A branch without a pull request is tested from the Actions tab
   push:
+    branches: [main, '*/main']
   pull_request:
   workflow_dispatch:
   workflow_call:
