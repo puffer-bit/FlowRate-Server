@@ -96,6 +96,11 @@ The panel gives out a login code for a user in **Roles → Users → Login → G
 device and 15 minutes. Codes given before and still unused are dropped. Only the SHA-256 of the code is kept
 (`UserLoginCodes`); case and dashes do not matter.
 
+With the code the panel shows a `flowrate://login?host=…&port=…&cert=…&code=…` link and its QR code. The host comes
+from the response (`Orchestrator:PublicHost`, which Docker fills from `PUBLIC_HOST`, else `PUBLIC_IP`; else the
+listen address of the coordinator when it is a specific one). Without it the panel uses the address it is open on,
+and shows no link when that is a local one, as through an SSH tunnel.
+
 ## Setting up from the client
 
 Once logged in, the client sets up the sender's own account with the `User*` requests of

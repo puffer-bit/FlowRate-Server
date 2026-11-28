@@ -1,5 +1,8 @@
 # Public IP clients reach the SFU at; install.sh detects it and asks on the first run
 PUBLIC_IP=
+# The address users connect to (a domain or an IP, without scheme or port), put into the login links and QR codes
+# the control panel gives out. Empty means PUBLIC_IP
+PUBLIC_HOST=
 # The address the SFU binds; empty for all of them. Set it to PUBLIC_IP when that address is on this
 # machine and clients may reach it over another interface (the server is the router, LAN clients come
 # to the public IP): bound to all addresses, the answers to UDP go out from the LAN address, the

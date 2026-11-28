@@ -133,6 +133,7 @@ PASSKEY_DOMAIN=
 | Variable | Default in `.env.example` | What to set |
 | --- | --- | --- |
 | `PUBLIC_IP` | `127.0.0.1` (local testing only) | IP address clients reach the SFU at, without a scheme or port. Use the public IP for internet access, or the machine's LAN IP for LAN-only access. The installer asks for this value. |
+| `PUBLIC_HOST` | Empty (uses `PUBLIC_IP`) | Domain or IP users connect to, without a scheme or port. Only used in the login links and QR codes the control panel gives out with a login code. |
 | `RTC_LISTEN_IP` | Empty (all interfaces) | Local address the SFU binds for media. Usually leave empty. Only set an address actually assigned to this machine; see the network notes below. Ignored in bridge mode. |
 | `SFU_GRPC_USERNAME` | Empty | Optional username for the local SFU's internal API. Set together with the password; no `:` or surrounding whitespace. |
 | `SFU_GRPC_PASSWORD` | Empty | Optional strong password for that API. Both credentials empty disables authentication; setting only one prevents startup. Existing nodes also need matching credentials in the panel. |

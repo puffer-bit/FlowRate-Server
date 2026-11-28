@@ -125,14 +125,25 @@ function DevicesSection({ coordinatorId, user }: { coordinatorId: string, user: 
                 Give it to {user.username} yourself. On the new device: Log in to an existing account → Login code.
                 It adds one device and works until {formatDateTime(code.expiresAtUtc)}. It is not shown again.
               </Text>
-              <Text size="sm">
-                Or let FlowRate fill it in: open the link on the new device, or scan the QR code with its camera.
-                The link points at {window.location.hostname}, the address this page is open on.
-              </Text>
-              <Group align="flex-end">
-                <QrCode value={loginLink(code)} alt="QR code of the login link" />
-                <Button component="a" href={loginLink(code)} variant="light">Open in FlowRate</Button>
-              </Group>
+              {linkHost(code)
+                ? (
+                  <>
+                    <Text size="sm">
+                      Or let FlowRate fill it in: open the link on the new device, or scan the QR code with its camera.
+                      The link points at {linkHost(code)}.
+                    </Text>
+                    <Group align="flex-end">
+                      <QrCode value={loginLink(code)} alt="QR code of the login link" />
+                      <Button component="a" href={loginLink(code)} variant="light">Open in FlowRate</Button>
+                    </Group>
+                  </>
+                )
+                : (
+                  <Text size="sm" c="dimmed">
+                    No login link: the server does not know the address users connect to, and this page is open on a
+                    local one. Set PUBLIC_HOST or PUBLIC_IP in .env and run docker compose up -d.
+                  </Text>
+                )}
             </Stack>
           </Alert>
         )
@@ -266,11 +277,24 @@ function TwoFactorSection({ coordinatorId, user, security }: {
 const DefaultCoordinatorPort = 26666
 
 /**
+ * The address the link points at: the one the server knows users connect to, else the one this page is open on,
+ * unless that is local (the panel is usually reached through an SSH tunnel on localhost). Null: no link.
+ */
+function linkHost(code: LoginCode): string | null {
+  if (code.host)
+    return code.host
+  const page = window.location.hostname.replace(/^\[|\]$/g, '')
+  const local = page === 'localhost' || page.endsWith('.localhost') || page === '::1' || page.startsWith('127.')
+    || page === '0.0.0.0' || page === '::'
+  return local ? null : page
+}
+
+/**
  * The flowrate:// link that opens the client on the server with the code filled in. The client asks before it logs
  * in, and trusts the certificate of the link only for this server.
  */
 function loginLink(code: LoginCode) {
-  const params = new URLSearchParams({ host: window.location.hostname })
+  const params = new URLSearchParams({ host: linkHost(code) ?? '' })
   if (code.port != null && code.port !== DefaultCoordinatorPort)
     params.set('port', String(code.port))
   params.set('cert', code.certificateFingerprint)
