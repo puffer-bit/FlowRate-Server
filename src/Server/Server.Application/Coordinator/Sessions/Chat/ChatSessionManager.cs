@@ -420,9 +420,9 @@ public class ChatSessionManager : IChatSessionManager
                 if (chat.IsPrivate && !chat.MemberIds.Contains(senderUserId))
                     return (ErrorCode.InsufficientPermissions, null);
                 // Two copies of one message may have raced to the lock
-                if (message.ClientMessageId is { } clientMessageId
-                    && await _messagesRepository.GetByClientMessageIdAsync(sessionId, senderUserId, clientMessageId) is { } sent)
-                    return (null, sent);
+                if (message.ClientMessageId is { } racedClientMessageId
+                    && await _messagesRepository.GetByClientMessageIdAsync(sessionId, senderUserId, racedClientMessageId) is { } raced)
+                    return (null, raced);
                 var stored = await _messagesRepository.AddAsync(messageModel);
                 chat.SetLastMessage(stored);
                 await _coordinatorEventBus.PublishAsync(new ChatSessionReconfiguredEvent(chat, senderUserId));
