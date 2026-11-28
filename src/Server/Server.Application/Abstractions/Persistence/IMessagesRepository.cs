@@ -36,6 +36,10 @@ public interface IMessagesRepository
     Task<ChatMessageModel?> GetByIdAsync(int messageId,
         CancellationToken cancellationToken = default);
 
+    /// <summary>The message the author already sent to the chat with this client id, deleted ones too.</summary>
+    Task<ChatMessageModel?> GetByClientMessageIdAsync(int chatId, int senderUserId, Guid clientMessageId,
+        CancellationToken cancellationToken = default);
+
     Task<IReadOnlyList<ChatMessageModel>> GetLastMessagesAsync(int chatId,
         int count,
         CancellationToken cancellationToken = default);

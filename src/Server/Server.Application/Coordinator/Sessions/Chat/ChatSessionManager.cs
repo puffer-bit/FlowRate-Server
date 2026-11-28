@@ -376,21 +376,30 @@ public class ChatSessionManager : IChatSessionManager
     }
 
     public async Task<ErrorCode?> AddMessageAsync(int sessionId, NewChatMessageModel message, int senderUserId)
+        => (await AddMessageWithResultAsync(sessionId, message, senderUserId)).result;
+
+    public async Task<(ErrorCode? result, ChatMessageModel? message)> AddMessageWithResultAsync(int sessionId,
+        NewChatMessageModel message, int senderUserId)
     {
         try
         {
             if (!_sessions.TryGetValue(sessionId, out var chat))
-                return ErrorCode.ChatNotFound;
+                return (ErrorCode.ChatNotFound, null);
+
+            // A repeat is answered before its uploads are looked at: the first copy took them already
+            if (message.ClientMessageId is { } clientMessageId
+                && await _messagesRepository.GetByClientMessageIdAsync(sessionId, senderUserId, clientMessageId) is { } sent)
+                return (null, sent);
 
             if (!chat.CanPost)
-                return ErrorCode.ChatReadOnly;
+                return (ErrorCode.ChatReadOnly, null);
 
             var command = ChatCommandRequest.Parse(message.TextContent?.Text);
-            if (command is { IsValid: false }) return ErrorCode.InvalidValue;
+            if (command is { IsValid: false }) return (ErrorCode.InvalidValue, null);
 
             var (attachmentsResult, images, files) = await ResolveAttachmentsAsync(chat, message, senderUserId);
             if (attachmentsResult != null)
-                return attachmentsResult;
+                return (attachmentsResult, null);
 
             var messageModel = message.ToModel(senderUserId, DateTimeOffset.UtcNow, images, files);
             if (command != null) messageModel.ExecuteCommand(command.ToModel());
@@ -399,7 +408,7 @@ public class ChatSessionManager : IChatSessionManager
             {
                 var repliedMessage = await GetMessageAsync(sessionId, replyToMessageId);
                 if (repliedMessage == null)
-                    return ErrorCode.ReplyTargetNotFound;
+                    return (ErrorCode.ReplyTargetNotFound, null);
 
                 messageModel.ReplyTo(repliedMessage);
             }
@@ -409,27 +418,30 @@ public class ChatSessionManager : IChatSessionManager
             try
             {
                 if (chat.IsPrivate && !chat.MemberIds.Contains(senderUserId))
-                    return ErrorCode.InsufficientPermissions;
+                    return (ErrorCode.InsufficientPermissions, null);
+                // Two copies of one message may have raced to the lock
+                if (message.ClientMessageId is { } racedClientMessageId
+                    && await _messagesRepository.GetByClientMessageIdAsync(sessionId, senderUserId, racedClientMessageId) is { } raced)
+                    return (null, raced);
                 var stored = await _messagesRepository.AddAsync(messageModel);
                 chat.SetLastMessage(stored);
                 await _coordinatorEventBus.PublishAsync(new ChatSessionReconfiguredEvent(chat, senderUserId));
                 await _coordinatorEventBus.PublishAsync(new ChatSessionMessageAddedEvent(sessionId, stored));
+                return (null, stored);
             }
             finally
             {
                 writeLock.Release();
             }
-
-            return null;
         }
         catch (MediaUploadUnavailableException)
         {
-            return ErrorCode.AttachmentNotReady;
+            return (ErrorCode.AttachmentNotReady, null);
         }
         catch (Exception e)
         {
             _logger.LogError(e, "Error while adding chat message.");
-            return ErrorCode.Internal;
+            return (ErrorCode.Internal, null);
         }
     }
 

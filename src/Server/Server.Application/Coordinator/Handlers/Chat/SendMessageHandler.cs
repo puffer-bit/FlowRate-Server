@@ -7,6 +7,7 @@ using Server.Application.Coordinator.Sessions.Chat;
 using Server.Application.Abstractions.Gateway;
 using Server.Application.Coordinator.Authentication;
 using Server.Application.Coordinator.Users;
+using Server.Application.Mappers;
 
 namespace Server.Application.Coordinator.Handlers.Chat;
 
@@ -29,10 +30,10 @@ public class SendMessageHandler : IMessageHandler<SendMessageRequest>
         if (request == null) return HandleMessageResult.ForbiddenRequest;
 
         // The sender is checked in memory: a message from a user who is not connected is not accepted
-        var result = _userManager.TryGetConnectedUser(request.SenderId, out _)
-            ? await _chatSessionManager.AddMessageAsync(request.ChatId, request.Message, request.SenderId)
-            : ErrorCode.NotConnected;
-        var responseData = request.Answer(result, request.ToResponse);
+        var (result, stored) = _userManager.TryGetConnectedUser(request.SenderId, out _)
+            ? await _chatSessionManager.AddMessageWithResultAsync(request.ChatId, request.Message, request.SenderId)
+            : (ErrorCode.NotConnected, null);
+        var responseData = request.Answer(result, () => request.ToResponse(stored?.ToDto()));
         
         _messageSender.SendMessageById(connectionId, 
             responseData);

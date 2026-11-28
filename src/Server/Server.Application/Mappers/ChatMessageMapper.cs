@@ -27,6 +27,7 @@ public static class ChatMessageMapperExtensions
             ChatId = model.ChatId,
             Revision = model.Revision,
             SenderUserId = model.SenderUserId,
+            ClientMessageId = model.ClientMessageId,
             SentAt = model.SentTime,
             ScheduledAt = model.DelayedSentTime,
             ExpiresAt = model.DisposeTime,
@@ -177,7 +178,8 @@ public static class ChatMessageMapperExtensions
             files,
             newChatMessageModel.ScheduledAt,
             newChatMessageModel.ExpiresAt,
-            newChatMessageModel.IsLinkPreviewDisabled);
+            newChatMessageModel.IsLinkPreviewDisabled,
+            newChatMessageModel.ClientMessageId);
     }
 
     private static ChatTextContentModel ToModel(this ChatTextContentDTO dto) => new() { Text = dto.Text };

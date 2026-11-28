@@ -698,6 +698,9 @@ namespace Server.Database.PostgreSql.Migrations
                         .HasMaxLength(36)
                         .HasColumnType("integer");
 
+                    b.Property<Guid?>("ClientMessageId")
+                        .HasColumnType("uuid");
+
                     b.Property<DateTime?>("DelayedSentTime")
                         .HasColumnType("timestamp with time zone");
 
@@ -786,6 +789,9 @@ namespace Server.Database.PostgreSql.Migrations
                     b.HasIndex("ChatId", "PinnedAt");
 
                     b.HasIndex("ChatId", "Revision");
+
+                    b.HasIndex("ChatId", "SenderUserId", "ClientMessageId")
+                        .IsUnique();
 
                     b.ToTable("ChatMessages", (string)null);
                 });

@@ -674,6 +674,9 @@ namespace Server.Database.Sqlite.Migrations
                         .HasMaxLength(36)
                         .HasColumnType("INTEGER");
 
+                    b.Property<Guid?>("ClientMessageId")
+                        .HasColumnType("TEXT");
+
                     b.Property<DateTime?>("DelayedSentTime")
                         .HasColumnType("TEXT");
 
@@ -762,6 +765,9 @@ namespace Server.Database.Sqlite.Migrations
                     b.HasIndex("ChatId", "PinnedAt");
 
                     b.HasIndex("ChatId", "Revision");
+
+                    b.HasIndex("ChatId", "SenderUserId", "ClientMessageId")
+                        .IsUnique();
 
                     b.ToTable("ChatMessages", (string)null);
                 });

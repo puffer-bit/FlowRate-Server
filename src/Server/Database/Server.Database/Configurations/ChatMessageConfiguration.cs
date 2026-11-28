@@ -13,6 +13,9 @@ public class ChatMessageConfiguration : IEntityTypeConfiguration<ChatMessageEnti
         builder.HasIndex(x => new { x.ChatId, x.Revision });
         builder.HasIndex(x => new { x.ChatId, x.Id });
         builder.HasIndex(x => new { x.ChatId, x.PinnedAt });
+        // A message sent again with the same ClientMessageId is found, never stored twice; NULLs of older
+        // clients stay apart
+        builder.HasIndex(x => new { x.ChatId, x.SenderUserId, x.ClientMessageId }).IsUnique();
         
         builder.HasOne(x => x.ChatSession)
                .WithMany(x => x.Messages)

@@ -15,6 +15,9 @@ public class ChatMessageEntity
 
     public required int SenderUserId { get; set; }
 
+    /// <summary>Given by the author's client; unique per chat and author when set.</summary>
+    public Guid? ClientMessageId { get; set; }
+
     public DateTimeOffset SentTime { get; set; }
     public DateTimeOffset? DelayedSentTime { get; set; }
     public DateTimeOffset? DisposeTime { get; set; }
